@@ -13,13 +13,21 @@ import { sendWhatsApp } from "@/lib/whatsapp";
 import { printDocument } from "@/lib/exporters";
 import { toast } from "sonner";
 
+type PrescriptionSearch = {
+  edit?: string;
+  mode?: "lab";
+  patient?: string;
+};
+
 export const Route = createFileRoute("/app/prescriptions/new")({
   component: NewPrescription,
-  validateSearch: (s: Record<string, unknown>) => ({
-    edit: typeof s.edit === "string" ? s.edit : undefined,
-    mode: s.mode === "lab" ? "lab" as const : undefined,
-    patient: typeof s.patient === "string" ? s.patient : undefined,
-  }),
+  validateSearch: (s: Record<string, unknown>): PrescriptionSearch => {
+    const search: PrescriptionSearch = {};
+    if (typeof s.edit === "string") search.edit = s.edit;
+    if (s.mode === "lab") search.mode = "lab";
+    if (typeof s.patient === "string") search.patient = s.patient;
+    return search;
+  },
 });
 
 type Med = { name: string; dosage: string; frequency: string; duration: string };
@@ -206,7 +214,9 @@ function NewPrescription() {
                       <Input placeholder="Dosage" className="h-10 rounded-lg" value={m.dosage} onChange={e => update(i, "dosage", e.target.value)} />
                       <Input placeholder="Frequency" className="h-10 rounded-lg" value={m.frequency} onChange={e => update(i, "frequency", e.target.value)} />
                       <Input placeholder="Duration" className="h-10 rounded-lg" value={m.duration} onChange={e => update(i, "duration", e.target.value)} />
-                      <Button type="button" variant="ghost" size="icon" onClick={() => setMeds(meds.filter((_, idx) => idx !== i))}>
+                      <Button type="button" variant="ghost" size="icon"
+                        aria-label={`Remove ${m.name || "medicine"}`} title="Remove medicine"
+                        onClick={() => setMeds(meds.filter((_, idx) => idx !== i))}>
                         <Trash2 className="h-4 w-4" />
                       </Button>
                     </div>

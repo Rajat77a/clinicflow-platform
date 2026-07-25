@@ -5,6 +5,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { absoluteUrl } from "@/lib/site";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -13,9 +14,9 @@ export const Route = createFileRoute("/")({
       { name: "description", content: "ClinicFlow is a premium clinic management platform for patients, appointments, prescriptions, billing and medical records." },
       { property: "og:title", content: "ClinicFlow — Clinic Management Platform" },
       { property: "og:description", content: "Premium clinic management for healthcare providers across India." },
-      { property: "og:url", content: "https://pulse-clinic-pro.lovable.app/" },
+      { property: "og:url", content: absoluteUrl("/") },
     ],
-    links: [{ rel: "canonical", href: "https://pulse-clinic-pro.lovable.app/" }],
+    links: [{ rel: "canonical", href: absoluteUrl("/") }],
   }),
   component: Home,
 });

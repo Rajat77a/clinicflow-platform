@@ -131,7 +131,7 @@ function NewBill() {
                   <Input type="number" min={0} step="0.01" placeholder="Unit ₹" className="h-10 rounded-lg" value={l.unit}
                     onChange={e => updateLine(l.id, { unit: +e.target.value })} />
                   <div className="text-right text-sm font-semibold tabular-nums">₹{(l.qty * l.unit).toFixed(2)}</div>
-                  <Button type="button" variant="ghost" size="icon" onClick={() => removeLine(l.id)}>
+                  <Button type="button" variant="ghost" size="icon" onClick={() => removeLine(l.id)} aria-label={`Remove ${l.name || "line item"}`} title={`Remove ${l.name || "line item"}`}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>

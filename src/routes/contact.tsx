@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { absoluteUrl } from "@/lib/site";
 
 export const Route = createFileRoute("/contact")({
   head: () => ({
@@ -14,9 +15,9 @@ export const Route = createFileRoute("/contact")({
       { title: "Contact — ClinicFlow" },
       { name: "description", content: "Get in touch with the ClinicFlow team. Sales, support and partnerships." },
       { property: "og:title", content: "Contact — ClinicFlow" },
-      { property: "og:url", content: "https://pulse-clinic-pro.lovable.app/contact" },
+      { property: "og:url", content: absoluteUrl("/contact") },
     ],
-    links: [{ rel: "canonical", href: "https://pulse-clinic-pro.lovable.app/contact" }],
+    links: [{ rel: "canonical", href: absoluteUrl("/contact") }],
   }),
   component: Contact,
 });

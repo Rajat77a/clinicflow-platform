@@ -8,19 +8,14 @@ export const Route = createFileRoute("/app")({
 });
 
 function AppLayout() {
-  const { user } = useAuth();
+  const { user, isReady } = useAuth();
   const navigate = useNavigate();
-  useEffect(() => {
-    if (typeof window !== "undefined" && !user) {
-      // small delay so hydration has a chance to read localStorage
-      const t = setTimeout(() => {
-        if (!localStorage.getItem("cf_user")) navigate({ to: "/login", replace: true });
-      }, 50);
-      return () => clearTimeout(t);
-    }
-  }, [user, navigate]);
 
-  if (!user) {
+  useEffect(() => {
+    if (isReady && !user) navigate({ to: "/login", replace: true });
+  }, [isReady, user, navigate]);
+
+  if (!isReady || !user) {
     return (
       <div className="grid min-h-screen place-items-center bg-background">
         <div className="text-sm text-muted-foreground">Loading workspace…</div>
