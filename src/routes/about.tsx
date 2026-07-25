@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Heart, Shield, Sparkles, Users } from "lucide-react";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { absoluteUrl } from "@/lib/site";
 
 export const Route = createFileRoute("/about")({
   head: () => ({
@@ -8,9 +9,9 @@ export const Route = createFileRoute("/about")({
       { title: "About — ClinicFlow" },
       { name: "description", content: "We build calm, premium software for clinics across India." },
       { property: "og:title", content: "About — ClinicFlow" },
-      { property: "og:url", content: "https://pulse-clinic-pro.lovable.app/about" },
+      { property: "og:url", content: absoluteUrl("/about") },
     ],
-    links: [{ rel: "canonical", href: "https://pulse-clinic-pro.lovable.app/about" }],
+    links: [{ rel: "canonical", href: absoluteUrl("/about") }],
   }),
   component: About,
 });

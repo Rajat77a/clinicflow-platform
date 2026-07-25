@@ -3,6 +3,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Button } from "@/components/ui/button";
 import { FileText, ImageIcon, FlaskConical, FileBarChart, Upload, Download } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/files")({ component: FilesPage });
 
@@ -30,7 +31,16 @@ function Grid({ filter }: { filter?: string }) {
                 <div className="text-xs text-muted-foreground">{f.patient} · {f.size}</div>
                 <div className="mt-1 text-xs text-muted-foreground">{f.date}</div>
               </div>
-              <Button size="icon" variant="ghost" className="opacity-0 group-hover:opacity-100"><Download className="h-4 w-4" /></Button>
+              <Button
+                size="icon"
+                variant="ghost"
+                className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                aria-label={`Download ${f.name}`}
+                title={`Download ${f.name}`}
+                onClick={() => toast.info("File download is unavailable in demo mode")}
+              >
+                <Download className="h-4 w-4" />
+              </Button>
             </div>
           </div>
         );

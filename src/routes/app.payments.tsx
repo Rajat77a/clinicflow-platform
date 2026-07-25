@@ -113,11 +113,11 @@ function PaymentsPage() {
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
-                    <Button size="icon" variant="ghost"><Eye className="h-4 w-4" /></Button>
+                    <Button size="icon" variant="ghost" aria-label={`View ${p.id}`} title={`View ${p.id}`} onClick={() => toast.info("Payment details are unavailable in demo mode")}><Eye className="h-4 w-4" /></Button>
                     {p.status === "Pending" && (
                       <>
                         <Button size="sm" variant="outline" onClick={() => toast.success("Verified")}>Verify</Button>
-                        <Button size="icon" variant="ghost"><X className="h-4 w-4" /></Button>
+                        <Button size="icon" variant="ghost" aria-label={`Reject ${p.id}`} title={`Reject ${p.id}`} onClick={() => toast.info("Payment rejection is unavailable in demo mode")}><X className="h-4 w-4" /></Button>
                       </>
                     )}
                   </div>

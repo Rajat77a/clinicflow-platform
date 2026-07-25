@@ -4,6 +4,7 @@ import {
   BellRing, FileBarChart, ShieldCheck, Building2, Activity,
 } from "lucide-react";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
+import { absoluteUrl } from "@/lib/site";
 
 export const Route = createFileRoute("/features")({
   head: () => ({
@@ -11,9 +12,9 @@ export const Route = createFileRoute("/features")({
       { title: "Features — ClinicFlow" },
       { name: "description", content: "Every feature your clinic needs: patients, appointments, prescriptions, billing, reports, audit logs and role-based access." },
       { property: "og:title", content: "Features — ClinicFlow" },
-      { property: "og:url", content: "https://pulse-clinic-pro.lovable.app/features" },
+      { property: "og:url", content: absoluteUrl("/features") },
     ],
-    links: [{ rel: "canonical", href: "https://pulse-clinic-pro.lovable.app/features" }],
+    links: [{ rel: "canonical", href: absoluteUrl("/features") }],
   }),
   component: Features,
 });

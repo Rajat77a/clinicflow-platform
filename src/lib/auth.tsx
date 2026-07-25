@@ -43,15 +43,31 @@ const DEFAULT_USERS: Record<Role, AuthUser> = {
 
 interface AuthCtx {
   user: AuthUser | null;
+  isReady: boolean;
   login: (role: Role, email: string) => void;
   logout: () => void;
   setRole: (role: Role) => void;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
+const ROLES = new Set<Role>(["super_admin", "clinic_admin", "doctor", "receptionist"]);
+
+function isAuthUser(value: unknown): value is AuthUser {
+  if (!value || typeof value !== "object") return false;
+  const user = value as Partial<AuthUser>;
+  return (
+    typeof user.name === "string" &&
+    typeof user.email === "string" &&
+    typeof user.role === "string" &&
+    ROLES.has(user.role as Role) &&
+    typeof user.clinic === "string" &&
+    typeof user.clinicLogo === "string"
+  );
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [isReady, setIsReady] = useState(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -60,11 +76,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     if (raw) {
       try {
-        setUser(JSON.parse(raw));
+        const savedUser: unknown = JSON.parse(raw);
+        if (isAuthUser(savedUser)) {
+          const normalizedUser = { ...DEFAULT_USERS[savedUser.role], email: savedUser.email };
+          setUser(normalizedUser);
+          localStorage.setItem("cf_user", JSON.stringify(normalizedUser));
+        } else {
+          localStorage.removeItem("cf_user");
+        }
       } catch {
-        // ignore invalid saved user
+        localStorage.removeItem("cf_user");
       }
     }
+    setIsReady(true);
   }, []);
 
   const persist = (u: AuthUser | null) => {
@@ -79,35 +103,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
-  const nameFromEmail = (email: string) => {
-    const localPart = email.trim().split("@")[0] ?? "";
-
-    return (
-      localPart
-        .split(/[._-]+/)
-        .filter(Boolean)
-        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-        .join(" ") || email.trim()
-    );
-  };
-
   return (
     <Ctx.Provider
       value={{
         user,
+        isReady,
         login: (role, email) =>
           persist({
             ...DEFAULT_USERS[role],
-            name: nameFromEmail(email),
             email: email.trim(),
           }),
         logout: () => persist(null),
-        setRole: (role) =>
-          persist({
-            ...DEFAULT_USERS[role],
-            name: user?.name ?? DEFAULT_USERS[role].name,
-            email: user?.email ?? DEFAULT_USERS[role].email,
-          }),
+        setRole: (role) => persist(DEFAULT_USERS[role]),
       }}
     >
       {children}

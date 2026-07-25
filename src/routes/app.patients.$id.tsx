@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -15,12 +15,18 @@ import {
   FolderOpen, FlaskConical, Download, Send, Printer, Edit, Eye,
 } from "lucide-react";
 
-export const Route = createFileRoute("/app/patients/$id")({ component: PatientProfile });
+export const Route = createFileRoute("/app/patients/$id")({
+  loader: ({ params }) => {
+    const patient = patients.find(candidate => candidate.id === params.id);
+    if (!patient) throw notFound();
+    return patient;
+  },
+  component: PatientProfile,
+});
 
 function PatientProfile() {
-  const { id } = Route.useParams();
   const { user } = useAuth();
-  const patient = patients.find(p => p.id === id) ?? patients[0];
+  const patient = Route.useLoaderData();
   const visits = appointments.filter(a => a.patientId === patient.id);
   const myRx = prescriptions.filter(r => r.patientId === patient.id);
   const myBills = bills.filter(b => b.patient === patient.name);
@@ -124,10 +130,10 @@ function PatientProfile() {
                       <div className="text-xs text-muted-foreground">{r.doctor}{r.followUp ? ` · Follow-up ${r.followUp}` : ""}</div>
                     </div>
                     <div className="flex gap-1">
-                      <Button size="sm" variant="ghost" onClick={() => printRx(r)}><Printer className="h-3.5 w-3.5" /></Button>
-                      <Button size="sm" variant="ghost" onClick={() => shareRx(r)}><Send className="h-3.5 w-3.5" /></Button>
+                      <Button size="sm" variant="ghost" onClick={() => printRx(r)} aria-label={`Print ${r.id}`} title={`Print ${r.id}`}><Printer className="h-3.5 w-3.5" /></Button>
+                      <Button size="sm" variant="ghost" onClick={() => shareRx(r)} aria-label={`Share ${r.id}`} title={`Share ${r.id}`}><Send className="h-3.5 w-3.5" /></Button>
                       {canEditRx && <Button asChild size="sm" variant="ghost">
-                        <Link to="/app/prescriptions/new" search={{ edit: r.id }}><Edit className="h-3.5 w-3.5" /></Link>
+                        <Link to="/app/prescriptions/new" search={{ edit: r.id }} aria-label={`Edit ${r.id}`} title={`Edit ${r.id}`}><Edit className="h-3.5 w-3.5" /></Link>
                       </Button>}
                     </div>
                   </div>

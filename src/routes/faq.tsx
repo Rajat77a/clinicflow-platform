@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { MarketingShell } from "@/components/marketing/marketing-shell";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { absoluteUrl } from "@/lib/site";
 
 const FAQ = [
   { q: "Which types of clinics is ClinicFlow built for?", a: "General, multi-specialty, dental, physiotherapy, dermatology, ENT, orthopedic, pediatric, ayurveda, homeopathy, diagnostic centers and private medical practices." },
@@ -19,9 +20,9 @@ export const Route = createFileRoute("/faq")({
       { title: "FAQ — ClinicFlow" },
       { name: "description", content: "Answers to common questions about ClinicFlow — onboarding, security and more." },
       { property: "og:title", content: "FAQ — ClinicFlow" },
-      { property: "og:url", content: "https://pulse-clinic-pro.lovable.app/faq" },
+      { property: "og:url", content: absoluteUrl("/faq") },
     ],
-    links: [{ rel: "canonical", href: "https://pulse-clinic-pro.lovable.app/faq" }],
+    links: [{ rel: "canonical", href: absoluteUrl("/faq") }],
     scripts: [{
       type: "application/ld+json",
       children: JSON.stringify({
