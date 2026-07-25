@@ -36,9 +36,9 @@ const CLINIC_TYPES = [
 ];
 
 const SECURITY = [
-  { icon: Lock, title: "End-to-End Encryption", desc: "All patient data is encrypted in transit and at rest." },
-  { icon: Server, title: "Daily Backups", desc: "Automated encrypted backups every 24 hours with instant recovery." },
-  { icon: Shield, title: "Role-Based Access", desc: "Super Admin, Clinic Admin, Doctor and Receptionist — each with controlled permissions." },
+  { icon: Lock, title: "Encryption Required", desc: "The production backend contract requires encryption in transit and at rest." },
+  { icon: Server, title: "Recovery Planning", desc: "Backups and restoration testing are required before a hospital rollout." },
+  { icon: Shield, title: "Role-Based Access", desc: "Four portals use one permission matrix with tenant-scoped clinical data." },
 ];
 
 function Home() {
@@ -98,7 +98,7 @@ function Home() {
       {/* Clinic types */}
       <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
         <div className="text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-          Trusted by every kind of clinic
+          Designed for many kinds of clinics
         </div>
         <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
           {CLINIC_TYPES.map((t) => (
@@ -114,10 +114,10 @@ function Home() {
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
           <div className="mx-auto max-w-2xl text-center">
             <h2 className="font-display text-2xl font-bold tracking-tight sm:text-3xl">
-              Security & Reliability
+              Security foundation
             </h2>
             <p className="mt-2 text-sm text-muted-foreground">
-              Your patient data is protected by industry-leading security practices.
+              Production approval requires backend safeguards and an independent security assessment.
             </p>
           </div>
           <div className="mt-10 grid gap-5 sm:grid-cols-3">
@@ -139,15 +139,15 @@ function Home() {
           <div className="mt-8 flex flex-wrap items-center justify-center gap-4 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1.5">
               <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-              ISO 27001 Certified
+              Independent security review pending
             </span>
             <span className="inline-flex items-center gap-1.5">
               <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-              HIPAA & GDPR Aligned
+              Compliance validation pending
             </span>
             <span className="inline-flex items-center gap-1.5">
               <CheckCircle2 className="h-3.5 w-3.5 text-success" />
-              99.99% Uptime
+              Production SLA pending
             </span>
           </div>
         </div>

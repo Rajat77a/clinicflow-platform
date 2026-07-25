@@ -6,7 +6,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { EntityPicker, patientOptions, doctorOptions, type PatientOption, type DoctorOption } from "@/components/forms/entity-picker";
+import { EntityPicker, toPatientOptions, toDoctorOptions, type PatientOption, type DoctorOption } from "@/components/forms/entity-picker";
+import { useWorkspaceData } from "@/lib/workspace-data";
+import { useAuth } from "@/lib/auth";
 import { Clock } from "lucide-react";
 import { toast } from "sonner";
 
@@ -27,11 +29,19 @@ function nowDefaults() {
 
 function NewAppointment() {
   const navigate = useNavigate();
+  const { user } = useAuth();
+  const { patients, doctors, createAppointment } = useWorkspaceData();
+  const patientOptions = toPatientOptions(patients);
+  const doctorOptions = toDoctorOptions(
+    user?.role === "doctor" ? doctors.filter(item => item.name === user.name) : doctors
+  );
   const [patient, setPatient] = useState<PatientOption | null>(null);
-  const [doctor, setDoctor] = useState<DoctorOption | null>(null);
+  const [doctor, setDoctor] = useState<DoctorOption | null>(doctorOptions[0] ?? null);
   const initial = nowDefaults();
   const [date, setDate] = useState(initial.date);
   const [time, setTime] = useState(initial.time);
+  const [type, setType] = useState("Consultation");
+  const [notes, setNotes] = useState("");
 
   const resetToNow = () => {
     const n = nowDefaults();
@@ -43,7 +53,15 @@ function NewAppointment() {
     e.preventDefault();
     if (!patient) { toast.error("Please select a patient"); return; }
     if (!doctor) { toast.error("Please select a doctor"); return; }
-    toast.success("Appointment booked");
+    const appointment = createAppointment({
+      patientId: patient.id,
+      doctorId: doctor.id,
+      date,
+      time,
+      type,
+      notes: notes.trim() || undefined,
+    });
+    toast.success(`Appointment ${appointment.id} booked`);
     navigate({ to: "/app/appointments" });
   };
 
@@ -74,16 +92,16 @@ function NewAppointment() {
             </Button>
           </div>
           <div className="space-y-1.5"><Label>Type</Label>
-            <Select defaultValue="consultation"><SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
+            <Select value={type} onValueChange={setType}><SelectTrigger className="h-11 rounded-xl"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="consultation">Consultation</SelectItem>
-                <SelectItem value="followup">Follow-up</SelectItem>
-                <SelectItem value="checkup">Check-up</SelectItem>
-                <SelectItem value="procedure">Procedure</SelectItem>
+                <SelectItem value="Consultation">Consultation</SelectItem>
+                <SelectItem value="Follow-up">Follow-up</SelectItem>
+                <SelectItem value="Check-up">Check-up</SelectItem>
+                <SelectItem value="Procedure">Procedure</SelectItem>
               </SelectContent>
             </Select>
           </div>
-          <div className="space-y-1.5"><Label>Notes</Label><Textarea rows={3} className="rounded-xl" placeholder="Reason for visit, prep notes…" /></div>
+          <div className="space-y-1.5"><Label>Notes</Label><Textarea rows={3} className="rounded-xl" placeholder="Reason for visit, prep notes…" value={notes} onChange={event => setNotes(event.target.value)} /></div>
         </section>
         <div className="flex gap-2">
           <Button type="button" variant="outline" className="flex-1" onClick={() => navigate({ to: "/app/appointments" })}>Cancel</Button>

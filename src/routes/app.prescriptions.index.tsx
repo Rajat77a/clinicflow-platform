@@ -2,19 +2,18 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { prescriptions } from "@/lib/sample-data";
 import { useAuth } from "@/lib/auth";
+import { useWorkspaceData } from "@/lib/workspace-data";
+import { hasPermission } from "@/lib/access-control";
 import { Plus, FileText, Edit, Eye } from "lucide-react";
 
 export const Route = createFileRoute("/app/prescriptions/")({ component: PrescriptionsPage });
 
 function PrescriptionsPage() {
   const { user } = useAuth();
-  const canCreateRx = user?.role === "doctor";
-  const canEdit = user?.role === "doctor";
-  const rows = user?.role === "doctor"
-    ? prescriptions.filter(p => p.doctor === user.name)
-    : prescriptions;
+  const { prescriptions: rows } = useWorkspaceData();
+  const canCreateRx = Boolean(user && hasPermission(user.role, "prescriptions.write"));
+  const canEdit = canCreateRx;
   return (
     <>
       <PageHeader title="Prescriptions" description="Issued prescriptions and lab reports."

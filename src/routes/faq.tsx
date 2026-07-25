@@ -5,7 +5,7 @@ import { absoluteUrl } from "@/lib/site";
 
 const FAQ = [
   { q: "Which types of clinics is ClinicFlow built for?", a: "General, multi-specialty, dental, physiotherapy, dermatology, ENT, orthopedic, pediatric, ayurveda, homeopathy, diagnostic centers and private medical practices." },
-  { q: "Is my patient data safe?", a: "Yes. ClinicFlow is ISO 27001 certified with end-to-end encryption, encrypted backups every 24 hours, and granular audit logs on every action." },
+  { q: "Is my patient data safe?", a: "ClinicFlow is currently a development environment and must not store real patient data. Production use requires the documented backend safeguards, independent security review and applicable compliance approval." },
   { q: "Can multiple clinics share one account?", a: "Each clinic gets its own independent workspace. No clinic can ever view another clinic's data, even on the same platform." },
   { q: "How long does onboarding take?", a: "Most clinics are fully live within a day. Our team helps migrate existing patient data and trains your staff." },
   { q: "Do you support multiple users per clinic?", a: "Yes — you can add unlimited doctors, receptionists and admins to your clinic workspace." },

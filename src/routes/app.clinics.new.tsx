@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -6,6 +7,7 @@ import { Label } from "@/components/ui/label";
 
 import { Textarea } from "@/components/ui/textarea";
 import { FileUploader } from "@/components/forms/file-uploader";
+import { useWorkspaceData } from "@/lib/workspace-data";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/clinics/new")({ component: AddClinic });
@@ -21,24 +23,36 @@ function Field({ label, children, span = 6 }: { label: string; children: React.R
 
 function AddClinic() {
   const navigate = useNavigate();
+  const { createClinic } = useWorkspaceData();
+  const [name, setName] = useState("");
+  const [city, setCity] = useState("");
+
+  const submit = (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!name.trim() || !city.trim()) return toast.error("Clinic name and location are required");
+    const clinic = createClinic({ name: name.trim(), city: city.trim() });
+    toast.success(`Clinic ${clinic.id} created`);
+    navigate({ to: "/app/clinics" });
+  };
+
   return (
     <>
       <PageHeader title="Add Clinic" description="Onboard a new clinic to ClinicFlow." />
       <form
-        onSubmit={(e) => { e.preventDefault(); toast.success("Clinic created"); navigate({ to: "/app/clinics" }); }}
+        onSubmit={submit}
         className="grid gap-6 lg:grid-cols-3"
       >
         <div className="lg:col-span-2 space-y-6">
           <section className="rounded-2xl border bg-card p-6 shadow-soft">
             <h2 className="mb-4 font-display text-base font-semibold">Clinic details</h2>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
-              <Field label="Clinic name" span={4}><Input placeholder="Northwood Health" className="h-11 rounded-xl" /></Field>
+              <Field label="Clinic name" span={4}><Input placeholder="Northwood Health" className="h-11 rounded-xl" value={name} onChange={event => setName(event.target.value)} /></Field>
               <Field label="Plan" span={2}>
                 <Input value="ClinicFlow — single plan" disabled className="h-11 rounded-xl" />
               </Field>
               <Field label="Email" span={3}><Input type="email" placeholder="admin@clinic.com" className="h-11 rounded-xl" /></Field>
               <Field label="Phone" span={3}><Input placeholder="+46 ..." className="h-11 rounded-xl" /></Field>
-              <Field label="Address" span={6}><Textarea placeholder="Street, city, country" rows={2} className="rounded-xl" /></Field>
+              <Field label="Address" span={6}><Textarea placeholder="Street, city, country" rows={2} className="rounded-xl" value={city} onChange={event => setCity(event.target.value)} /></Field>
             </div>
           </section>
 

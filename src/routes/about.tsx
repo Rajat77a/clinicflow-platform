@@ -30,8 +30,8 @@ function About() {
           their time, so they can focus on patients.
         </p>
         <p className="mt-4 text-muted-foreground">
-          Today, ClinicFlow powers 340+ clinics across India, from solo practices to multi-specialty centers,
-          dental chains, dermatology clinics, physiotherapy, ayurveda and diagnostic labs.
+          ClinicFlow is currently being developed as a connected platform for solo practices,
+          multi-specialty centers and diagnostic workflows.
         </p>
       </section>
 
@@ -40,7 +40,7 @@ function About() {
           {[
             { icon: Heart, t: "Patient-first", d: "Every feature is judged by one question: does this help the patient?" },
             { icon: Sparkles, t: "Calm by design", d: "We obsess over white space, typography and clear language." },
-            { icon: Shield, t: "Trust by default", d: "ISO 27001, encryption at rest, daily backups, granular audit logs." },
+            { icon: Shield, t: "Trust by default", d: "Least-privilege roles, tenant isolation and auditable workflows are core requirements." },
             { icon: Users, t: "Built with clinics", d: "Every release ships from real feedback from real clinic staff." },
           ].map((v) => {
             const I = v.icon;
@@ -57,7 +57,7 @@ function About() {
 
       <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
         <div className="grid gap-6 rounded-3xl border bg-gradient-to-br from-primary-soft/50 to-card p-10 sm:grid-cols-4">
-          {[["340+", "Clinics"], ["1.2M+", "Patients"], ["12", "Specialties"], ["99.99%", "Uptime"]].map(([v, l]) => (
+          {[["4", "Role portals"], ["1", "Shared workspace"], ["6", "Tested access rules"], ["0", "Unverified claims"]].map(([v, l]) => (
             <div key={l} className="text-center">
               <div className="font-display text-3xl font-bold">{v}</div>
               <div className="mt-1 text-xs uppercase tracking-wider text-muted-foreground">{l}</div>

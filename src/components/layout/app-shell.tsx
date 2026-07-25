@@ -9,7 +9,7 @@ import {
   DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth, ROLE_LABELS, type Role } from "@/lib/auth";
-import { doctors, patients } from "@/lib/sample-data";
+import { useWorkspaceData } from "@/lib/workspace-data";
 import { SidebarNav } from "./sidebar-nav";
 
 function ClinicMark({ initials }: { initials: string }) {
@@ -40,6 +40,7 @@ type SearchResult =
 
 function GlobalSearch() {
   const navigate = useNavigate();
+  const { doctors, patients } = useWorkspaceData();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const normalized = query.toLocaleLowerCase().replace(/\s/g, "");
@@ -60,7 +61,7 @@ function GlobalSearch() {
       )
       .map(doctor => ({ id: doctor.id, kind: "doctor", name: doctor.name, detail: `${doctor.specialty} · ${doctor.id}` }));
     return [...patientResults, ...doctorResults].slice(0, 8);
-  }, [normalized]);
+  }, [doctors, normalized, patients]);
 
   const select = (result: SearchResult) => {
     setQuery("");

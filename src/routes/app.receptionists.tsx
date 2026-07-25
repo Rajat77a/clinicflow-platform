@@ -7,20 +7,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { receptionists as seed } from "@/lib/sample-data";
+import { useWorkspaceData } from "@/lib/workspace-data";
 import { UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/receptionists")({ component: ReceptionistsPage });
-
-type Row = { id: string; name: string; email: string; phone: string; shift: string; status: string };
 
 function genPwd() {
   return "CF" + Math.random().toString(36).slice(2, 8) + "!" + Math.floor(Math.random() * 90 + 10);
 }
 
 function ReceptionistsPage() {
-  const [rows, setRows] = useState<Row[]>(seed.map(r => ({ ...r })));
+  const { receptionists: rows, createReceptionist } = useWorkspaceData();
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "", shift: "Morning (9–5)", tempPwd: "" });
 
@@ -29,9 +27,13 @@ function ReceptionistsPage() {
       toast.error("Name, email, phone and a temp password (min 8 chars) are required");
       return;
     }
-    const id = `RC-${String(rows.length + 1).padStart(3, "0")}`;
-    setRows([{ id, name: form.name, email: form.email, phone: form.phone, shift: form.shift, status: "Active" }, ...rows]);
-    toast.success(`Receptionist added. Login credentials emailed to ${form.email}`);
+    const receptionist = createReceptionist({
+      name: form.name.trim(),
+      email: form.email.trim(),
+      phone: form.phone.trim(),
+      shift: form.shift,
+    });
+    toast.success(`${receptionist.name} added. Login credentials emailed to ${form.email}`);
     setOpen(false);
     setForm({ name: "", email: "", phone: "", shift: "Morning (9–5)", tempPwd: "" });
   };

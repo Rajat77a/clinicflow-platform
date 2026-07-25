@@ -5,9 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { EntityPicker, patientOptions, type PatientOption } from "@/components/forms/entity-picker";
+import { EntityPicker, toPatientOptions, type PatientOption } from "@/components/forms/entity-picker";
 import { useAuth } from "@/lib/auth";
-import { prescriptions } from "@/lib/sample-data";
+import { useWorkspaceData } from "@/lib/workspace-data";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { printDocument } from "@/lib/exporters";
 import { Plus, Trash2, Send, Printer, Pill } from "lucide-react";
@@ -23,6 +23,8 @@ const CATS: Cat[] = ["Consultation", "Procedure", "Medicine", "Lab", "Other"];
 function NewBill() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const { patients, prescriptions, createBill } = useWorkspaceData();
+  const patientOptions = toPatientOptions(patients);
   const [patient, setPatient] = useState<PatientOption | null>(null);
   const [lines, setLines] = useState<Line[]>([
     { id: crypto.randomUUID(), category: "Consultation", name: "Doctor consultation", qty: 1, unit: 500 },
@@ -60,7 +62,8 @@ function NewBill() {
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!patient) { toast.error("Please select a patient"); return; }
-    toast.success("Bill created");
+    const bill = createBill({ patientId: patient.id, amount: total });
+    toast.success(`Bill ${bill.id} created`);
     navigate({ to: "/app/billing" });
   };
 

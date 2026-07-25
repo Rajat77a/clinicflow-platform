@@ -7,8 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
-import { doctors, receptionists } from "@/lib/sample-data";
 import { useAuth } from "@/lib/auth";
+import { useWorkspaceData } from "@/lib/workspace-data";
 import { UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
@@ -18,6 +18,7 @@ type Row = { id: string; name: string; email: string; role: string; status: stri
 
 function UsersPage() {
   const { user } = useAuth();
+  const { doctors, receptionists } = useWorkspaceData();
   const isSuper = user?.role === "super_admin";
   const isClinicAdmin = user?.role === "clinic_admin";
 

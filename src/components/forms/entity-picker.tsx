@@ -128,13 +128,13 @@ export function EntityPicker<T extends EntityOption>({
   );
 }
 
-// ----- Adapters -----
-import { patients as PATIENTS, doctors as DOCTORS } from "@/lib/sample-data";
+// ----- Workspace adapters -----
+import type { Doctor, Patient } from "@/lib/workspace-data";
 
-export type PatientOption = EntityOption & { raw: typeof PATIENTS[number] };
-export type DoctorOption = EntityOption & { raw: typeof DOCTORS[number] };
+export type PatientOption = EntityOption & { raw: Patient };
+export type DoctorOption = EntityOption & { raw: Doctor };
 
-export const patientOptions: PatientOption[] = PATIENTS.map(p => ({
+export const toPatientOptions = (patients: Patient[]): PatientOption[] => patients.map(p => ({
   id: p.id,
   primary: p.name,
   secondary: `${p.age} ${p.gender[0]}`,
@@ -143,7 +143,7 @@ export const patientOptions: PatientOption[] = PATIENTS.map(p => ({
   raw: p,
 }));
 
-export const doctorOptions: DoctorOption[] = DOCTORS.map(d => ({
+export const toDoctorOptions = (doctors: Doctor[]): DoctorOption[] => doctors.map(d => ({
   id: d.id,
   primary: d.name,
   secondary: d.specialty,
