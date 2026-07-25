@@ -85,9 +85,9 @@ function Login() {
 
           <div className="mt-10 grid max-w-md grid-cols-3 gap-4">
             {[
-              ["340+", "clinics"],
-              ["1.2M", "patients"],
-              ["99.99%", "uptime"],
+              ["4", "role portals"],
+              ["1", "workspace"],
+              ["RBAC", "foundation"],
             ].map(([v, l]) => (
               <div key={l}>
                 <div className="font-display text-2xl font-bold">{v}</div>
@@ -98,7 +98,7 @@ function Login() {
         </div>
 
         <div className="relative text-xs opacity-75">
-          HIPAA & GDPR aligned · ISO 27001 certified
+          Demo environment · production compliance validation pending
         </div>
       </div>
 

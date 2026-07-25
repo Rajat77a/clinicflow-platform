@@ -88,11 +88,11 @@ export function MarketingShell({ children }: { children: ReactNode }) {
                 <div className="font-display text-base font-bold">ClinicFlow</div>
               </div>
               <p className="mt-4 max-w-sm text-sm text-muted-foreground">
-                The all-in-one clinic management platform trusted by clinics across India — from solo
-                practices to multi-specialty centers.
+                A connected clinic management platform for patients, appointments, prescriptions,
+                billing and role-based workflows.
               </p>
               <div className="mt-4 text-xs text-muted-foreground">
-                HIPAA & GDPR aligned · ISO 27001 certified
+                Production compliance and certification are pending independent review.
               </div>
             </div>
             <div>

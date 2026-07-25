@@ -3,39 +3,49 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 export type Role = "super_admin" | "clinic_admin" | "doctor" | "receptionist";
 
 export interface AuthUser {
+  userId: string;
   name: string;
   email: string;
   role: Role;
+  clinicId: string | null;
   clinic: string;
   clinicLogo: string;
 }
 
 const DEFAULT_USERS: Record<Role, AuthUser> = {
   super_admin: {
+    userId: "USR-SA-001",
     name: "Dr. Helena Vance",
     email: "helena@clinicflow.io",
     role: "super_admin",
+    clinicId: null,
     clinic: "ClinicFlow HQ",
     clinicLogo: "CF",
   },
   clinic_admin: {
+    userId: "USR-CA-001",
     name: "Marcus Lindqvist",
     email: "marcus@northwood.health",
     role: "clinic_admin",
+    clinicId: "CL-001",
     clinic: "Northwood Health",
     clinicLogo: "NH",
   },
   doctor: {
+    userId: "DR-01",
     name: "Dr. Amelia Chen",
     email: "amelia.chen@northwood.health",
     role: "doctor",
+    clinicId: "CL-001",
     clinic: "Northwood Health",
     clinicLogo: "NH",
   },
   receptionist: {
+    userId: "RC-01",
     name: "Sofia Romero",
     email: "sofia@northwood.health",
     role: "receptionist",
+    clinicId: "CL-001",
     clinic: "Northwood Health",
     clinicLogo: "NH",
   },
@@ -60,8 +70,7 @@ function isAuthUser(value: unknown): value is AuthUser {
     typeof user.email === "string" &&
     typeof user.role === "string" &&
     ROLES.has(user.role as Role) &&
-    typeof user.clinic === "string" &&
-    typeof user.clinicLogo === "string"
+    typeof user.clinic === "string"
   );
 }
 

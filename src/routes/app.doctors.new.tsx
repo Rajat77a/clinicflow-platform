@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { FileUploader } from "@/components/forms/file-uploader";
+import { useWorkspaceData } from "@/lib/workspace-data";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/doctors/new")({ component: NewDoctor });
@@ -22,16 +23,26 @@ function Field({ label, span = 6, children }: { label: string; span?: number; ch
 
 function NewDoctor() {
   const navigate = useNavigate();
+  const { createDoctor } = useWorkspaceData();
+  const [name, setName] = React.useState("");
+  const [specialty, setSpecialty] = React.useState("");
+  const [phone, setPhone] = React.useState("");
   const [email, setEmail] = React.useState("");
   const [tempPwd, setTempPwd] = React.useState("");
   const genPwd = () => setTempPwd("CF" + Math.random().toString(36).slice(2, 8) + "!" + Math.floor(Math.random() * 90 + 10));
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !tempPwd.trim() || tempPwd.length < 8) {
-      toast.error("Email and a temporary password (min 8 chars) are required to create login credentials");
+    if (!name.trim() || !specialty.trim() || !email.trim() || !phone.trim() || !tempPwd.trim() || tempPwd.length < 8) {
+      toast.error("Name, specialty, email, phone and a temporary password are required");
       return;
     }
-    toast.success(`Doctor added. Login credentials emailed to ${email}`);
+    const doctor = createDoctor({
+      name: name.trim(),
+      specialty: specialty.trim(),
+      email: email.trim(),
+      phone: phone.trim(),
+    });
+    toast.success(`${doctor.name} added. Login credentials emailed to ${email}`);
     navigate({ to: "/app/doctors" });
   };
   return (
@@ -42,7 +53,7 @@ function NewDoctor() {
           <section className="rounded-2xl border bg-card p-6 shadow-soft">
             <h2 className="mb-4 font-display text-base font-semibold">Personal information</h2>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
-              <Field label="Full name" span={4}><Input required className="h-11 rounded-xl" placeholder="Dr. Amelia Chen" /></Field>
+              <Field label="Full name" span={4}><Input required className="h-11 rounded-xl" placeholder="Dr. Amelia Chen" value={name} onChange={event => setName(event.target.value)} /></Field>
               <Field label="Gender" span={2}>
                 <Select>
                   <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Select" /></SelectTrigger>
@@ -53,7 +64,7 @@ function NewDoctor() {
                   </SelectContent>
                 </Select>
               </Field>
-              <Field label="Specialty" span={3}><Input required className="h-11 rounded-xl" placeholder="General Medicine" /></Field>
+              <Field label="Specialty" span={3}><Input required className="h-11 rounded-xl" placeholder="General Medicine" value={specialty} onChange={event => setSpecialty(event.target.value)} /></Field>
               <Field label="Qualification" span={3}><Input className="h-11 rounded-xl" placeholder="MBBS, MD" /></Field>
               <Field label="Medical registration No." span={3}><Input className="h-11 rounded-xl" placeholder="MCI-123456" /></Field>
               <Field label="Experience (years)" span={3}><Input type="number" className="h-11 rounded-xl" placeholder="8" /></Field>
@@ -65,7 +76,7 @@ function NewDoctor() {
             <p className="mb-4 text-xs text-muted-foreground">Email and temporary password are required — they will be sent to the doctor so they can sign in.</p>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
               <Field label="Email (login ID)" span={3}><Input required type="email" value={email} onChange={e => setEmail(e.target.value)} className="h-11 rounded-xl" placeholder="amelia@clinic.com" /></Field>
-              <Field label="Phone" span={3}><Input required className="h-11 rounded-xl" placeholder="+91 98765 43210" /></Field>
+              <Field label="Phone" span={3}><Input required className="h-11 rounded-xl" placeholder="+91 98765 43210" value={phone} onChange={event => setPhone(event.target.value)} /></Field>
               <Field label="Temporary password" span={4}>
                 <Input required minLength={8} value={tempPwd} onChange={e => setTempPwd(e.target.value)} className="h-11 rounded-xl font-mono" placeholder="Min 8 characters" />
               </Field>

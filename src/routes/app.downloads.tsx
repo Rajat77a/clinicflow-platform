@@ -1,15 +1,13 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useAuth, type Role } from "@/lib/auth";
-import {
-  clinics, patients, doctors, receptionists, appointments, prescriptions,
-  bills, labReports, followUps, auditLogs, payments,
-} from "@/lib/sample-data";
+import { followUps, payments } from "@/lib/sample-data";
+import { useWorkspaceData } from "@/lib/workspace-data";
 import { downloadCSV } from "@/lib/exporters";
 import { Download } from "lucide-react";
 import { toast } from "sonner";
@@ -18,44 +16,46 @@ export const Route = createFileRoute("/app/downloads")({ component: DownloadCent
 
 type Dataset = { key: string; label: string; rows: Record<string, unknown>[] };
 
-const ROLE_DATASETS: Record<Role, Dataset[]> = {
-  super_admin: [
-    { key: "clinics", label: "Clinics", rows: clinics },
-    { key: "subscriptions", label: "Payments", rows: payments },
-    { key: "auditLogs", label: "Audit Logs", rows: auditLogs },
-    { key: "doctors", label: "Doctors (all)", rows: doctors },
-    { key: "receptionists", label: "Receptionists (all)", rows: receptionists },
-    { key: "patients", label: "Patients (all)", rows: patients },
-  ],
-  clinic_admin: [
-    { key: "patients", label: "Patients", rows: patients },
-    { key: "doctors", label: "Doctors", rows: doctors },
-    { key: "receptionists", label: "Receptionists", rows: receptionists },
-    { key: "appointments", label: "Appointments", rows: appointments },
-    { key: "prescriptions", label: "Prescriptions", rows: prescriptions.map(p => ({ ...p, medicines: p.medicines.length })) },
-    { key: "bills", label: "Bills", rows: bills },
-    { key: "labReports", label: "Lab Reports", rows: labReports },
-    { key: "auditLogs", label: "Audit Logs", rows: auditLogs },
-  ],
-  doctor: [
-    { key: "patients", label: "My patients", rows: patients },
-    { key: "prescriptions", label: "My prescriptions", rows: prescriptions.map(p => ({ ...p, medicines: p.medicines.length })) },
-    { key: "labReports", label: "Lab reports", rows: labReports },
-    { key: "appointments", label: "My appointments", rows: appointments },
-    { key: "followUps", label: "Follow-ups", rows: followUps },
-  ],
-  receptionist: [
-    { key: "appointments", label: "Appointments", rows: appointments },
-    { key: "bills", label: "Bills", rows: bills },
-    { key: "labReports", label: "Lab reports uploaded", rows: labReports },
-    { key: "patients", label: "Patients", rows: patients },
-  ],
-};
-
 function DownloadCenter() {
   const { user } = useAuth();
+  const {
+    clinics, patients, doctors, receptionists, appointments, prescriptions,
+    bills, labReports, auditLogs,
+  } = useWorkspaceData();
   const role = user?.role ?? "clinic_admin";
-  const datasets = ROLE_DATASETS[role];
+  const datasets = useMemo(() => {
+    const byRole: Record<Role, Dataset[]> = {
+      super_admin: [
+        { key: "clinics", label: "Clinics", rows: clinics },
+        { key: "payments", label: "Payments", rows: payments },
+        { key: "auditLogs", label: "Audit Logs", rows: auditLogs },
+      ],
+      clinic_admin: [
+        { key: "patients", label: "Patients", rows: patients },
+        { key: "doctors", label: "Doctors", rows: doctors },
+        { key: "receptionists", label: "Receptionists", rows: receptionists },
+        { key: "appointments", label: "Appointments", rows: appointments },
+        { key: "prescriptions", label: "Prescriptions", rows: prescriptions.map(p => ({ ...p, medicines: p.medicines.length })) },
+        { key: "bills", label: "Bills", rows: bills },
+        { key: "labReports", label: "Lab Reports", rows: labReports },
+        { key: "auditLogs", label: "Audit Logs", rows: auditLogs },
+      ],
+      doctor: [
+        { key: "patients", label: "My patients", rows: patients },
+        { key: "prescriptions", label: "My prescriptions", rows: prescriptions.map(p => ({ ...p, medicines: p.medicines.length })) },
+        { key: "labReports", label: "My patients' lab reports", rows: labReports },
+        { key: "appointments", label: "My appointments", rows: appointments },
+        { key: "followUps", label: "Follow-ups", rows: followUps.filter(item => item.doctor === user?.name) },
+      ],
+      receptionist: [
+        { key: "appointments", label: "Appointments", rows: appointments },
+        { key: "bills", label: "Bills", rows: bills },
+        { key: "labReports", label: "Lab reports", rows: labReports },
+        { key: "patients", label: "Patients", rows: patients },
+      ],
+    };
+    return byRole[role];
+  }, [appointments, auditLogs, bills, clinics, doctors, labReports, patients, prescriptions, receptionists, role, user?.name]);
   const [selected, setSelected] = useState<Record<string, boolean>>(
     Object.fromEntries(datasets.map(d => [d.key, true]))
   );

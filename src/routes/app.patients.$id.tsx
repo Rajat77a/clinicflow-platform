@@ -6,27 +6,26 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { patients, prescriptions, bills, appointments, labReports, type LabReport } from "@/lib/sample-data";
+import { useWorkspaceData, type LabReport, type Prescription } from "@/lib/workspace-data";
 import { downloadCSV, printDocument } from "@/lib/exporters";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { useAuth } from "@/lib/auth";
+import { hasPermission } from "@/lib/access-control";
 import {
   Phone, MapPin, MessageCircle, Calendar, AlertTriangle, FileText, Receipt,
   FolderOpen, FlaskConical, Download, Send, Printer, Edit, Eye,
 } from "lucide-react";
 
 export const Route = createFileRoute("/app/patients/$id")({
-  loader: ({ params }) => {
-    const patient = patients.find(candidate => candidate.id === params.id);
-    if (!patient) throw notFound();
-    return patient;
-  },
   component: PatientProfile,
 });
 
 function PatientProfile() {
   const { user } = useAuth();
-  const patient = Route.useLoaderData();
+  const { id } = Route.useParams();
+  const { patients, prescriptions, bills, appointments, labReports } = useWorkspaceData();
+  const patient = patients.find(candidate => candidate.id === id);
+  if (!patient) throw notFound();
   const visits = appointments.filter(a => a.patientId === patient.id);
   const myRx = prescriptions.filter(r => r.patientId === patient.id);
   const myBills = bills.filter(b => b.patient === patient.name);
@@ -35,8 +34,9 @@ function PatientProfile() {
   const [viewingBill, setViewingBill] = useState<(typeof myBills)[number] | null>(null);
   const [viewingLab, setViewingLab] = useState<LabReport | null>(null);
 
-  const canEditRx = user?.role === "doctor";
-  const canAddLab = user?.role === "doctor" || user?.role === "clinic_admin" || user?.role === "receptionist";
+  const canEditRx = Boolean(user && hasPermission(user.role, "prescriptions.write"));
+  const canAddLab = Boolean(user && hasPermission(user.role, "labs.write"));
+  const canBook = Boolean(user && hasPermission(user.role, "appointments.create"));
 
   const exportAll = () => {
     downloadCSV(`${patient.id}-profile.csv`, [{ ...patient }]);
@@ -46,7 +46,7 @@ function PatientProfile() {
     downloadCSV(`${patient.id}-lab-reports.csv`, myLabs);
   };
 
-  const printRx = (rx: typeof prescriptions[number]) => {
+  const printRx = (rx: Prescription) => {
     printDocument(`
       <h2>${user?.clinic ?? "ClinicFlow"}</h2>
       <div class="muted">Prescription ${rx.id} · ${rx.date}</div>
@@ -62,7 +62,7 @@ function PatientProfile() {
     `, `Prescription ${rx.id}`);
   };
 
-  const shareRx = (rx: typeof prescriptions[number]) => {
+  const shareRx = (rx: Prescription) => {
     const msg = `Hi ${patient.name}, prescription ${rx.id} (${rx.date}):\nDiagnosis: ${rx.diagnosis}\n${rx.medicines.map(m => `• ${m.name} — ${m.dosage} ${m.frequency} × ${m.duration}`).join("\n")}`;
     sendWhatsApp(patient.phone, msg);
   };
@@ -74,7 +74,7 @@ function PatientProfile() {
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={exportAll}><Download className="mr-1.5 h-4 w-4" />Download all</Button>
             {canEditRx && <Button asChild variant="outline"><Link to="/app/prescriptions/new">New prescription</Link></Button>}
-            <Button asChild><Link to="/app/appointments/new">Book follow-up</Link></Button>
+            {canBook && <Button asChild><Link to="/app/appointments/new">Book follow-up</Link></Button>}
           </div>
         } />
 

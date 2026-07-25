@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { EntityPicker, patientOptions, doctorOptions, type PatientOption, type DoctorOption } from "@/components/forms/entity-picker";
+import { EntityPicker, toPatientOptions, toDoctorOptions, type PatientOption, type DoctorOption } from "@/components/forms/entity-picker";
 import { useAuth } from "@/lib/auth";
-import { prescriptions as SEED, labReports as SEED_LABS, type LabReport } from "@/lib/sample-data";
+import { type LabReport } from "@/lib/sample-data";
+import { useWorkspaceData } from "@/lib/workspace-data";
 import { Activity, Plus, Trash2, Send, Printer, FlaskConical, Upload } from "lucide-react";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { printDocument } from "@/lib/exporters";
@@ -35,14 +36,19 @@ type Med = { name: string; dosage: string; frequency: string; duration: string }
 function NewPrescription() {
   const navigate = useNavigate();
   const { user } = useAuth();
+  const {
+    patients, doctors, prescriptions, labReports, savePrescription, saveLabReports,
+  } = useWorkspaceData();
+  const patientOptions = toPatientOptions(patients);
+  const doctorOptions = toDoctorOptions(doctors);
   const { edit, mode, patient: patientParam } = Route.useSearch();
   const isReceptionist = user?.role === "receptionist";
   const isLabMode = mode === "lab";
   const patientLocked = Boolean(patientParam);
 
-  const seed = useMemo(() => edit ? SEED.find(p => p.id === edit) : undefined, [edit]);
+  const seed = useMemo(() => edit ? prescriptions.find(p => p.id === edit) : undefined, [edit, prescriptions]);
   const isDoctor = user?.role === "doctor";
-  const isOwnRx = !seed || !isDoctor || seed.doctor === user?.name;
+  const isOwnRx = !seed || (isDoctor && seed.doctor === user?.name);
 
   const [patient, setPatient] = useState<PatientOption | null>(
     patientParam
@@ -62,7 +68,7 @@ function NewPrescription() {
     (isLabMode ? [] : [{ name: "Amoxicillin 500 mg", dosage: "1 tab", frequency: "3× per day", duration: "5 days" }])
   );
   const [labs, setLabs] = useState<LabReport[]>(
-    edit ? SEED_LABS.filter(l => l.prescriptionId === edit) : []
+    edit ? labReports.filter(l => l.prescriptionId === edit) : []
   );
   const [newLab, setNewLab] = useState({ test: "", result: "", reference: "", notes: "" });
 
@@ -102,6 +108,7 @@ function NewPrescription() {
     if (!patient) { toast.error("Please select a patient"); return; }
     if (isLabMode) {
       if (labs.length === 0) { toast.error("Add at least one lab report"); return; }
+      saveLabReports(labs);
       toast.success("Lab report saved");
       navigate({ to: "/app/patients/$id", params: { id: patient.id } });
       return;
@@ -109,7 +116,24 @@ function NewPrescription() {
     if (!doctor) { toast.error("Please select a doctor"); return; }
     if (!diagnosis.trim()) { toast.error("Diagnosis is required"); return; }
     if (meds.length === 0 || !meds[0].name.trim()) { toast.error("Add at least one medicine"); return; }
-    toast.success(edit ? "Prescription updated" : "Prescription saved");
+    const saved = savePrescription({
+      id: edit,
+      patientId: patient.id,
+      doctorId: doctor.id,
+      diagnosis: diagnosis.trim(),
+      notes: notes.trim() || undefined,
+      followUp: followup || undefined,
+      medicines: meds,
+    });
+    if (labs.length) {
+      saveLabReports(labs.map(report => ({
+        ...report,
+        prescriptionId: saved.id,
+        patient: patient.primary,
+        patientId: patient.id,
+      })));
+    }
+    toast.success(edit ? "Prescription updated" : `Prescription ${saved.id} saved`);
     navigate({ to: "/app/prescriptions" });
   };
 
@@ -138,6 +162,13 @@ function NewPrescription() {
 
   return (
     <>
+      {!isLabMode && !isDoctor ? (
+        <>
+          <PageHeader title="Prescription access restricted" description="Only doctors can create or edit prescriptions. Use lab mode to attach reports." />
+          <Button variant="outline" onClick={() => navigate({ to: "/app/prescriptions" })}>Back to prescriptions</Button>
+        </>
+      ) : (
+      <>
       <PageHeader
         title={edit ? `Edit ${edit}` : isLabMode ? "Add lab report" : isReceptionist ? "Lab report" : "New prescription"}
         description={
@@ -175,8 +206,15 @@ function NewPrescription() {
                 <Label>
                   Doctor {isLabMode ? <span className="text-xs text-muted-foreground font-normal">(optional — leave empty if not assigned)</span> : <span className="text-destructive">*</span>}
                 </Label>
-                <EntityPicker options={doctorOptions} value={doctor} onChange={setDoctor}
-                  placeholder={isLabMode ? "Search doctor name (optional)…" : "Search by name, doctor ID or phone…"} />
+                {isDoctor && !isLabMode && doctor ? (
+                  <div className="rounded-xl border bg-muted/40 px-3 py-2.5">
+                    <div className="text-sm font-semibold">{doctor.primary}</div>
+                    <div className="text-xs text-muted-foreground">{doctor.id} · signed-in doctor</div>
+                  </div>
+                ) : (
+                  <EntityPicker options={doctorOptions} value={doctor} onChange={setDoctor}
+                    placeholder={isLabMode ? "Search doctor name (optional)…" : "Search by name, doctor ID or phone…"} />
+                )}
                 {isLabMode && doctor && (
                   <button type="button" onClick={() => setDoctor(null)}
                     className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">
@@ -330,6 +368,8 @@ function NewPrescription() {
           </div>
         </aside>
       </div>
+      </>
+      )}
     </>
   );
 }

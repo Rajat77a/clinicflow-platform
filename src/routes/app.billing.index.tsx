@@ -9,16 +9,14 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { StatCard } from "@/components/layout/stat-card";
-import { bills as SEED_BILLS, prescriptions } from "@/lib/sample-data";
+import { useWorkspaceData, type Bill } from "@/lib/workspace-data";
 import { Receipt, CheckCircle2, Clock, AlertCircle, Eye } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/billing/")({ component: BillingPage });
 
-type Bill = (typeof SEED_BILLS)[number];
-
 function BillingPage() {
-  const [bills, setBills] = useState<Bill[]>(SEED_BILLS);
+  const { bills, prescriptions, updateBill } = useWorkspaceData();
   const [viewing, setViewing] = useState<Bill | null>(null);
   const [payMethod, setPayMethod] = useState<string>("Card");
 
@@ -27,7 +25,9 @@ function BillingPage() {
   const overdue = bills.filter(b => b.status === "Overdue").reduce((s, b) => s + b.amount, 0);
 
   const setStatus = (id: string, status: string, method?: string) => {
-    setBills(bs => bs.map(b => b.id === id ? { ...b, status, method: method ?? b.method } : b));
+    const bill = bills.find(item => item.id === id);
+    if (!bill) return;
+    updateBill({ ...bill, status, method: method ?? bill.method });
     toast.success(`Invoice ${id} marked ${status.toLowerCase()}`);
   };
 

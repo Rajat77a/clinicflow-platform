@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { clinics, doctors, receptionists, patients } from "@/lib/sample-data";
+import { useWorkspaceData, type Clinic } from "@/lib/workspace-data";
 import { Search, Plus, Download } from "lucide-react";
 import { downloadCSV } from "@/lib/exporters";
 import { toast } from "sonner";
@@ -12,16 +12,14 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/app/clinics/")({ component: ClinicsPage });
 
 function ClinicsPage() {
-  const exportClinic = (c: typeof clinics[number]) => {
+  const { clinics } = useWorkspaceData();
+  const exportClinic = (c: Clinic) => {
     const summary = [{
       clinicId: c.id, clinicName: c.name, city: c.city,
       doctors: c.doctors, receptionists: c.receptionists, patients: c.patients,
       plan: c.plan, status: c.status, renews: c.expires,
     }];
     downloadCSV(`${c.id}-summary.csv`, summary);
-    downloadCSV(`${c.id}-doctors.csv`, doctors);
-    downloadCSV(`${c.id}-receptionists.csv`, receptionists);
-    downloadCSV(`${c.id}-patients.csv`, patients);
     toast.success(`Exported ${c.name} · logged in audit`);
   };
 

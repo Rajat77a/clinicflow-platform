@@ -9,13 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { appointments as SEED } from "@/lib/sample-data";
+import { useWorkspaceData, type Appointment } from "@/lib/workspace-data";
 import { CalendarDays, List, Plus } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/appointments/")({ component: AppointmentsPage });
 
-type Appt = (typeof SEED)[number];
+type Appt = Appointment;
 
 function CalendarView({ appts }: { appts: Appt[] }) {
   const hours = ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30"];
@@ -48,7 +48,7 @@ function CalendarView({ appts }: { appts: Appt[] }) {
 }
 
 function AppointmentsPage() {
-  const [rows, setRows] = useState<Appt[]>(SEED);
+  const { appointments: rows, updateAppointment } = useWorkspaceData();
   const [editing, setEditing] = useState<Appt | null>(null);
   const [draft, setDraft] = useState<Appt | null>(null);
 
@@ -56,7 +56,7 @@ function AppointmentsPage() {
   const save = () => {
     if (!draft) return;
     if (!draft.date || !draft.time) { toast.error("Date and time are required"); return; }
-    setRows(rs => rs.map(r => r.id === draft.id ? draft : r));
+    updateAppointment(draft);
     toast.success(`Appointment ${draft.id} updated`);
     setEditing(null);
   };

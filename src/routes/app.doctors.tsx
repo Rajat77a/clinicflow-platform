@@ -3,7 +3,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { doctors } from "@/lib/sample-data";
+import { useWorkspaceData } from "@/lib/workspace-data";
 import { Plus } from "lucide-react";
 
 export const Route = createFileRoute("/app/doctors")({ component: DoctorsRoute });
@@ -16,6 +16,7 @@ function DoctorsRoute() {
 }
 
 function DoctorsPage() {
+  const { doctors } = useWorkspaceData();
   return (
     <>
       <PageHeader title="Doctors" description="Practitioners at your clinic."

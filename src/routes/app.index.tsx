@@ -14,9 +14,9 @@ import { StatCard } from "@/components/layout/stat-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-  appointments, clinics, notifications, patients, prescriptions,
-  revenueByMonth, subscriptions, visitsByWeek,
+  notifications, revenueByMonth, subscriptions, visitsByWeek,
 } from "@/lib/sample-data";
+import { useWorkspaceData } from "@/lib/workspace-data";
 
 export const Route = createFileRoute("/app/")({
   component: Dashboard,
@@ -108,6 +108,7 @@ function NotifList() {
 
 /* ---------- Super Admin ---------- */
 function SuperAdminDashboard() {
+  const { clinics } = useWorkspaceData();
   const totalClinics = clinics.length;
   const active = clinics.filter(c => c.status === "Active").length;
   const expired = clinics.filter(c => c.status === "Expired").length;
@@ -176,7 +177,11 @@ function SuperAdminDashboard() {
 
 /* ---------- Clinic Admin ---------- */
 function ClinicAdminDashboard() {
-  const today = appointments.filter(a => a.date === "2026-06-20");
+  const { appointments, patients, doctors } = useWorkspaceData();
+  const todayDate = new Date().toISOString().slice(0, 10);
+  const today = appointments.filter(a => a.date === todayDate);
+  const newPatients = patients.filter(patient => patient.lastVisit === todayDate).length;
+  const activeDoctors = doctors.filter(doctor => doctor.status === "Active").length;
   return (
     <>
       <PageHeader
@@ -191,10 +196,10 @@ function ClinicAdminDashboard() {
       />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="Today's Appointments" value={today.length} icon={<Calendar className="h-4 w-4" />} trend={{ value: "+3", up: true }} />
-        <StatCard label="New Patients" value="12" tone="info" icon={<UserPlus className="h-4 w-4" />} trend={{ value: "+18%", up: true }} />
+        <StatCard label="New Patients" value={newPatients} tone="info" icon={<UserPlus className="h-4 w-4" />} />
         <StatCard label="Follow-Ups" value="9" tone="warning" icon={<ClipboardCheck className="h-4 w-4" />} />
         <StatCard label="Monthly Revenue" value="€34,750" tone="success" icon={<DollarSign className="h-4 w-4" />} trend={{ value: "+11%", up: true }} />
-        <StatCard label="Active Doctors" value="4" icon={<Stethoscope className="h-4 w-4" />} />
+        <StatCard label="Active Doctors" value={activeDoctors} icon={<Stethoscope className="h-4 w-4" />} />
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
@@ -232,7 +237,9 @@ function ClinicAdminDashboard() {
 
 /* ---------- Doctor ---------- */
 function DoctorDashboard() {
-  const my = appointments.filter(a => a.doctor === "Dr. Amelia Chen");
+  const { user } = useAuth();
+  const { appointments, prescriptions } = useWorkspaceData();
+  const my = appointments.filter(a => a.doctor === user?.name);
   return (
     <>
       <PageHeader
@@ -291,7 +298,11 @@ function DoctorDashboard() {
 
 /* ---------- Receptionist ---------- */
 function ReceptionistDashboard() {
-  const today = appointments.filter(a => a.date === "2026-06-20");
+  const { appointments, patients, bills } = useWorkspaceData();
+  const todayDate = new Date().toISOString().slice(0, 10);
+  const today = appointments.filter(a => a.date === todayDate);
+  const pendingBills = bills.filter(bill => bill.status !== "Paid").length;
+  const newPatients = patients.filter(patient => patient.lastVisit === todayDate).length;
   return (
     <>
       <PageHeader
@@ -307,8 +318,8 @@ function ReceptionistDashboard() {
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Today's appointments" value={today.length} icon={<Calendar className="h-4 w-4" />} />
         <StatCard label="Checked-in" value="2" tone="success" icon={<CheckCircle2 className="h-4 w-4" />} />
-        <StatCard label="Pending bills" value="3" tone="warning" icon={<Receipt className="h-4 w-4" />} />
-        <StatCard label="New patients (today)" value="4" tone="info" icon={<UserPlus className="h-4 w-4" />} />
+        <StatCard label="Pending bills" value={pendingBills} tone="warning" icon={<Receipt className="h-4 w-4" />} />
+        <StatCard label="New patients (today)" value={newPatients} tone="info" icon={<UserPlus className="h-4 w-4" />} />
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">
