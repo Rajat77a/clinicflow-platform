@@ -32,6 +32,8 @@ test("clinic roles cannot enter platform controls", () => {
 test("clinical duties remain separated by permission", () => {
   assert.equal(hasPermission("doctor", "prescriptions.write"), true);
   assert.equal(hasPermission("receptionist", "prescriptions.write"), false);
+  assert.equal(hasPermission("receptionist", "prescriptions.read"), false);
+  assert.equal(hasPermission("receptionist", "labs.write"), false);
   assert.equal(hasPermission("clinic_admin", "prescriptions.write"), false);
   assert.equal(hasPermission("doctor", "billing.read"), false);
   assert.equal(hasPermission("receptionist", "billing.write"), true);
@@ -42,6 +44,7 @@ test("route matching covers nested records and creation screens", () => {
   assert.equal(permissionForPath("/app/patients/PT-10293"), "patients.read");
   assert.equal(permissionForPath("/app/patients/new"), "patients.create");
   assert.equal(permissionForPath("/app/appointments/new"), "appointments.create");
+  assert.equal(permissionForPath("/app/prescriptions/new"), "prescriptions.write");
   assert.equal(permissionForPath("/app/clinics/new"), "platform.clinics.manage");
   assert.equal(permissionForPath("/app"), null);
   assert.equal(canAccessPath("super_admin", "/app/unregistered-future-route"), false);

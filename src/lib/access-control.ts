@@ -82,8 +82,6 @@ const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     "appointments.read",
     "appointments.create",
     "appointments.update",
-    "prescriptions.read",
-    "labs.write",
     "billing.read",
     "billing.write",
     "files.read",
@@ -105,7 +103,7 @@ const ROUTE_RULES: ReadonlyArray<{ matches: RegExp; permission: Permission }> = 
   { matches: /^\/app\/patients(?:\/|$)/, permission: "patients.read" },
   { matches: /^\/app\/appointments\/new\/?$/, permission: "appointments.create" },
   { matches: /^\/app\/appointments(?:\/|$)/, permission: "appointments.read" },
-  { matches: /^\/app\/prescriptions\/new\/?$/, permission: "labs.write" },
+  { matches: /^\/app\/prescriptions\/new\/?$/, permission: "prescriptions.write" },
   { matches: /^\/app\/prescriptions(?:\/|$)/, permission: "prescriptions.read" },
   { matches: /^\/app\/billing(?:\/|$)/, permission: "billing.read" },
   { matches: /^\/app\/files(?:\/|$)/, permission: "files.read" },
@@ -124,7 +122,7 @@ export function hasPermission(role: Role, permission: Permission) {
 }
 
 export function permissionForPath(pathname: string): Permission | null {
-  return ROUTE_RULES.find(rule => rule.matches.test(pathname))?.permission ?? null;
+  return ROUTE_RULES.find((rule) => rule.matches.test(pathname))?.permission ?? null;
 }
 
 export function canAccessPath(role: Role, pathname: string) {
@@ -135,5 +133,7 @@ export function canAccessPath(role: Role, pathname: string) {
 }
 
 export function rolesForPermission(permission: Permission): Role[] {
-  return (Object.keys(ROLE_PERMISSIONS) as Role[]).filter(role => hasPermission(role, permission));
+  return (Object.keys(ROLE_PERMISSIONS) as Role[]).filter((role) =>
+    hasPermission(role, permission),
+  );
 }
