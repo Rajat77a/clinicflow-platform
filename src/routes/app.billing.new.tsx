@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,8 +23,13 @@ const CATS: Cat[] = ["Consultation", "Procedure", "Medicine", "Lab", "Other"];
 function NewBill() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { patients, prescriptions, createBill } = useWorkspaceData();
+  const { patients, prescriptions, searchPatients, createBill } = useWorkspaceData();
   const patientOptions = toPatientOptions(patients);
+  const searchPatientOptions = useCallback(
+    async (query: string) =>
+      toPatientOptions((await searchPatients({ query, limit: 12 })).rows),
+    [searchPatients],
+  );
   const [patient, setPatient] = useState<PatientOption | null>(null);
   const [lines, setLines] = useState<Line[]>([
     { id: crypto.randomUUID(), category: "Consultation", name: "Doctor consultation", qty: 1, unit: 500 },
@@ -112,7 +117,7 @@ function NewBill() {
           <section className="rounded-2xl border bg-card p-6 shadow-soft space-y-4">
             <div className="space-y-1.5">
               <Label>Patient <span className="text-destructive">*</span></Label>
-              <EntityPicker options={patientOptions} value={patient} onChange={setPatient}
+              <EntityPicker options={patientOptions} onSearch={searchPatientOptions} value={patient} onChange={setPatient}
                 placeholder="Search by name, patient ID or phone…" />
             </div>
             <div className="flex flex-wrap gap-2">

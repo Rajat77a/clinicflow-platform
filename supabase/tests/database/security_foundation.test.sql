@@ -196,4 +196,39 @@ begin
 end
 $$;
 
+do $$
+declare
+  directory_is_definer boolean;
+begin
+  select p.prosecdef
+  into directory_is_definer
+  from pg_proc p
+  join pg_namespace n on n.oid = p.pronamespace
+  where n.nspname = 'public'
+    and p.proname = 'search_patients'
+    and pg_get_function_identity_arguments(p.oid) = 'p_query text, p_limit integer, p_offset integer';
+
+  if directory_is_definer is null then
+    raise exception 'Paginated patient directory function is missing';
+  end if;
+  if directory_is_definer then
+    raise exception 'Patient directory bypasses caller RLS';
+  end if;
+  if has_function_privilege(
+    'anon',
+    'public.search_patients(text, integer, integer)',
+    'EXECUTE'
+  ) then
+    raise exception 'Anonymous users can search the patient directory';
+  end if;
+  if not has_function_privilege(
+    'authenticated',
+    'public.search_patients(text, integer, integer)',
+    'EXECUTE'
+  ) then
+    raise exception 'Authenticated hospital roles cannot use the patient directory';
+  end if;
+end
+$$;
+
 rollback;

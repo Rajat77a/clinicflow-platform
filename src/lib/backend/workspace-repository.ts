@@ -17,8 +17,23 @@ import type {
   WorkspaceSnapshot,
 } from "../workspace-data";
 
+export interface PatientPage {
+  rows: Patient[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface PatientSearch {
+  query?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export interface WorkspaceRepository {
   load(): Promise<WorkspaceSnapshot>;
+  searchPatients(input?: PatientSearch): Promise<PatientPage>;
+  getPatient(id: string): Promise<Patient | null>;
   createDoctor(input: DoctorInput): Promise<Doctor>;
   createReceptionist(input: ReceptionistInput): Promise<Receptionist>;
   inviteClinicAdmin(input: ClinicAdminInput): Promise<StaffMember>;
