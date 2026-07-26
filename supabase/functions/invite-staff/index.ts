@@ -90,8 +90,14 @@ Deno.serve(async (request) => {
       .eq("role_code", actor.role_code)
       .eq("permission_code", "people.manage")
       .maybeSingle();
-    const canAssignRole = roleCode !== "clinic_admin" || actor.role_code === "super_admin";
-    if (!permission || !canAssignRole) {
+    if (!permission) {
+      return response(403, { error: "You cannot assign this role" });
+    }
+    const { error: roleAssignmentError } = await adminClient.rpc("assert_staff_role_assignment", {
+      p_actor_role: actor.role_code,
+      p_target_role: roleCode,
+    });
+    if (roleAssignmentError) {
       return response(403, { error: "You cannot assign this role" });
     }
 

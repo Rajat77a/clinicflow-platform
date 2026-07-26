@@ -71,6 +71,62 @@ $$;
 
 do $$
 begin
+  if has_table_privilege('authenticated', 'public.roles', 'INSERT')
+    or has_table_privilege('authenticated', 'public.roles', 'UPDATE')
+    or has_table_privilege('authenticated', 'public.roles', 'DELETE')
+  then
+    raise exception 'Authenticated clients can modify authorization roles';
+  end if;
+
+  if has_table_privilege('authenticated', 'public.role_permissions', 'INSERT')
+    or has_table_privilege('authenticated', 'public.role_permissions', 'UPDATE')
+    or has_table_privilege('authenticated', 'public.role_permissions', 'DELETE')
+  then
+    raise exception 'Authenticated clients can modify role permissions';
+  end if;
+
+  if has_table_privilege('authenticated', 'public.staff_memberships', 'INSERT')
+    or has_table_privilege('authenticated', 'public.staff_memberships', 'UPDATE')
+    or has_table_privilege('authenticated', 'public.staff_memberships', 'DELETE')
+  then
+    raise exception 'Authenticated clients can assign hospital roles directly';
+  end if;
+
+  if has_column_privilege('authenticated', 'public.profiles', 'email', 'UPDATE') then
+    raise exception 'Profile email can be changed outside the authentication service';
+  end if;
+
+  if not has_column_privilege('authenticated', 'public.profiles', 'display_name', 'UPDATE')
+    or not has_column_privilege('authenticated', 'public.profiles', 'phone', 'UPDATE')
+  then
+    raise exception 'Users cannot maintain permitted profile fields';
+  end if;
+end
+$$;
+
+do $$
+begin
+  perform public.assert_staff_role_assignment('super_admin', 'clinic_admin');
+  perform public.assert_staff_role_assignment('clinic_admin', 'doctor');
+
+  begin
+    perform public.assert_staff_role_assignment('clinic_admin', 'super_admin');
+    raise exception 'Clinic administrator escalation was accepted';
+  exception
+    when insufficient_privilege then null;
+  end;
+
+  begin
+    perform public.assert_staff_role_assignment('doctor', 'receptionist');
+    raise exception 'Clinical staff role assignment was accepted';
+  exception
+    when insufficient_privilege then null;
+  end;
+end
+$$;
+
+do $$
+begin
   if not exists (
     select 1
     from storage.buckets
@@ -79,6 +135,34 @@ begin
       and file_size_limit = 104857600
   ) then
     raise exception 'Private hospital document bucket is missing or misconfigured';
+  end if;
+end
+$$;
+
+do $$
+begin
+  if has_table_privilege('authenticated', 'public.documents', 'INSERT')
+    or has_table_privilege('authenticated', 'public.documents', 'UPDATE')
+    or has_table_privilege('authenticated', 'public.documents', 'DELETE')
+  then
+    raise exception 'Browser clients can mutate trusted document metadata';
+  end if;
+
+  if exists (
+    select 1
+    from public.role_permissions
+    where permission_code = 'documents.write'
+  ) then
+    raise exception 'A browser role can still upload hospital documents';
+  end if;
+
+  if exists (
+    select 1
+    from public.role_permissions
+    where role_code = 'doctor'
+      and permission_code = 'documents.read'
+  ) then
+    raise exception 'Doctors can access hospital-wide object storage without patient scoping';
   end if;
 end
 $$;
