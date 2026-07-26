@@ -5,6 +5,7 @@ import {
   FolderOpen, ShieldCheck, LifeBuoy, BellRing, Plus, CalendarClock, Download, FlaskConical,
 } from "lucide-react";
 import { useAuth, type Role } from "@/lib/auth";
+import { isProductionReadyPath } from "@/lib/production-readiness";
 import { cn } from "@/lib/utils";
 
 type NavItem = { to: string; label: string; icon: React.ComponentType<{ className?: string }> };
@@ -100,10 +101,15 @@ const NAV: Record<Role, NavSection[]> = {
 };
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
-  const { user } = useAuth();
+  const { user, isDemoMode } = useAuth();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   if (!user) return null;
-  const sections = NAV[user.role];
+  const sections = NAV[user.role]
+    .map(section => ({
+      ...section,
+      items: section.items.filter(item => isDemoMode || isProductionReadyPath(item.to)),
+    }))
+    .filter(section => section.items.length > 0);
 
   return (
     <nav className="flex flex-col gap-6 px-3 py-4">
