@@ -7,10 +7,9 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider } from "@/lib/auth";
 import { WorkspaceDataProvider } from "@/lib/workspace-data";
 import { Toaster } from "@/components/ui/sonner";
@@ -38,11 +37,8 @@ function NotFoundComponent() {
 }
 
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
-  console.error(error);
+  void error;
   const router = useRouter();
-  useEffect(() => {
-    reportLovableError(error, { boundary: "tanstack_root_error_component" });
-  }, [error]);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -77,24 +73,17 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "ClinicFlow — Modern Clinic Management Platform" },
-      { name: "description", content: "Premium SaaS clinic management for clinics, doctors, receptionists and admins." },
+      { title: "ClinicFlow - Hospital Operations" },
+      { name: "description", content: "Secure hospital operations for authorized clinical and administrative staff." },
       { name: "author", content: "ClinicFlow" },
-      { property: "og:title", content: "ClinicFlow — Modern Clinic Management Platform" },
-      { property: "og:description", content: "Premium SaaS clinic management for clinics, doctors, receptionists and admins." },
+      { property: "og:title", content: "ClinicFlow - Hospital Operations" },
+      { property: "og:description", content: "Secure hospital operations for authorized clinical and administrative staff." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
-      { name: "twitter:title", content: "ClinicFlow — Modern Clinic Management Platform" },
-      { name: "twitter:description", content: "Premium SaaS clinic management for clinics, doctors, receptionists and admins." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/10485441-f923-4fa8-b160-2e8c6833be66/id-preview-b9c73cdd--7ff91c69-fbed-4396-9f6b-7ff81d517e2d.lovable.app-1781976657023.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/10485441-f923-4fa8-b160-2e8c6833be66/id-preview-b9c73cdd--7ff91c69-fbed-4396-9f6b-7ff81d517e2d.lovable.app-1781976657023.png" },
+      { name: "twitter:title", content: "ClinicFlow - Hospital Operations" },
+      { name: "twitter:description", content: "Secure hospital operations for authorized clinical and administrative staff." },
     ],
-    links: [
-      { rel: "stylesheet", href: appCss },
-      { rel: "preconnect", href: "https://fonts.googleapis.com" },
-      { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
-      { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" },
-    ],
+    links: [{ rel: "stylesheet", href: appCss }],
   }),
   shellComponent: RootShell,
   component: RootComponent,
