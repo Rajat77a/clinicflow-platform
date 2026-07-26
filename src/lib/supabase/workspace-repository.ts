@@ -2,6 +2,8 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import type {
   PatientPage,
   PatientSearch,
+  RecordPage,
+  RecordPageInput,
   WorkspaceRepository,
 } from "../backend/workspace-repository";
 import type {
@@ -21,8 +23,10 @@ import type {
   ReceptionistInput,
   StaffMember,
   WorkspaceSnapshot,
+  AuditEntry,
 } from "../workspace-data";
 import { getSupabaseBrowserClient } from "./client";
+import { normalizePageInput } from "../record-page";
 
 // Supabase query results are validated and normalized at this repository boundary.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -161,32 +165,36 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         .select(
           "id,hospital_id,patient_id,doctor_user_id,starts_at,ends_at,status,reason,administrative_notes,version,patients(first_name,last_name)",
         )
-        .order("starts_at", { ascending: true }),
+        .order("starts_at", { ascending: false })
+        .limit(100),
       this.client
         .from("prescriptions")
         .select(
           "id,hospital_id,patient_id,prescriber_user_id,status,instructions,follow_up_at,signed_at,created_at,patients(first_name,last_name),encounters(diagnoses),prescription_items(medicine_name,dosage,frequency,duration)",
         )
-        .order("created_at", { ascending: false }),
+        .order("created_at", { ascending: false })
+        .limit(50),
       this.client
         .from("lab_orders")
         .select(
           "id,hospital_id,patient_id,test_name,completed_at,ordered_at,patients(first_name,last_name),lab_results(id,result,interpretation,recorded_at,status,recorded_by)",
         )
-        .order("ordered_at", { ascending: false }),
+        .order("ordered_at", { ascending: false })
+        .limit(50),
       this.client
         .from("invoices")
         .select(
           "id,hospital_id,patient_id,invoice_number,status,total,issued_at,created_at,patients(first_name,last_name),payments(method,status,received_at)",
         )
-        .order("created_at", { ascending: false }),
+        .order("created_at", { ascending: false })
+        .limit(50),
       this.client
         .from("audit_events")
         .select(
           "id,hospital_id,actor_user_id,action,entity_type,entity_id,occurred_at,profiles!audit_events_actor_user_id_fkey(display_name)",
         )
         .order("occurred_at", { ascending: false })
-        .limit(250),
+        .limit(100),
     ]);
 
     [
@@ -398,10 +406,229 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     return page.rows.find((patient) => patient.id === id) ?? null;
   }
 
+  private async loadDoctorNames() {
+    const { data, error } = await this.client.rpc("list_active_doctors_with_counts");
+    throwIfError(error);
+    return new Map(
+      ((data ?? []) as Row[]).map((row) => [
+        row.user_id as string,
+        row.display_name ?? "Unknown doctor",
+      ]),
+    );
+  }
+
+  async listAppointments(input: RecordPageInput = {}): Promise<RecordPage<Appointment>> {
+    const { limit, offset } = normalizePageInput(input);
+    let query = this.client
+      .from("appointments")
+      .select(
+        "id,hospital_id,patient_id,doctor_user_id,starts_at,ends_at,status,reason,administrative_notes,version,patients(first_name,last_name)",
+        { count: "exact" },
+      )
+      .order("starts_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (input.patientId) query = query.eq("patient_id", input.patientId);
+    if (input.recordId) query = query.eq("id", input.recordId);
+
+    const [result, doctorById] = await Promise.all([query, this.loadDoctorNames()]);
+    throwIfError(result.error);
+    return {
+      rows: ((result.data ?? []) as Row[]).map((row) => {
+        const start = new Date(row.starts_at);
+        const end = new Date(row.ends_at);
+        return {
+          id: row.id,
+          clinicId: row.hospital_id,
+          patientId: row.patient_id,
+          patient: relatedPatientName(row),
+          doctor: doctorById.get(row.doctor_user_id) ?? "Unknown doctor",
+          doctorId: row.doctor_user_id,
+          date: start.toISOString().slice(0, 10),
+          time: start.toISOString().slice(11, 16),
+          durationMinutes: Math.max(5, Math.round((end.getTime() - start.getTime()) / 60000)),
+          type: row.reason,
+          status: appointmentStatusToUi[row.status] ?? row.status,
+          notes: row.administrative_notes || undefined,
+          version: row.version,
+        };
+      }),
+      total: result.count ?? 0,
+      limit,
+      offset,
+    };
+  }
+
+  async listPrescriptions(input: RecordPageInput = {}): Promise<RecordPage<Prescription>> {
+    const { limit, offset } = normalizePageInput(input);
+    let query = this.client
+      .from("prescriptions")
+      .select(
+        "id,hospital_id,patient_id,prescriber_user_id,status,instructions,follow_up_at,signed_at,created_at,patients(first_name,last_name),encounters(diagnoses),prescription_items(medicine_name,dosage,frequency,duration)",
+        { count: "exact" },
+      )
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (input.patientId) query = query.eq("patient_id", input.patientId);
+    if (input.recordId) query = query.eq("id", input.recordId);
+
+    const [result, doctorById] = await Promise.all([query, this.loadDoctorNames()]);
+    throwIfError(result.error);
+    return {
+      rows: ((result.data ?? []) as Row[]).map((row) => {
+        const encounter = firstRelation(row.encounters);
+        return {
+          id: row.id,
+          clinicId: row.hospital_id,
+          patientId: row.patient_id,
+          patient: relatedPatientName(row),
+          doctor: doctorById.get(row.prescriber_user_id) ?? "Unknown doctor",
+          date: (row.signed_at || row.created_at).slice(0, 10),
+          diagnosis: encounter?.diagnoses?.[0] ?? "Not recorded",
+          notes: row.instructions || undefined,
+          followUp: row.follow_up_at?.slice(0, 10),
+          medicines: ((row.prescription_items ?? []) as Row[]).map((item) => ({
+            name: item.medicine_name,
+            dosage: item.dosage,
+            frequency: item.frequency,
+            duration: item.duration,
+          })),
+        };
+      }),
+      total: result.count ?? 0,
+      limit,
+      offset,
+    };
+  }
+
+  async listLabReports(input: RecordPageInput = {}): Promise<RecordPage<LabReport>> {
+    const { limit, offset } = normalizePageInput(input);
+    let query = this.client
+      .from("lab_results")
+      .select(
+        "id,result,interpretation,recorded_at,status,recorded_by,lab_orders!inner(id,hospital_id,patient_id,test_name,completed_at,ordered_at,patients(first_name,last_name))",
+        { count: "exact" },
+      )
+      .order("recorded_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (input.patientId) query = query.eq("lab_orders.patient_id", input.patientId);
+    if (input.recordId) query = query.eq("id", input.recordId);
+
+    const [result, doctorById] = await Promise.all([query, this.loadDoctorNames()]);
+    throwIfError(result.error);
+    return {
+      rows: ((result.data ?? []) as Row[]).map((row) => {
+        const order = firstRelation(row.lab_orders) ?? {};
+        const structured = (row.result ?? {}) as Record<string, string>;
+        return {
+          id: row.id,
+          clinicId: order.hospital_id,
+          patientId: order.patient_id,
+          patient: relatedPatientName(order),
+          test: order.test_name,
+          date: (row.recorded_at || order.completed_at || order.ordered_at).slice(0, 10),
+          result: structured.value ?? structured.result ?? "",
+          reference: structured.reference ?? "",
+          notes: row.interpretation || undefined,
+          uploadedBy: doctorById.get(row.recorded_by) ?? "Hospital staff",
+        };
+      }),
+      total: result.count ?? 0,
+      limit,
+      offset,
+    };
+  }
+
+  async listBills(input: RecordPageInput = {}): Promise<RecordPage<Bill>> {
+    const { limit, offset } = normalizePageInput(input);
+    let query = this.client
+      .from("invoices")
+      .select(
+        "id,hospital_id,patient_id,invoice_number,status,total,issued_at,created_at,patients(first_name,last_name),payments(method,status,received_at)",
+        { count: "exact" },
+      )
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (input.patientId) query = query.eq("patient_id", input.patientId);
+    if (input.recordId) query = query.eq("id", input.recordId);
+
+    const result = await query;
+    throwIfError(result.error);
+    return {
+      rows: ((result.data ?? []) as Row[]).map((row) => {
+        const payment = ((row.payments ?? []) as Row[]).find((item) => item.status === "confirmed");
+        return {
+          id: row.invoice_number,
+          databaseId: row.id,
+          clinicId: row.hospital_id,
+          patientId: row.patient_id,
+          patient: relatedPatientName(row),
+          date: (row.issued_at || row.created_at).slice(0, 10),
+          amount: Number(row.total),
+          status:
+            row.status === "paid"
+              ? "Paid"
+              : row.status === "void"
+                ? "Void"
+                : row.status === "issued"
+                  ? "Pending"
+                  : row.status,
+          method: payment?.method ?? "-",
+        };
+      }),
+      total: result.count ?? 0,
+      limit,
+      offset,
+    };
+  }
+
+  async listAuditLogs(input: RecordPageInput = {}): Promise<RecordPage<AuditEntry>> {
+    const { limit, offset } = normalizePageInput(input);
+    let query = this.client
+      .from("audit_events")
+      .select(
+        "id,hospital_id,actor_user_id,action,entity_type,entity_id,occurred_at,profiles!audit_events_actor_user_id_fkey(display_name)",
+        { count: "exact" },
+      )
+      .order("occurred_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (input.query?.trim()) query = query.ilike("action", `%${input.query.trim()}%`);
+
+    const result = await query;
+    throwIfError(result.error);
+    return {
+      rows: ((result.data ?? []) as Row[]).map((row) => {
+        const occurred = new Date(row.occurred_at);
+        return {
+          id: String(row.id),
+          clinicId: row.hospital_id,
+          user: firstRelation(row.profiles)?.display_name ?? "System",
+          action: `${row.action} ${row.entity_type}${row.entity_id ? ` ${row.entity_id}` : ""}`,
+          date: occurred.toISOString().slice(0, 10),
+          time: occurred.toISOString().slice(11, 16),
+        };
+      }),
+      total: result.count ?? 0,
+      limit,
+      offset,
+    };
+  }
+
   private async reloadAndFind<T>(
     collection: keyof WorkspaceSnapshot,
     id: string,
   ): Promise<T> {
+    if (collection === "appointments") {
+      const page = await this.listAppointments({ recordId: id, limit: 1 });
+      if (page.rows[0]) return page.rows[0] as T;
+    }
+    if (collection === "prescriptions") {
+      const page = await this.listPrescriptions({ recordId: id, limit: 1 });
+      if (page.rows[0]) return page.rows[0] as T;
+    }
+    if (collection === "labReports") {
+      const page = await this.listLabReports({ recordId: id, limit: 1 });
+      if (page.rows[0]) return page.rows[0] as T;
+    }
     const snapshot = await this.load();
     const value = (snapshot[collection] as Array<{ id: string }>).find((item) => item.id === id);
     if (!value) throw new Error("Saved record is not visible to the current role");
@@ -525,8 +752,8 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       p_idempotency_key: randomKey(),
     });
     throwIfError(error);
-    const snapshot = await this.load();
-    const bill = snapshot.bills.find((item) => item.databaseId === data);
+    const page = await this.listBills({ recordId: data as string, limit: 1 });
+    const bill = page.rows[0];
     if (!bill) throw new Error("Saved invoice is not visible to the current role");
     return bill;
   }
@@ -542,8 +769,8 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       p_idempotency_key: randomKey(),
     });
     throwIfError(error);
-    const snapshot = await this.load();
-    const updated = snapshot.bills.find((item) => item.databaseId === bill.databaseId);
+    const page = await this.listBills({ recordId: bill.databaseId, limit: 1 });
+    const updated = page.rows[0];
     if (!updated) throw new Error("Updated invoice is not visible to the current role");
     return updated;
   }

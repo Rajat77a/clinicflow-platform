@@ -12,7 +12,13 @@ import { useAuth, type AuthUser } from "./auth";
 import { hasPermission, type Permission } from "./access-control";
 import { supabaseConfig } from "./supabase/config";
 import { SupabaseWorkspaceRepository } from "./supabase/workspace-repository";
-import type { PatientPage, PatientSearch } from "./backend/workspace-repository";
+import type {
+  PatientPage,
+  PatientSearch,
+  RecordPage,
+  RecordPageInput,
+} from "./backend/workspace-repository";
+import { localRecordPage } from "./record-page";
 import {
   appointments as seedAppointments,
   auditLogs as seedAuditLogs,
@@ -337,6 +343,11 @@ interface WorkspaceData {
   refresh: () => Promise<void>;
   searchPatients: (input?: PatientSearch) => Promise<PatientPage>;
   getPatient: (id: string) => Promise<Patient | null>;
+  listAppointments: (input?: RecordPageInput) => Promise<RecordPage<Appointment>>;
+  listPrescriptions: (input?: RecordPageInput) => Promise<RecordPage<Prescription>>;
+  listLabReports: (input?: RecordPageInput) => Promise<RecordPage<LabReport>>;
+  listBills: (input?: RecordPageInput) => Promise<RecordPage<Bill>>;
+  listAuditLogs: (input?: RecordPageInput) => Promise<RecordPage<AuditEntry>>;
   createClinic: (input: ClinicInput) => Promise<Clinic>;
   createDoctor: (input: DoctorInput) => Promise<Doctor>;
   createReceptionist: (input: ReceptionistInput) => Promise<Receptionist>;
@@ -480,6 +491,67 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         requireUser(user, "patients.read");
         if (repository) return repository.getPatient(id);
         return patients.find((patient) => patient.id === id) ?? null;
+      },
+      listAppointments: async (input = {}) => {
+        requireUser(user, "appointments.read");
+        if (repository) return repository.listAppointments(input);
+        return localRecordPage(
+          appointments.filter((item) => !input.patientId || item.patientId === input.patientId),
+          input,
+        );
+      },
+      listPrescriptions: async (input = {}) => {
+        if (!user || !hasPermission(user.role, "prescriptions.read")) {
+          return localRecordPage([], input);
+        }
+        if (repository) return repository.listPrescriptions(input);
+        return localRecordPage(
+          prescriptions.filter((item) => !input.patientId || item.patientId === input.patientId),
+          input,
+        );
+      },
+      listLabReports: async (input = {}) => {
+        if (!user) return localRecordPage([], input);
+        const actor = user;
+        if (
+          !hasPermission(actor.role, "labs.write")
+          && !hasPermission(actor.role, "prescriptions.read")
+        ) {
+          return localRecordPage([], input);
+        }
+        if (repository) return repository.listLabReports(input);
+        const reports = clinicScope(state.labReports).filter(
+          (item) => !input.patientId || item.patientId === input.patientId,
+        );
+        return localRecordPage(reports, input);
+      },
+      listBills: async (input = {}) => {
+        if (!user || !hasPermission(user.role, "billing.read")) {
+          return localRecordPage([], input);
+        }
+        if (repository) return repository.listBills(input);
+        return localRecordPage(
+          clinicScope(state.bills).filter(
+            (item) => !input.patientId || item.patientId === input.patientId,
+          ),
+          input,
+        );
+      },
+      listAuditLogs: async (input = {}) => {
+        const actor = requireUser(user, "audit.read");
+        const scoped = actor.role === "super_admin"
+          ? state.auditLogs
+          : state.auditLogs.filter((entry) => entry.clinicId === clinicId);
+        if (repository) return repository.listAuditLogs(input);
+        const query = input.query?.trim().toLocaleLowerCase() ?? "";
+        return localRecordPage(
+          query
+            ? scoped.filter((entry) =>
+                `${entry.user} ${entry.action}`.toLocaleLowerCase().includes(query),
+              )
+            : scoped,
+          input,
+        );
       },
       createClinic: async (input) => {
         const actor = requireUser(user, "platform.clinics.manage");

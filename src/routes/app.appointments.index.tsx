@@ -12,6 +12,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { useWorkspaceData, type Appointment } from "@/lib/workspace-data";
 import { CalendarDays, List, Plus } from "lucide-react";
 import { toast } from "sonner";
+import { PaginationFooter } from "@/components/data/pagination-footer";
+import { useRecordPage } from "@/lib/use-record-page";
 
 export const Route = createFileRoute("/app/appointments/")({ component: AppointmentsPage });
 
@@ -48,7 +50,16 @@ function CalendarView({ appts }: { appts: Appt[] }) {
 }
 
 function AppointmentsPage() {
-  const { appointments: rows, updateAppointment } = useWorkspaceData();
+  const { listAppointments, updateAppointment } = useWorkspaceData();
+  const {
+    rows,
+    total,
+    limit,
+    offset,
+    setOffset,
+    isLoading,
+    error,
+  } = useRecordPage(listAppointments);
   const [editing, setEditing] = useState<Appt | null>(null);
   const [draft, setDraft] = useState<Appt | null>(null);
   const [saving, setSaving] = useState(false);
@@ -83,6 +94,15 @@ function AppointmentsPage() {
           <Table>
             <TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Patient</TableHead><TableHead>Doctor</TableHead><TableHead>Date & time</TableHead><TableHead>Type</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow></TableHeader>
             <TableBody>
+              {isLoading && (
+                <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">Loading appointments...</TableCell></TableRow>
+              )}
+              {!isLoading && error && (
+                <TableRow><TableCell colSpan={7} className="py-8 text-center text-destructive">{error}</TableCell></TableRow>
+              )}
+              {!isLoading && !error && rows.length === 0 && (
+                <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No appointments found.</TableCell></TableRow>
+              )}
               {rows.map(a => (
                 <TableRow key={a.id}>
                   <TableCell className="font-mono text-xs">{a.id}</TableCell>
@@ -96,6 +116,13 @@ function AppointmentsPage() {
               ))}
             </TableBody>
           </Table>
+          <PaginationFooter
+            offset={offset}
+            limit={limit}
+            total={total}
+            onOffsetChange={setOffset}
+            disabled={isLoading}
+          />
         </TabsContent>
         <TabsContent value="calendar" className="mt-4"><CalendarView appts={rows} /></TabsContent>
         <TabsContent value="upcoming" className="mt-4 grid gap-3 sm:grid-cols-2">

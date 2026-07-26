@@ -6,12 +6,23 @@ import { useAuth } from "@/lib/auth";
 import { useWorkspaceData } from "@/lib/workspace-data";
 import { hasPermission } from "@/lib/access-control";
 import { Plus, FileText, Edit, Eye } from "lucide-react";
+import { PaginationFooter } from "@/components/data/pagination-footer";
+import { useRecordPage } from "@/lib/use-record-page";
 
 export const Route = createFileRoute("/app/prescriptions/")({ component: PrescriptionsPage });
 
 function PrescriptionsPage() {
   const { user } = useAuth();
-  const { prescriptions: rows } = useWorkspaceData();
+  const { listPrescriptions } = useWorkspaceData();
+  const {
+    rows,
+    total,
+    limit,
+    offset,
+    setOffset,
+    isLoading,
+    error,
+  } = useRecordPage(listPrescriptions);
   const canCreateRx = Boolean(user && hasPermission(user.role, "prescriptions.write"));
   const canEdit = canCreateRx;
   return (
@@ -37,6 +48,15 @@ function PrescriptionsPage() {
             <TableHead className="text-right">Actions</TableHead>
           </TableRow></TableHeader>
           <TableBody>
+            {isLoading && (
+              <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">Loading prescriptions...</TableCell></TableRow>
+            )}
+            {!isLoading && error && (
+              <TableRow><TableCell colSpan={7} className="py-8 text-center text-destructive">{error}</TableCell></TableRow>
+            )}
+            {!isLoading && !error && rows.length === 0 && (
+              <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No prescriptions found.</TableCell></TableRow>
+            )}
             {rows.map(r => (
               <TableRow key={r.id}>
                 <TableCell><div className="flex items-center gap-2 font-mono text-xs"><FileText className="h-3.5 w-3.5 text-info" />{r.id}</div></TableCell>
@@ -66,6 +86,13 @@ function PrescriptionsPage() {
             ))}
           </TableBody>
         </Table>
+        <PaginationFooter
+          offset={offset}
+          limit={limit}
+          total={total}
+          onOffsetChange={setOffset}
+          disabled={isLoading}
+        />
       </div>
     </>
   );
