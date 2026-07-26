@@ -1,18 +1,24 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { useWorkspaceData, type LabReport, type Prescription } from "@/lib/workspace-data";
+import {
+  useWorkspaceData,
+  type Bill,
+  type LabReport,
+  type Patient,
+  type Prescription,
+} from "@/lib/workspace-data";
 import { downloadCSV, printDocument } from "@/lib/exporters";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { useAuth } from "@/lib/auth";
 import { hasPermission } from "@/lib/access-control";
 import {
-  Phone, MapPin, MessageCircle, Calendar, AlertTriangle, FileText, Receipt,
+  Phone, MessageCircle, Calendar, FileText, Receipt,
   FolderOpen, FlaskConical, Download, Send, Printer, Edit, Eye,
 } from "lucide-react";
 
@@ -23,16 +29,44 @@ export const Route = createFileRoute("/app/patients/$id")({
 function PatientProfile() {
   const { user } = useAuth();
   const { id } = Route.useParams();
-  const { patients, prescriptions, bills, appointments, labReports } = useWorkspaceData();
-  const patient = patients.find(candidate => candidate.id === id);
-  if (!patient) throw notFound();
-  const visits = appointments.filter(a => a.patientId === patient.id);
-  const myRx = prescriptions.filter(r => r.patientId === patient.id);
-  const myBills = bills.filter(b => b.patient === patient.name);
-  const myLabs = labReports.filter(l => l.patientId === patient.id);
-
-  const [viewingBill, setViewingBill] = useState<(typeof myBills)[number] | null>(null);
+  const { patients, prescriptions, bills, appointments, labReports, getPatient } = useWorkspaceData();
+  const snapshotPatient = patients.find(candidate => candidate.id === id);
+  const [loadedPatient, setLoadedPatient] = useState<Patient | null>(null);
+  const [recordLoading, setRecordLoading] = useState(!snapshotPatient);
+  const [viewingBill, setViewingBill] = useState<Bill | null>(null);
   const [viewingLab, setViewingLab] = useState<LabReport | null>(null);
+  const patient = snapshotPatient ?? loadedPatient;
+  const visits = appointments.filter(a => a.patientId === id);
+  const myRx = prescriptions.filter(r => r.patientId === id);
+  const myBills = bills.filter(b => b.patientId === id);
+  const myLabs = labReports.filter(l => l.patientId === id);
+
+  useEffect(() => {
+    if (snapshotPatient) {
+      setRecordLoading(false);
+      return;
+    }
+    let current = true;
+    setRecordLoading(true);
+    void getPatient(id)
+      .then((result) => {
+        if (current) setLoadedPatient(result);
+      })
+      .catch(() => {
+        if (current) setLoadedPatient(null);
+      })
+      .finally(() => {
+        if (current) setRecordLoading(false);
+      });
+    return () => {
+      current = false;
+    };
+  }, [getPatient, id, snapshotPatient]);
+
+  if (recordLoading) {
+    return <div className="py-12 text-center text-sm text-muted-foreground">Loading patient record…</div>;
+  }
+  if (!patient) throw notFound();
 
   const canEditRx = Boolean(user && hasPermission(user.role, "prescriptions.write"));
   const canAddLab = Boolean(user && hasPermission(user.role, "labs.write"));
@@ -69,7 +103,7 @@ function PatientProfile() {
 
   return (
     <>
-      <PageHeader title={patient.name} description={`Patient ID ${patient.id} · Registered May 2025`}
+      <PageHeader title={patient.name} description={`Patient ID ${patient.medicalRecordNumber ?? patient.id}`}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={exportAll}><Download className="mr-1.5 h-4 w-4" />Download all</Button>
@@ -98,15 +132,8 @@ function PatientProfile() {
                 {patient.phone} (WhatsApp)
               </button>
             </div>
-            <div className="flex items-center gap-2"><MapPin className="h-4 w-4 text-muted-foreground" /> <span>Kungsgatan 32, Stockholm</span></div>
             <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-muted-foreground" /> <span>Last visit {patient.lastVisit}</span></div>
           </dl>
-          <div className="mt-6 rounded-xl bg-warning/15 p-3">
-            <div className="flex items-center gap-2 text-xs font-semibold text-warning-foreground">
-              <AlertTriangle className="h-3.5 w-3.5" /> Allergies & alerts
-            </div>
-            <div className="mt-1 text-sm">Penicillin · Pollen</div>
-          </div>
         </div>
 
         <div className="lg:col-span-2">

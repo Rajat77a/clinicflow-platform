@@ -12,6 +12,7 @@ import { useAuth, type AuthUser } from "./auth";
 import { hasPermission, type Permission } from "./access-control";
 import { supabaseConfig } from "./supabase/config";
 import { SupabaseWorkspaceRepository } from "./supabase/workspace-repository";
+import type { PatientPage, PatientSearch } from "./backend/workspace-repository";
 import {
   appointments as seedAppointments,
   auditLogs as seedAuditLogs,
@@ -334,6 +335,8 @@ interface WorkspaceData {
   auditLogs: AuditEntry[];
   staffMembers: StaffMember[];
   refresh: () => Promise<void>;
+  searchPatients: (input?: PatientSearch) => Promise<PatientPage>;
+  getPatient: (id: string) => Promise<Patient | null>;
   createClinic: (input: ClinicInput) => Promise<Clinic>;
   createDoctor: (input: DoctorInput) => Promise<Doctor>;
   createReceptionist: (input: ReceptionistInput) => Promise<Receptionist>;
@@ -447,6 +450,37 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       staffMembers: user && hasPermission(user.role, "people.manage")
         ? clinicScope(state.staffMembers)
         : [],
+      searchPatients: async (input = {}) => {
+        requireUser(user, "patients.read");
+        if (repository) return repository.searchPatients(input);
+
+        const query = input.query?.trim().toLocaleLowerCase().replace(/\s/g, "") ?? "";
+        const limit = Math.min(Math.max(input.limit ?? 25, 1), 100);
+        const offset = Math.max(input.offset ?? 0, 0);
+        const matches = query
+          ? patients.filter((patient) =>
+              [
+                patient.id,
+                patient.medicalRecordNumber ?? "",
+                patient.name,
+                patient.phone,
+              ].some((value) =>
+                value.toLocaleLowerCase().replace(/\s/g, "").includes(query),
+              ),
+            )
+          : patients;
+        return {
+          rows: matches.slice(offset, offset + limit),
+          total: matches.length,
+          limit,
+          offset,
+        };
+      },
+      getPatient: async (id) => {
+        requireUser(user, "patients.read");
+        if (repository) return repository.getPatient(id);
+        return patients.find((patient) => patient.id === id) ?? null;
+      },
       createClinic: async (input) => {
         const actor = requireUser(user, "platform.clinics.manage");
         if (repository) {

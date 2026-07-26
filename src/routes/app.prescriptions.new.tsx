@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -37,9 +37,15 @@ function NewPrescription() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const {
-    patients, doctors, prescriptions, labReports, savePrescription, saveLabReports,
+    patients, doctors, prescriptions, labReports, searchPatients, getPatient,
+    savePrescription, saveLabReports,
   } = useWorkspaceData();
   const patientOptions = toPatientOptions(patients);
+  const searchPatientOptions = useCallback(
+    async (query: string) =>
+      toPatientOptions((await searchPatients({ query, limit: 12 })).rows),
+    [searchPatients],
+  );
   const doctorOptions = toDoctorOptions(doctors);
   const { edit, mode, patient: patientParam } = Route.useSearch();
   const isReceptionist = user?.role === "receptionist";
@@ -60,18 +66,25 @@ function NewPrescription() {
       ? doctorOptions.find(d => d.raw.name === seed.doctor) ?? null
       : isDoctor ? doctorOptions.find(d => d.raw.name === user?.name) ?? null : null
   );
-  const [diagnosis, setDiagnosis] = useState(seed?.diagnosis ?? (isLabMode ? "" : "Seasonal allergic rhinitis"));
-  const [notes, setNotes] = useState(seed?.notes ?? (isLabMode ? "" : "Rest and hydration. Avoid known triggers."));
+  const [diagnosis, setDiagnosis] = useState(seed?.diagnosis ?? "");
+  const [notes, setNotes] = useState(seed?.notes ?? "");
   const [followup, setFollowup] = useState(seed?.followUp ?? "");
   const [meds, setMeds] = useState<Med[]>(
     seed?.medicines.map(m => ({ name: m.name, dosage: m.dosage, frequency: m.frequency, duration: m.duration })) ??
-    (isLabMode ? [] : [{ name: "Amoxicillin 500 mg", dosage: "1 tab", frequency: "3× per day", duration: "5 days" }])
+    (isLabMode ? [] : [{ name: "", dosage: "", frequency: "", duration: "" }])
   );
   const [labs, setLabs] = useState<LabReport[]>(
     edit ? labReports.filter(l => l.prescriptionId === edit) : []
   );
   const [isSaving, setIsSaving] = useState(false);
   const [newLab, setNewLab] = useState({ test: "", result: "", reference: "", notes: "" });
+
+  useEffect(() => {
+    if (!patientParam || patient?.id === patientParam) return;
+    void getPatient(patientParam).then((result) => {
+      if (result) setPatient(toPatientOptions([result])[0]);
+    });
+  }, [getPatient, patient?.id, patientParam]);
 
   const update = (i: number, k: keyof Med, v: string) =>
     setMeds(meds.map((m, idx) => (idx === i ? { ...m, [k]: v } : m)));
@@ -213,7 +226,7 @@ function NewPrescription() {
                     <span className="ml-2 rounded-md bg-background px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground">Locked</span>
                   </div>
                 ) : (
-                  <EntityPicker options={patientOptions} value={patient} onChange={setPatient}
+                  <EntityPicker options={patientOptions} onSearch={searchPatientOptions} value={patient} onChange={setPatient}
                     placeholder="Search by name, patient ID or phone…" />
                 )}
               </div>

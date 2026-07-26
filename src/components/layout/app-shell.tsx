@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   Activity,
@@ -57,24 +57,21 @@ type SearchResult =
 
 function GlobalSearch() {
   const navigate = useNavigate();
-  const { doctors, patients } = useWorkspaceData();
+  const { doctors, searchPatients } = useWorkspaceData();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
+  const [results, setResults] = useState<SearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
   const normalized = query.toLocaleLowerCase().replace(/\s/g, "");
-  const results = useMemo<SearchResult[]>(() => {
-    if (!normalized) return [];
-    const patientResults: SearchResult[] = patients
-      .filter((patient) =>
-        [patient.id, patient.name, patient.phone].some((value) =>
-          value.toLocaleLowerCase().replace(/\s/g, "").includes(normalized),
-        ),
-      )
-      .map((patient) => ({
-        id: patient.id,
-        kind: "patient",
-        name: patient.name,
-        detail: `${patient.id} · ${patient.phone}`,
-      }));
+
+  useEffect(() => {
+    if (!normalized) {
+      setResults([]);
+      setSearching(false);
+      return;
+    }
+
+    let current = true;
     const doctorResults: SearchResult[] = doctors
       .filter((doctor) =>
         [doctor.id, doctor.name, doctor.phone, doctor.email].some((value) =>
@@ -87,8 +84,32 @@ function GlobalSearch() {
         name: doctor.name,
         detail: `${doctor.specialty} · ${doctor.id}`,
       }));
-    return [...patientResults, ...doctorResults].slice(0, 8);
-  }, [doctors, normalized, patients]);
+    setSearching(true);
+    const timer = window.setTimeout(() => {
+      void searchPatients({ query, limit: 6 })
+        .then((page) => {
+          if (!current) return;
+          const patientResults: SearchResult[] = page.rows.map((patient) => ({
+            id: patient.id,
+            kind: "patient",
+            name: patient.name,
+            detail: `${patient.medicalRecordNumber ?? patient.id} · ${patient.phone}`,
+          }));
+          setResults([...patientResults, ...doctorResults].slice(0, 8));
+        })
+        .catch(() => {
+          if (current) setResults(doctorResults.slice(0, 8));
+        })
+        .finally(() => {
+          if (current) setSearching(false);
+        });
+    }, 250);
+
+    return () => {
+      current = false;
+      window.clearTimeout(timer);
+    };
+  }, [doctors, normalized, query, searchPatients]);
 
   const select = (result: SearchResult) => {
     setQuery("");
@@ -139,7 +160,9 @@ function GlobalSearch() {
           role="listbox"
           className="absolute left-0 right-0 top-11 z-50 max-h-80 overflow-y-auto rounded-xl border bg-popover p-1 shadow-card"
         >
-          {results.length ? (
+          {searching ? (
+            <div className="px-3 py-3 text-sm text-muted-foreground">Searching…</div>
+          ) : results.length ? (
             results.map((result) => (
               <button
                 key={`${result.kind}-${result.id}`}

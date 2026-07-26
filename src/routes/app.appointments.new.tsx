@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,8 +30,13 @@ function nowDefaults() {
 function NewAppointment() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { patients, doctors, createAppointment } = useWorkspaceData();
+  const { patients, doctors, searchPatients, createAppointment } = useWorkspaceData();
   const patientOptions = toPatientOptions(patients);
+  const searchPatientOptions = useCallback(
+    async (query: string) =>
+      toPatientOptions((await searchPatients({ query, limit: 12 })).rows),
+    [searchPatients],
+  );
   const doctorOptions = toDoctorOptions(
     user?.role === "doctor" ? doctors.filter(item => item.name === user.name) : doctors
   );
@@ -80,7 +85,7 @@ function NewAppointment() {
         <section className="rounded-2xl border bg-card p-6 shadow-soft space-y-4">
           <div className="space-y-1.5">
             <Label>Patient <span className="text-destructive">*</span></Label>
-            <EntityPicker options={patientOptions} value={patient} onChange={setPatient}
+            <EntityPicker options={patientOptions} onSearch={searchPatientOptions} value={patient} onChange={setPatient}
               placeholder="Search by name, patient ID or phone…" />
           </div>
           <div className="space-y-1.5">

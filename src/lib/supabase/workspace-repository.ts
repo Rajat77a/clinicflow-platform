@@ -1,5 +1,9 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import type { WorkspaceRepository } from "../backend/workspace-repository";
+import type {
+  PatientPage,
+  PatientSearch,
+  WorkspaceRepository,
+} from "../backend/workspace-repository";
 import type {
   Appointment,
   AppointmentInput,
@@ -83,6 +87,23 @@ function displaySex(value: string | null) {
     .join(" ");
 }
 
+function mapPatient(row: Row, doctorName?: string): Patient {
+  return {
+    id: row.id,
+    clinicId: row.hospital_id,
+    name: `${row.first_name} ${row.last_name}`.trim(),
+    age: yearsSince(row.date_of_birth),
+    dateOfBirth: row.date_of_birth,
+    gender: displaySex(row.sex),
+    phone: row.phone || "",
+    doctor: doctorName ?? row.doctor_name ?? "Unassigned",
+    lastVisit: row.updated_at.slice(0, 10),
+    status: row.status === "active" ? "Active" : row.status,
+    version: row.version,
+    medicalRecordNumber: row.medical_record_number,
+  };
+}
+
 const appointmentStatusToUi: Record<string, string> = {
   scheduled: "Pending",
   confirmed: "Confirmed",
@@ -102,6 +123,12 @@ function firstRelation(value: unknown): Row | null {
   return value && typeof value === "object" ? (value as Row) : null;
 }
 
+function relatedPatientName(row: Row) {
+  const patient = firstRelation(row.patients);
+  if (!patient) return "Restricted patient";
+  return `${patient.first_name ?? ""} ${patient.last_name ?? ""}`.trim() || "Restricted patient";
+}
+
 export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   constructor(private readonly client: SupabaseClient = getSupabaseBrowserClient()) {}
 
@@ -111,7 +138,6 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       doctorsResult,
       membershipsResult,
       patientsResult,
-      careTeamsResult,
       appointmentsResult,
       prescriptionsResult,
       labOrdersResult,
@@ -119,41 +145,39 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       auditResult,
     ] = await Promise.all([
       this.client.from("hospitals").select("id,name,configuration").maybeSingle(),
-      this.client.rpc("list_active_doctors"),
+      this.client.rpc("list_active_doctors_with_counts"),
       this.client
         .from("staff_memberships")
         .select(
           "user_id,hospital_id,role_code,active,specialty,shift,profiles!staff_memberships_user_id_fkey(display_name,email,phone)",
         ),
-      this.client
-        .from("patients")
-        .select(
-          "id,hospital_id,medical_record_number,first_name,last_name,date_of_birth,sex,phone,status,created_at,updated_at,version",
-        )
-        .order("created_at", { ascending: false }),
-      this.client.from("patient_care_teams").select("patient_id,staff_user_id,relationship,active"),
+      this.client.rpc("search_patients", {
+        p_query: "",
+        p_limit: 50,
+        p_offset: 0,
+      }),
       this.client
         .from("appointments")
         .select(
-          "id,hospital_id,patient_id,doctor_user_id,starts_at,ends_at,status,reason,administrative_notes,version",
+          "id,hospital_id,patient_id,doctor_user_id,starts_at,ends_at,status,reason,administrative_notes,version,patients(first_name,last_name)",
         )
         .order("starts_at", { ascending: true }),
       this.client
         .from("prescriptions")
         .select(
-          "id,hospital_id,patient_id,prescriber_user_id,status,instructions,follow_up_at,signed_at,created_at,encounters(diagnoses),prescription_items(medicine_name,dosage,frequency,duration)",
+          "id,hospital_id,patient_id,prescriber_user_id,status,instructions,follow_up_at,signed_at,created_at,patients(first_name,last_name),encounters(diagnoses),prescription_items(medicine_name,dosage,frequency,duration)",
         )
         .order("created_at", { ascending: false }),
       this.client
         .from("lab_orders")
         .select(
-          "id,hospital_id,patient_id,test_name,completed_at,ordered_at,lab_results(id,result,interpretation,recorded_at,status,recorded_by)",
+          "id,hospital_id,patient_id,test_name,completed_at,ordered_at,patients(first_name,last_name),lab_results(id,result,interpretation,recorded_at,status,recorded_by)",
         )
         .order("ordered_at", { ascending: false }),
       this.client
         .from("invoices")
         .select(
-          "id,hospital_id,patient_id,invoice_number,status,total,issued_at,created_at,payments(method,status,received_at)",
+          "id,hospital_id,patient_id,invoice_number,status,total,issued_at,created_at,patients(first_name,last_name),payments(method,status,received_at)",
         )
         .order("created_at", { ascending: false }),
       this.client
@@ -170,7 +194,6 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       doctorsResult,
       membershipsResult,
       patientsResult,
-      careTeamsResult,
       appointmentsResult,
       prescriptionsResult,
       labOrdersResult,
@@ -188,41 +211,22 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       specialty: row.specialty || "General Medicine",
       email: row.email || "",
       phone: row.phone || "",
-      patients: 0,
+      patients: Number(row.patient_count ?? 0),
       status: "Active",
     }));
     const doctorById = new Map(doctors.map((doctor) => [doctor.id, doctor]));
 
     const careTeamDoctor = new Map<string, string>();
-    for (const row of (careTeamsResult.data ?? []) as Row[]) {
-      if (row.active && doctorById.has(row.staff_user_id)) {
-        careTeamDoctor.set(row.patient_id, row.staff_user_id);
+    for (const row of (patientsResult.data ?? []) as Row[]) {
+      if (row.doctor_user_id && doctorById.has(row.doctor_user_id)) {
+        careTeamDoctor.set(row.id, row.doctor_user_id);
       }
     }
 
-    const patients: Patient[] = ((patientsResult.data ?? []) as Row[]).map((row) => {
-      const doctor = doctorById.get(careTeamDoctor.get(row.id) ?? "");
-      return {
-        id: row.id,
-        clinicId: row.hospital_id,
-        name: `${row.first_name} ${row.last_name}`.trim(),
-        age: yearsSince(row.date_of_birth),
-        dateOfBirth: row.date_of_birth,
-        gender: displaySex(row.sex),
-        phone: row.phone || "",
-        doctor: doctor?.name ?? "Unassigned",
-        lastVisit: row.updated_at.slice(0, 10),
-        status: row.status === "active" ? "Active" : row.status,
-        version: row.version,
-        medicalRecordNumber: row.medical_record_number,
-      };
-    });
+    const patients: Patient[] = ((patientsResult.data ?? []) as Row[]).map((row) =>
+      mapPatient(row, doctorById.get(careTeamDoctor.get(row.id) ?? "")?.name),
+    );
     const patientById = new Map(patients.map((patient) => [patient.id, patient]));
-
-    for (const patient of patients) {
-      const doctor = doctors.find((item) => item.name === patient.doctor);
-      if (doctor) doctor.patients += 1;
-    }
 
     const receptionists: Receptionist[] = ((membershipsResult.data ?? []) as Row[])
       .filter((row) => row.role_code === "receptionist")
@@ -258,7 +262,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         id: row.id,
         clinicId: row.hospital_id,
         patientId: row.patient_id,
-        patient: patientById.get(row.patient_id)?.name ?? "Restricted patient",
+        patient: patientById.get(row.patient_id)?.name ?? relatedPatientName(row),
         doctor: doctorById.get(row.doctor_user_id)?.name ?? "Unknown doctor",
         doctorId: row.doctor_user_id,
         date: start.toISOString().slice(0, 10),
@@ -277,7 +281,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         id: row.id,
         clinicId: row.hospital_id,
         patientId: row.patient_id,
-        patient: patientById.get(row.patient_id)?.name ?? "Restricted patient",
+        patient: patientById.get(row.patient_id)?.name ?? relatedPatientName(row),
         doctor: doctorById.get(row.prescriber_user_id)?.name ?? "Unknown doctor",
         date: (row.signed_at || row.created_at).slice(0, 10),
         diagnosis: encounter?.diagnoses?.[0] ?? "Not recorded",
@@ -300,7 +304,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
           id: result.id,
           clinicId: order.hospital_id,
           patientId: order.patient_id,
-          patient: patientById.get(order.patient_id)?.name ?? "Restricted patient",
+          patient: patientById.get(order.patient_id)?.name ?? relatedPatientName(order),
           test: order.test_name,
           date: (result.recorded_at || order.completed_at || order.ordered_at).slice(0, 10),
           result: structured.value ?? structured.result ?? "",
@@ -318,7 +322,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         databaseId: row.id,
         clinicId: row.hospital_id,
         patientId: row.patient_id,
-        patient: patientById.get(row.patient_id)?.name ?? "Restricted patient",
+        patient: patientById.get(row.patient_id)?.name ?? relatedPatientName(row),
         date: (row.issued_at || row.created_at).slice(0, 10),
         amount: Number(row.total),
         status:
@@ -339,7 +343,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       city: String(hospital.configuration?.city ?? ""),
       doctors: doctors.length,
       receptionists: receptionists.length,
-      patients: patients.length,
+      patients: Number(((patientsResult.data ?? []) as Row[])[0]?.total_count ?? 0),
       plan: "Dedicated installation",
       status: "Active",
       expires: "Not applicable",
@@ -368,6 +372,30 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       }),
       staffMembers,
     };
+  }
+
+  async searchPatients(input: PatientSearch = {}): Promise<PatientPage> {
+    const limit = Math.min(Math.max(input.limit ?? 25, 1), 100);
+    const offset = Math.max(input.offset ?? 0, 0);
+    const { data, error } = await this.client.rpc("search_patients", {
+      p_query: input.query?.trim() ?? "",
+      p_limit: limit,
+      p_offset: offset,
+    });
+    throwIfError(error);
+
+    const rows = (data ?? []) as Row[];
+    return {
+      rows: rows.map((row) => mapPatient(row)),
+      total: rows.length ? Number(rows[0].total_count) : 0,
+      limit,
+      offset,
+    };
+  }
+
+  async getPatient(id: string) {
+    const page = await this.searchPatients({ query: id, limit: 20 });
+    return page.rows.find((patient) => patient.id === id) ?? null;
   }
 
   private async reloadAndFind<T>(

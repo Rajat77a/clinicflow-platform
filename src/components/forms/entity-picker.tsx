@@ -14,6 +14,7 @@ export interface EntityOption {
 
 interface Props<T extends EntityOption> {
   options: T[];
+  onSearch?: (query: string) => Promise<T[]>;
   value: T | null;
   onChange: (v: T | null) => void;
   placeholder?: string;
@@ -23,12 +24,14 @@ interface Props<T extends EntityOption> {
 }
 
 export function EntityPicker<T extends EntityOption>({
-  options, value, onChange, placeholder = "Type ID, name or phone…",
+  options, onSearch, value, onChange, placeholder = "Type ID, name or phone…",
   emptyText = "No matches", labelId, className,
 }: Props<T>) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
+  const [remoteResults, setRemoteResults] = useState<T[] | null>(null);
+  const [isSearching, setIsSearching] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -39,11 +42,41 @@ export function EntityPicker<T extends EntityOption>({
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
+  useEffect(() => {
+    const normalized = query.trim();
+    if (!onSearch || normalized.length < 2) {
+      setRemoteResults(null);
+      setIsSearching(false);
+      return;
+    }
+
+    let current = true;
+    setIsSearching(true);
+    const timer = window.setTimeout(() => {
+      void onSearch(normalized)
+        .then((rows) => {
+          if (current) setRemoteResults(rows);
+        })
+        .catch(() => {
+          if (current) setRemoteResults([]);
+        })
+        .finally(() => {
+          if (current) setIsSearching(false);
+        });
+    }, 250);
+
+    return () => {
+      current = false;
+      window.clearTimeout(timer);
+    };
+  }, [onSearch, query]);
+
   const results = useMemo(() => {
+    if (remoteResults) return remoteResults.slice(0, 12);
     const q = query.trim().toLowerCase();
     if (!q) return options.slice(0, 8);
     return options.filter(o => o.searchTokens.some(t => t.includes(q))).slice(0, 12);
-  }, [options, query]);
+  }, [options, query, remoteResults]);
 
   useEffect(() => { setActive(0); }, [query]);
 
@@ -96,7 +129,9 @@ export function EntityPicker<T extends EntityOption>({
 
       {open && !value && (
         <div className="absolute z-50 mt-1 max-h-80 w-full overflow-auto rounded-xl border bg-popover p-1 shadow-lg">
-          {results.length === 0 ? (
+          {isSearching ? (
+            <div className="px-3 py-6 text-center text-sm text-muted-foreground">Searching…</div>
+          ) : results.length === 0 ? (
             <div className="px-3 py-6 text-center text-sm text-muted-foreground">{emptyText}</div>
           ) : (
             results.map((o, i) => (
