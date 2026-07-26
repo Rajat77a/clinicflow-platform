@@ -3,8 +3,8 @@ import { createClient } from "npm:@supabase/supabase-js@2.110.8";
 const allowedRoles = new Set(["clinic_admin", "doctor", "receptionist"]);
 const allowedOrigin = Deno.env.get("CLINICFLOW_ALLOWED_ORIGIN") ?? "";
 
-function response(status: number, body: Record<string, unknown>) {
-  return new Response(JSON.stringify(body), {
+function response(status: number, body: Record<string, unknown> | null) {
+  return new Response(body ? JSON.stringify(body) : null, {
     status,
     headers: {
       "Content-Type": "application/json",
@@ -19,7 +19,7 @@ function response(status: number, body: Record<string, unknown>) {
 
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
-    return response(204, {});
+    return response(204, null);
   }
   if (request.method !== "POST") {
     return response(405, { error: "Method not allowed" });
