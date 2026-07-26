@@ -8,7 +8,6 @@ const NAV = [
   { to: "/features", label: "Features" },
   { to: "/about", label: "About" },
   { to: "/faq", label: "FAQ" },
-  { to: "/contact", label: "Contact" },
 ];
 
 export function MarketingShell({ children }: { children: ReactNode }) {
@@ -107,7 +106,6 @@ export function MarketingShell({ children }: { children: ReactNode }) {
               <div className="text-xs font-semibold uppercase tracking-wider text-foreground">Company</div>
               <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
                 <li><Link to="/about" className="hover:text-foreground">About us</Link></li>
-                <li><Link to="/contact" className="hover:text-foreground">Contact</Link></li>
                 <li><Link to="/faq" className="hover:text-foreground">FAQ</Link></li>
                 <li><Link to="/login" className="hover:text-foreground">Sign in</Link></li>
               </ul>
