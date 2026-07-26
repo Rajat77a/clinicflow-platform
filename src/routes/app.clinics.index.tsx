@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useWorkspaceData, type Clinic } from "@/lib/workspace-data";
+import { supabaseConfig } from "@/lib/supabase/config";
 import { Search, Plus, Download } from "lucide-react";
 import { downloadCSV } from "@/lib/exporters";
 import { toast } from "sonner";
@@ -35,11 +36,19 @@ function ClinicsPage() {
 
   return (
     <>
-      <PageHeader title="Clinics" description="All clinics on ClinicFlow."
+      <PageHeader
+        title={supabaseConfig.demoMode ? "Clinics" : "Hospital"}
+        description={supabaseConfig.demoMode ? "All clinics on ClinicFlow." : "This dedicated ClinicFlow installation."}
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" onClick={exportAll}><Download className="mr-1.5 h-4 w-4" />Download all</Button>
-            <Button asChild><Link to="/app/clinics/new"><Plus className="mr-1.5 h-4 w-4" /> Add Clinic</Link></Button>
+            <Button variant="outline" onClick={exportAll}>
+              <Download className="mr-1.5 h-4 w-4" />Download
+            </Button>
+            {supabaseConfig.demoMode && (
+              <Button asChild>
+                <Link to="/app/clinics/new"><Plus className="mr-1.5 h-4 w-4" /> Add Clinic</Link>
+              </Button>
+            )}
           </div>
         } />
       <div className="rounded-2xl border bg-card shadow-soft">

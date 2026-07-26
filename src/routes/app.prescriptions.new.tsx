@@ -70,6 +70,7 @@ function NewPrescription() {
   const [labs, setLabs] = useState<LabReport[]>(
     edit ? labReports.filter(l => l.prescriptionId === edit) : []
   );
+  const [isSaving, setIsSaving] = useState(false);
   const [newLab, setNewLab] = useState({ test: "", result: "", reference: "", notes: "" });
 
   const update = (i: number, k: keyof Med, v: string) =>
@@ -101,40 +102,54 @@ function NewPrescription() {
     toast.success(`Uploaded ${file.name}`);
   };
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isReceptionist && !isLabMode) return; // guard
     if (!isOwnRx) { toast.error("You can only edit prescriptions you issued"); return; }
     if (!patient) { toast.error("Please select a patient"); return; }
     if (isLabMode) {
       if (labs.length === 0) { toast.error("Add at least one lab report"); return; }
-      saveLabReports(labs);
-      toast.success("Lab report saved");
-      navigate({ to: "/app/patients/$id", params: { id: patient.id } });
+      setIsSaving(true);
+      try {
+        await saveLabReports(labs);
+        toast.success("Lab report saved");
+        navigate({ to: "/app/patients/$id", params: { id: patient.id } });
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Unable to save the lab report");
+      } finally {
+        setIsSaving(false);
+      }
       return;
     }
     if (!doctor) { toast.error("Please select a doctor"); return; }
     if (!diagnosis.trim()) { toast.error("Diagnosis is required"); return; }
     if (meds.length === 0 || !meds[0].name.trim()) { toast.error("Add at least one medicine"); return; }
-    const saved = savePrescription({
-      id: edit,
-      patientId: patient.id,
-      doctorId: doctor.id,
-      diagnosis: diagnosis.trim(),
-      notes: notes.trim() || undefined,
-      followUp: followup || undefined,
-      medicines: meds,
-    });
-    if (labs.length) {
-      saveLabReports(labs.map(report => ({
-        ...report,
-        prescriptionId: saved.id,
-        patient: patient.primary,
+    setIsSaving(true);
+    try {
+      const saved = await savePrescription({
+        id: edit,
         patientId: patient.id,
-      })));
+        doctorId: doctor.id,
+        diagnosis: diagnosis.trim(),
+        notes: notes.trim() || undefined,
+        followUp: followup || undefined,
+        medicines: meds,
+      });
+      if (labs.length) {
+        await saveLabReports(labs.map(report => ({
+          ...report,
+          prescriptionId: saved.id,
+          patient: patient.primary,
+          patientId: patient.id,
+        })));
+      }
+      toast.success(edit ? "Prescription updated" : `Prescription ${saved.id} saved`);
+      navigate({ to: "/app/prescriptions" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to save the prescription");
+    } finally {
+      setIsSaving(false);
     }
-    toast.success(edit ? "Prescription updated" : `Prescription ${saved.id} saved`);
-    navigate({ to: "/app/prescriptions" });
   };
 
   const printRx = () => {
@@ -316,9 +331,13 @@ function NewPrescription() {
               Cancel
             </Button>
             {isLabMode
-              ? <Button type="submit" className="flex-1">Save lab report</Button>
+              ? <Button type="submit" className="flex-1" disabled={isSaving}>
+                  {isSaving ? "Saving..." : "Save lab report"}
+                </Button>
               : !isReceptionist
-                ? <Button type="submit" className="flex-1">{edit ? "Save changes" : "Save & sign"}</Button>
+                ? <Button type="submit" className="flex-1" disabled={isSaving}>
+                    {isSaving ? "Saving..." : edit ? "Save changes" : "Save & sign"}
+                  </Button>
                 : <Button type="button" className="flex-1" onClick={() => { toast.success("Lab reports saved"); navigate({ to: "/app/prescriptions" }); }}>Save lab reports</Button>}
           </div>
         </form>

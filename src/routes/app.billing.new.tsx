@@ -31,6 +31,7 @@ function NewBill() {
   ]);
   const [discount, setDiscount] = useState(0);
   const [tax, setTax] = useState(0);
+  const [isSaving, setIsSaving] = useState(false);
 
   const subtotal = lines.reduce((s, l) => s + l.qty * l.unit, 0);
   const total = Math.max(0, subtotal - discount) * (1 + tax / 100);
@@ -59,12 +60,20 @@ function NewBill() {
     toast.success(`Imported ${medLines.length} medicines from ${rx.id}`);
   };
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!patient) { toast.error("Please select a patient"); return; }
-    const bill = createBill({ patientId: patient.id, amount: total });
-    toast.success(`Bill ${bill.id} created`);
-    navigate({ to: "/app/billing" });
+    if (total <= 0) { toast.error("Invoice total must be greater than zero"); return; }
+    setIsSaving(true);
+    try {
+      const bill = await createBill({ patientId: patient.id, amount: total });
+      toast.success(`Bill ${bill.id} created`);
+      navigate({ to: "/app/billing" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to create the bill");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const billHtml = () => `
@@ -201,7 +210,9 @@ function NewBill() {
           </section>
           <div className="flex gap-2">
             <Button type="button" variant="outline" className="flex-1" onClick={() => navigate({ to: "/app/billing" })}>Cancel</Button>
-            <Button type="submit" className="flex-1">Create bill</Button>
+            <Button type="submit" className="flex-1" disabled={isSaving}>
+              {isSaving ? "Creating..." : "Create bill"}
+            </Button>
           </div>
         </aside>
       </form>

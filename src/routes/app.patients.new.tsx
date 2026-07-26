@@ -25,21 +25,37 @@ function NewPatient() {
   const navigate = useNavigate();
   const { createPatient, doctors } = useWorkspaceData();
   const [name, setName] = useState("");
-  const [age, setAge] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
   const [gender, setGender] = useState("");
   const [phone, setPhone] = useState("");
-  const [doctor, setDoctor] = useState(doctors[0]?.name ?? "");
+  const [doctorId, setDoctorId] = useState(doctors[0]?.id ?? "");
+  const [saving, setSaving] = useState(false);
 
-  const submit = (event: React.FormEvent) => {
+  const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!name.trim()) return toast.error("Full name is required");
-    if (!age || Number(age) < 0) return toast.error("Enter a valid age");
+    if (!dateOfBirth || new Date(dateOfBirth) > new Date()) {
+      return toast.error("Enter a valid date of birth");
+    }
     if (!gender) return toast.error("Select a gender");
     if (!phone.trim()) return toast.error("Phone is required");
-    if (!doctor) return toast.error("Assign a doctor");
-    const patient = createPatient({ name: name.trim(), age: Number(age), gender, phone: phone.trim(), doctor });
-    toast.success(`Patient ${patient.id} registered`);
-    navigate({ to: "/app/patients/$id", params: { id: patient.id } });
+    if (!doctorId) return toast.error("Assign a doctor");
+    setSaving(true);
+    try {
+      const patient = await createPatient({
+        name: name.trim(),
+        dateOfBirth,
+        gender,
+        phone: phone.trim(),
+        doctorId,
+      });
+      toast.success(`Patient ${patient.medicalRecordNumber ?? patient.id} registered`);
+      navigate({ to: "/app/patients/$id", params: { id: patient.id } });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to register patient");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -52,8 +68,7 @@ function NewPatient() {
             <h2 className="mb-4 font-display text-base font-semibold">Personal information</h2>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
               <Field label="Full name" span={4}><Input className="h-11 rounded-xl" placeholder="Liam Andersson" value={name} onChange={event => setName(event.target.value)} /></Field>
-              <Field label="Date of birth" span={2}><Input type="date" className="h-11 rounded-xl" /></Field>
-              <Field label="Age" span={2}><Input type="number" min={0} className="h-11 rounded-xl" placeholder="34" value={age} onChange={event => setAge(event.target.value)} /></Field>
+              <Field label="Date of birth" span={2}><Input type="date" max={new Date().toISOString().slice(0, 10)} className="h-11 rounded-xl" value={dateOfBirth} onChange={event => setDateOfBirth(event.target.value)} /></Field>
               <Field label="Gender" span={2}>
                 <Select value={gender} onValueChange={setGender}><SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
@@ -69,9 +84,9 @@ function NewPatient() {
                 </Select>
               </Field>
               <Field label="Assigned doctor" span={6}>
-                <Select value={doctor} onValueChange={setDoctor}>
+                <Select value={doctorId} onValueChange={setDoctorId}>
                   <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Select doctor" /></SelectTrigger>
-                  <SelectContent>{doctors.map(item => <SelectItem key={item.id} value={item.name}>{item.name} · {item.specialty}</SelectItem>)}</SelectContent>
+                  <SelectContent>{doctors.map(item => <SelectItem key={item.id} value={item.id}>{item.name} · {item.specialty}</SelectItem>)}</SelectContent>
                 </Select>
               </Field>
             </div>
@@ -104,7 +119,7 @@ function NewPatient() {
           </section>
           <div className="flex gap-2">
             <Button type="button" variant="outline" className="flex-1" onClick={() => navigate({ to: "/app/patients" })}>Cancel</Button>
-            <Button type="submit" className="flex-1">Save patient</Button>
+            <Button type="submit" className="flex-1" disabled={saving}>{saving ? "Saving..." : "Save patient"}</Button>
           </div>
         </aside>
       </form>

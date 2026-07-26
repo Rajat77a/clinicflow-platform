@@ -11,6 +11,8 @@ export interface AuthUser {
   email: string;
   role: Role;
   clinicId: string | null;
+  facilityId: string | null;
+  departmentId: string | null;
   clinic: string;
   clinicLogo: string;
 }
@@ -22,6 +24,8 @@ const DEFAULT_USERS: Record<Role, AuthUser> = {
     email: "helena@clinicflow.io",
     role: "super_admin",
     clinicId: null,
+    facilityId: null,
+    departmentId: null,
     clinic: "ClinicFlow HQ",
     clinicLogo: "CF",
   },
@@ -31,6 +35,8 @@ const DEFAULT_USERS: Record<Role, AuthUser> = {
     email: "marcus@northwood.health",
     role: "clinic_admin",
     clinicId: "CL-001",
+    facilityId: null,
+    departmentId: null,
     clinic: "Northwood Health",
     clinicLogo: "NH",
   },
@@ -40,6 +46,8 @@ const DEFAULT_USERS: Record<Role, AuthUser> = {
     email: "amelia.chen@northwood.health",
     role: "doctor",
     clinicId: "CL-001",
+    facilityId: null,
+    departmentId: null,
     clinic: "Northwood Health",
     clinicLogo: "NH",
   },
@@ -49,6 +57,8 @@ const DEFAULT_USERS: Record<Role, AuthUser> = {
     email: "sofia@northwood.health",
     role: "receptionist",
     clinicId: "CL-001",
+    facilityId: null,
+    departmentId: null,
     clinic: "Northwood Health",
     clinicLogo: "NH",
   },
@@ -96,7 +106,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         supabase.from("profiles").select("display_name, email").eq("id", authUser.id).maybeSingle(),
         supabase
           .from("staff_memberships")
-          .select("hospital_id, role_code")
+          .select("hospital_id, facility_id, department_id, role_code")
           .eq("user_id", authUser.id)
           .eq("active", true)
           .maybeSingle(),
@@ -133,6 +143,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       email: profile?.email || authUser.email || "",
       role: membership.role_code as Role,
       clinicId: membership.hospital_id,
+      facilityId: membership.facility_id,
+      departmentId: membership.department_id,
       clinic,
       clinicLogo: clinic
         .split(/\s+/)

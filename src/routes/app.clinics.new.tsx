@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FileUploader } from "@/components/forms/file-uploader";
 import { useWorkspaceData } from "@/lib/workspace-data";
+import { supabaseConfig } from "@/lib/supabase/config";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/clinics/new")({ component: AddClinic });
@@ -26,13 +27,35 @@ function AddClinic() {
   const { createClinic } = useWorkspaceData();
   const [name, setName] = useState("");
   const [city, setCity] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
 
-  const submit = (event: React.FormEvent) => {
+  if (!supabaseConfig.demoMode) {
+    return (
+      <>
+        <PageHeader
+          title="Dedicated hospital installation"
+          description="This deployment is permanently scoped to one hospital."
+        />
+        <Button variant="outline" onClick={() => navigate({ to: "/app/clinics" })}>
+          Back to hospital
+        </Button>
+      </>
+    );
+  }
+
+  const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!name.trim() || !city.trim()) return toast.error("Clinic name and location are required");
-    const clinic = createClinic({ name: name.trim(), city: city.trim() });
-    toast.success(`Clinic ${clinic.id} created`);
-    navigate({ to: "/app/clinics" });
+    setIsSaving(true);
+    try {
+      const clinic = await createClinic({ name: name.trim(), city: city.trim() });
+      toast.success(`Clinic ${clinic.id} created`);
+      navigate({ to: "/app/clinics" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to create the clinic");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -78,7 +101,9 @@ function AddClinic() {
           </section>
           <div className="flex gap-2">
             <Button type="button" variant="outline" className="flex-1" onClick={() => navigate({ to: "/app/clinics" })}>Cancel</Button>
-            <Button type="submit" className="flex-1">Create clinic</Button>
+            <Button type="submit" className="flex-1" disabled={isSaving}>
+              {isSaving ? "Creating..." : "Create clinic"}
+            </Button>
           </div>
         </aside>
       </form>
