@@ -1,4 +1,7 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+import type { AuthChangeEvent, AuthError, Session, User } from "@supabase/supabase-js";
+import { getSupabaseBrowserClient } from "./supabase/client";
+import { supabaseConfig } from "./supabase/config";
 
 export type Role = "super_admin" | "clinic_admin" | "doctor" | "receptionist";
 
@@ -54,9 +57,12 @@ const DEFAULT_USERS: Record<Role, AuthUser> = {
 interface AuthCtx {
   user: AuthUser | null;
   isReady: boolean;
-  login: (role: Role, email: string) => void;
-  logout: () => void;
+  isDemoMode: boolean;
+  login: (email: string, password: string, demoRole?: Role) => Promise<void>;
+  logout: () => Promise<void>;
   setRole: (role: Role) => void;
+  requestPasswordReset: (email: string) => Promise<void>;
+  updatePassword: (password: string) => Promise<void>;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
@@ -78,8 +84,93 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isReady, setIsReady] = useState(false);
 
+  const hydrateSupabaseUser = useCallback(async (authUser: User | null) => {
+    if (!authUser) {
+      setUser(null);
+      return;
+    }
+
+    const supabase = getSupabaseBrowserClient();
+    const [{ data: profile, error: profileError }, { data: membership, error: membershipError }] =
+      await Promise.all([
+        supabase.from("profiles").select("display_name, email").eq("id", authUser.id).maybeSingle(),
+        supabase
+          .from("staff_memberships")
+          .select("hospital_id, role_code")
+          .eq("user_id", authUser.id)
+          .eq("active", true)
+          .maybeSingle(),
+      ]);
+
+    if (profileError || membershipError) {
+      throw profileError ?? membershipError;
+    }
+    if (!membership) {
+      await supabase.auth.signOut();
+      throw new Error("Your account is not assigned to this hospital");
+    }
+    if (!ROLES.has(membership.role_code as Role)) {
+      await supabase.auth.signOut();
+      throw new Error("This role is not supported by the current portal");
+    }
+
+    const { data: hospital, error: hospitalError } = await supabase
+      .from("hospitals")
+      .select("name")
+      .eq("id", membership.hospital_id)
+      .single();
+    if (hospitalError) throw hospitalError;
+
+    const name =
+      profile?.display_name ||
+      authUser.user_metadata.full_name ||
+      authUser.email ||
+      "Hospital user";
+    const clinic = hospital.name;
+    setUser({
+      userId: authUser.id,
+      name,
+      email: profile?.email || authUser.email || "",
+      role: membership.role_code as Role,
+      clinicId: membership.hospital_id,
+      clinic,
+      clinicLogo: clinic
+        .split(/\s+/)
+        .map((part: string) => part[0])
+        .join("")
+        .slice(0, 2)
+        .toUpperCase(),
+    });
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
+
+    if (!supabaseConfig.demoMode) {
+      const supabase = getSupabaseBrowserClient();
+      void supabase.auth
+        .getUser()
+        .then(async ({ data, error }: { data: { user: User | null }; error: AuthError | null }) => {
+          try {
+            if (error) throw error;
+            await hydrateSupabaseUser(data.user);
+          } catch {
+            setUser(null);
+          } finally {
+            setIsReady(true);
+          }
+        });
+
+      const { data: listener } = supabase.auth.onAuthStateChange(
+        (_event: AuthChangeEvent, session: Session | null) => {
+          queueMicrotask(() => {
+            void hydrateSupabaseUser(session?.user ?? null).catch(() => setUser(null));
+          });
+        },
+      );
+
+      return () => listener.subscription.unsubscribe();
+    }
 
     const raw = localStorage.getItem("cf_user");
 
@@ -98,7 +189,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
     setIsReady(true);
-  }, []);
+  }, [hydrateSupabaseUser]);
 
   const persist = (u: AuthUser | null) => {
     setUser(u);
@@ -117,13 +208,49 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         isReady,
-        login: (role, email) =>
-          persist({
-            ...DEFAULT_USERS[role],
+        isDemoMode: supabaseConfig.demoMode,
+        login: async (email, password, demoRole = "clinic_admin") => {
+          if (supabaseConfig.demoMode) {
+            persist({
+              ...DEFAULT_USERS[demoRole],
+              email: email.trim(),
+            });
+            return;
+          }
+
+          const { data, error } = await getSupabaseBrowserClient().auth.signInWithPassword({
             email: email.trim(),
-          }),
-        logout: () => persist(null),
-        setRole: (role) => persist(DEFAULT_USERS[role]),
+            password,
+          });
+          if (error) throw error;
+          await hydrateSupabaseUser(data.user);
+        },
+        logout: async () => {
+          if (!supabaseConfig.demoMode) {
+            const { error } = await getSupabaseBrowserClient().auth.signOut();
+            if (error) throw error;
+          }
+          persist(null);
+        },
+        setRole: (role) => {
+          if (!supabaseConfig.demoMode) {
+            throw new Error("Roles can only be changed by an authorized administrator");
+          }
+          persist(DEFAULT_USERS[role]);
+        },
+        requestPasswordReset: async (email) => {
+          if (supabaseConfig.demoMode) return;
+          const { error } = await getSupabaseBrowserClient().auth.resetPasswordForEmail(
+            email.trim(),
+            { redirectTo: `${supabaseConfig.appUrl}/login` },
+          );
+          if (error) throw error;
+        },
+        updatePassword: async (password) => {
+          if (supabaseConfig.demoMode) return;
+          const { error } = await getSupabaseBrowserClient().auth.updateUser({ password });
+          if (error) throw error;
+        },
       }}
     >
       {children}

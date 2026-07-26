@@ -4,7 +4,14 @@ import { Activity, ArrowRight, Building2, ShieldCheck, Stethoscope, UserCog } fr
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useAuth, type Role, ROLE_LABELS } from "@/lib/auth";
 
@@ -12,7 +19,10 @@ export const Route = createFileRoute("/login")({
   head: () => ({
     meta: [
       { title: "Sign in — ClinicFlow" },
-      { name: "description", content: "Sign in to ClinicFlow, the modern clinic management platform." },
+      {
+        name: "description",
+        content: "Sign in to ClinicFlow, the modern clinic management platform.",
+      },
     ],
   }),
   component: Login,
@@ -26,13 +36,14 @@ const ROLE_ICONS: Record<Role, React.ComponentType<{ className?: string }>> = {
 };
 
 function Login() {
-  const { login } = useAuth();
+  const { isDemoMode, login, requestPasswordReset, updatePassword } = useAuth();
   const navigate = useNavigate();
   const [role, setRole] = useState<Role>("clinic_admin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!email.trim()) {
@@ -50,8 +61,15 @@ function Login() {
       return;
     }
 
-    login(role, email);
-    navigate({ to: "/app" });
+    setSubmitting(true);
+    try {
+      await login(email, password, role);
+      navigate({ to: "/app" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to sign in");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -80,7 +98,8 @@ function Login() {
             Run a calmer clinic.
           </h1>
           <p className="mt-4 max-w-md text-base text-primary-foreground/85">
-            From patient registration to prescriptions and billing — ClinicFlow gives every role the clarity they need to deliver better care.
+            From patient registration to prescriptions and billing — ClinicFlow gives every role the
+            clarity they need to deliver better care.
           </p>
 
           <div className="mt-10 grid max-w-md grid-cols-3 gap-4">
@@ -134,7 +153,11 @@ function Login() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label htmlFor="password">Password</Label>
-                <ForgotPasswordDialog />
+                <ForgotPasswordDialog
+                  isDemoMode={isDemoMode}
+                  requestPasswordReset={requestPasswordReset}
+                  updatePassword={updatePassword}
+                />
               </div>
               <Input
                 id="password"
@@ -148,34 +171,40 @@ function Login() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>Sign in as (demo)</Label>
-              <div className="grid grid-cols-2 gap-2">
-                {(Object.keys(ROLE_LABELS) as Role[]).map((r) => {
-                  const Icon = ROLE_ICONS[r];
-                  const active = role === r;
+            {isDemoMode && (
+              <div className="space-y-2">
+                <Label>Sign in as (demo)</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(Object.keys(ROLE_LABELS) as Role[]).map((r) => {
+                    const Icon = ROLE_ICONS[r];
+                    const active = role === r;
 
-                  return (
-                    <button
-                      type="button"
-                      key={r}
-                      onClick={() => setRole(r)}
-                      className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm transition-all ${
-                        active
-                          ? "border-primary bg-primary-soft text-primary shadow-soft"
-                          : "border-border hover:bg-muted"
-                      }`}
-                    >
-                      <Icon className="h-4 w-4 shrink-0" />
-                      <span className="font-medium">{ROLE_LABELS[r]}</span>
-                    </button>
-                  );
-                })}
+                    return (
+                      <button
+                        type="button"
+                        key={r}
+                        onClick={() => setRole(r)}
+                        className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm transition-all ${
+                          active
+                            ? "border-primary bg-primary-soft text-primary shadow-soft"
+                            : "border-border hover:bg-muted"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4 shrink-0" />
+                        <span className="font-medium">{ROLE_LABELS[r]}</span>
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
+            )}
 
-            <Button type="submit" className="h-11 w-full rounded-xl text-sm font-semibold">
-              Sign in <ArrowRight className="ml-1.5 h-4 w-4" />
+            <Button
+              type="submit"
+              disabled={submitting}
+              className="h-11 w-full rounded-xl text-sm font-semibold"
+            >
+              {submitting ? "Signing in..." : "Sign in"} <ArrowRight className="ml-1.5 h-4 w-4" />
             </Button>
 
             <p className="text-center text-xs text-muted-foreground">
@@ -184,8 +213,21 @@ function Login() {
           </form>
 
           <div className="mt-8 rounded-xl border bg-muted/40 p-4 text-xs text-muted-foreground">
-            <span className="font-semibold text-foreground">Demo mode:</span> no real authentication — enter your email, password and pick a role to explore the matching dashboard.{" "}
-            <Link to="/" className="underline">Back home</Link>
+            {isDemoMode ? (
+              <>
+                <span className="font-semibold text-foreground">Demo mode:</span> no real
+                authentication - enter your email, password and pick a role to explore the matching
+                dashboard.{" "}
+              </>
+            ) : (
+              <>
+                <span className="font-semibold text-foreground">Secure access:</span> use the staff
+                account assigned by your hospital administrator.{" "}
+              </>
+            )}
+            <Link to="/" className="underline">
+              Back home
+            </Link>
           </div>
         </div>
       </div>
@@ -193,7 +235,15 @@ function Login() {
   );
 }
 
-function ForgotPasswordDialog() {
+function ForgotPasswordDialog({
+  isDemoMode,
+  requestPasswordReset,
+  updatePassword,
+}: {
+  isDemoMode: boolean;
+  requestPasswordReset: (email: string) => Promise<void>;
+  updatePassword: (password: string) => Promise<void>;
+}) {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<"request" | "reset">("request");
   const [email, setEmail] = useState("");
@@ -207,7 +257,7 @@ function ForgotPasswordDialog() {
     setPw2("");
   };
 
-  const sendCode = (e: React.FormEvent) => {
+  const sendCode = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (!email.trim()) {
@@ -215,11 +265,25 @@ function ForgotPasswordDialog() {
       return;
     }
 
-    toast.success("Verification link sent — continue to set a new password");
-    setStep("reset");
+    try {
+      await requestPasswordReset(email);
+      toast.success(
+        isDemoMode
+          ? "Demo reset flow opened"
+          : "If the account exists, a secure reset link has been sent",
+      );
+      if (isDemoMode) {
+        setStep("reset");
+      } else {
+        setOpen(false);
+        reset();
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to send reset link");
+    }
   };
 
-  const savePw = (e: React.FormEvent) => {
+  const savePw = async (e: React.FormEvent) => {
     e.preventDefault();
 
     if (pw.length < 8) {
@@ -232,13 +296,24 @@ function ForgotPasswordDialog() {
       return;
     }
 
-    toast.success("Password updated — you can sign in now");
-    setOpen(false);
-    reset();
+    try {
+      await updatePassword(pw);
+      toast.success("Password updated - you can sign in now");
+      setOpen(false);
+      reset();
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to update password");
+    }
   };
 
   return (
-    <Dialog open={open} onOpenChange={(o) => { setOpen(o); if (!o) reset(); }}>
+    <Dialog
+      open={open}
+      onOpenChange={(o) => {
+        setOpen(o);
+        if (!o) reset();
+      }}
+    >
       <button
         type="button"
         onClick={() => setOpen(true)}
@@ -249,7 +324,9 @@ function ForgotPasswordDialog() {
 
       <DialogContent className="max-w-md">
         <DialogHeader>
-          <DialogTitle>{step === "request" ? "Reset your password" : "Set a new password"}</DialogTitle>
+          <DialogTitle>
+            {step === "request" ? "Reset your password" : "Set a new password"}
+          </DialogTitle>
           <DialogDescription>
             {step === "request"
               ? "Enter your work email and we'll send a secure reset link."
@@ -271,7 +348,9 @@ function ForgotPasswordDialog() {
               />
             </div>
             <DialogFooter>
-              <Button type="submit" className="w-full">Send reset link</Button>
+              <Button type="submit" className="w-full">
+                Send reset link
+              </Button>
             </DialogFooter>
           </form>
         ) : (
@@ -300,7 +379,9 @@ function ForgotPasswordDialog() {
             </div>
 
             <DialogFooter className="gap-2 sm:gap-2">
-              <Button type="button" variant="outline" onClick={() => setStep("request")}>Back</Button>
+              <Button type="button" variant="outline" onClick={() => setStep("request")}>
+                Back
+              </Button>
               <Button type="submit">Update password</Button>
             </DialogFooter>
           </form>

@@ -1,12 +1,27 @@
 import { useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { Activity, Bell, LogOut, Menu, Moon, Search, Stethoscope, Sun, ChevronDown, UserRound } from "lucide-react";
+import {
+  Activity,
+  Bell,
+  LogOut,
+  Menu,
+  Moon,
+  Search,
+  Stethoscope,
+  Sun,
+  ChevronDown,
+  UserRound,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem,
-  DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger,
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth, ROLE_LABELS, type Role } from "@/lib/auth";
 import { useWorkspaceData } from "@/lib/workspace-data";
@@ -28,7 +43,9 @@ function Brand() {
       </div>
       <div className="leading-tight">
         <div className="font-display font-bold text-base tracking-tight">ClinicFlow</div>
-        <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Healthcare OS</div>
+        <div className="text-[10px] uppercase tracking-widest text-muted-foreground">
+          Healthcare OS
+        </div>
       </div>
     </Link>
   );
@@ -47,19 +64,29 @@ function GlobalSearch() {
   const results = useMemo<SearchResult[]>(() => {
     if (!normalized) return [];
     const patientResults: SearchResult[] = patients
-      .filter(patient =>
-        [patient.id, patient.name, patient.phone].some(value =>
-          value.toLocaleLowerCase().replace(/\s/g, "").includes(normalized)
-        )
+      .filter((patient) =>
+        [patient.id, patient.name, patient.phone].some((value) =>
+          value.toLocaleLowerCase().replace(/\s/g, "").includes(normalized),
+        ),
       )
-      .map(patient => ({ id: patient.id, kind: "patient", name: patient.name, detail: `${patient.id} · ${patient.phone}` }));
+      .map((patient) => ({
+        id: patient.id,
+        kind: "patient",
+        name: patient.name,
+        detail: `${patient.id} · ${patient.phone}`,
+      }));
     const doctorResults: SearchResult[] = doctors
-      .filter(doctor =>
-        [doctor.id, doctor.name, doctor.phone, doctor.email].some(value =>
-          value.toLocaleLowerCase().replace(/\s/g, "").includes(normalized)
-        )
+      .filter((doctor) =>
+        [doctor.id, doctor.name, doctor.phone, doctor.email].some((value) =>
+          value.toLocaleLowerCase().replace(/\s/g, "").includes(normalized),
+        ),
       )
-      .map(doctor => ({ id: doctor.id, kind: "doctor", name: doctor.name, detail: `${doctor.specialty} · ${doctor.id}` }));
+      .map((doctor) => ({
+        id: doctor.id,
+        kind: "doctor",
+        name: doctor.name,
+        detail: `${doctor.specialty} · ${doctor.id}`,
+      }));
     return [...patientResults, ...doctorResults].slice(0, 8);
   }, [doctors, normalized, patients]);
 
@@ -94,12 +121,12 @@ function GlobalSearch() {
         placeholder="Search patients, doctors, phone or ID…"
         className="h-10 w-full rounded-xl border-border/70 bg-muted/40 pl-9 focus-visible:bg-background"
         value={query}
-        onChange={event => {
+        onChange={(event) => {
           setQuery(event.target.value);
           setOpen(true);
         }}
         onFocus={() => setOpen(true)}
-        onKeyDown={event => {
+        onKeyDown={(event) => {
           if (event.key === "Escape") {
             setQuery("");
             setOpen(false);
@@ -107,24 +134,38 @@ function GlobalSearch() {
         }}
       />
       {open && query && (
-        <div id="workspace-search-results" role="listbox" className="absolute left-0 right-0 top-11 z-50 max-h-80 overflow-y-auto rounded-xl border bg-popover p-1 shadow-card">
-          {results.length ? results.map(result => (
-            <button
-              key={`${result.kind}-${result.id}`}
-              type="button"
-              role="option"
-              aria-selected="false"
-              className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
-              onClick={() => select(result)}
-            >
-              {result.kind === "patient" ? <UserRound className="h-4 w-4 text-primary" /> : <Stethoscope className="h-4 w-4 text-info" />}
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold">{result.name}</span>
-                <span className="block truncate text-xs text-muted-foreground">{result.detail}</span>
-              </span>
-            </button>
-          )) : (
-            <div className="px-3 py-3 text-sm text-muted-foreground">No matching patients or doctors.</div>
+        <div
+          id="workspace-search-results"
+          role="listbox"
+          className="absolute left-0 right-0 top-11 z-50 max-h-80 overflow-y-auto rounded-xl border bg-popover p-1 shadow-card"
+        >
+          {results.length ? (
+            results.map((result) => (
+              <button
+                key={`${result.kind}-${result.id}`}
+                type="button"
+                role="option"
+                aria-selected="false"
+                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
+                onClick={() => select(result)}
+              >
+                {result.kind === "patient" ? (
+                  <UserRound className="h-4 w-4 text-primary" />
+                ) : (
+                  <Stethoscope className="h-4 w-4 text-info" />
+                )}
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold">{result.name}</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {result.detail}
+                  </span>
+                </span>
+              </button>
+            ))
+          ) : (
+            <div className="px-3 py-3 text-sm text-muted-foreground">
+              No matching patients or doctors.
+            </div>
           )}
         </div>
       )}
@@ -133,7 +174,7 @@ function GlobalSearch() {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { user, logout, setRole } = useAuth();
+  const { user, logout, setRole, isDemoMode } = useAuth();
   const navigate = useNavigate();
   const [dark, setDark] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -180,13 +221,22 @@ export function AppShell({ children }: { children: ReactNode }) {
         {/* Top bar */}
         <header className="sticky top-0 z-20 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b bg-background/80 px-4 py-3 backdrop-blur-md sm:px-6">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="lg:hidden" onClick={() => setMobileOpen(true)} aria-label="Open navigation" title="Open navigation">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="lg:hidden"
+              onClick={() => setMobileOpen(true)}
+              aria-label="Open navigation"
+              title="Open navigation"
+            >
               <Menu className="h-5 w-5" />
             </Button>
             <div className="hidden lg:flex items-center gap-2">
               <ClinicMark initials={user.clinicLogo} />
               <div className="leading-tight">
-                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">Clinic</div>
+                <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                  Clinic
+                </div>
                 <div className="text-sm font-semibold truncate max-w-[180px]">{user.clinic}</div>
               </div>
             </div>
@@ -195,11 +245,22 @@ export function AppShell({ children }: { children: ReactNode }) {
           <GlobalSearch />
 
           <div className="flex items-center gap-1 sm:gap-2">
-            <Button variant="ghost" size="icon" onClick={toggleDark} className="rounded-xl" aria-label={dark ? "Use light theme" : "Use dark theme"} title={dark ? "Use light theme" : "Use dark theme"}>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleDark}
+              className="rounded-xl"
+              aria-label={dark ? "Use light theme" : "Use dark theme"}
+              title={dark ? "Use light theme" : "Use dark theme"}
+            >
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
             <Button asChild variant="ghost" size="icon" className="relative rounded-xl">
-              <Link to="/app/notifications" aria-label="View notifications" title="View notifications">
+              <Link
+                to="/app/notifications"
+                aria-label="View notifications"
+                title="View notifications"
+              >
                 <Bell className="h-4 w-4" />
                 <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive" />
               </Link>
@@ -208,11 +269,17 @@ export function AppShell({ children }: { children: ReactNode }) {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-10 gap-2 rounded-xl px-2">
                   <div className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-br from-primary to-info text-primary-foreground text-xs font-semibold">
-                    {user.name.split(" ").map(n => n[0]).slice(0, 2).join("")}
+                    {user.name
+                      .split(" ")
+                      .map((n) => n[0])
+                      .slice(0, 2)
+                      .join("")}
                   </div>
                   <div className="hidden sm:block text-left leading-tight">
                     <div className="text-sm font-semibold">{user.name.split(" ")[0]}</div>
-                    <div className="text-[10px] text-muted-foreground">{ROLE_LABELS[user.role]}</div>
+                    <div className="text-[10px] text-muted-foreground">
+                      {ROLE_LABELS[user.role]}
+                    </div>
                   </div>
                   <ChevronDown className="hidden sm:block h-3.5 w-3.5 text-muted-foreground" />
                 </Button>
@@ -223,18 +290,25 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <div className="text-xs font-normal text-muted-foreground">{user.email}</div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                <DropdownMenuLabel className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                  Switch role (demo)
-                </DropdownMenuLabel>
-                {(Object.keys(ROLE_LABELS) as Role[]).map((r) => (
-                  <DropdownMenuItem key={r} onClick={() => setRole(r)}>
-                    <span className={user.role === r ? "font-semibold text-primary" : ""}>
-                      {ROLE_LABELS[r]}
-                    </span>
-                  </DropdownMenuItem>
-                ))}
+                {isDemoMode && (
+                  <DropdownMenuLabel className="text-[11px] uppercase tracking-wider text-muted-foreground">
+                    Switch role (demo)
+                  </DropdownMenuLabel>
+                )}
+                {isDemoMode &&
+                  (Object.keys(ROLE_LABELS) as Role[]).map((r) => (
+                    <DropdownMenuItem key={r} onClick={() => setRole(r)}>
+                      <span className={user.role === r ? "font-semibold text-primary" : ""}>
+                        {ROLE_LABELS[r]}
+                      </span>
+                    </DropdownMenuItem>
+                  ))}
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={() => { logout(); navigate({ to: "/login" }); }}>
+                <DropdownMenuItem
+                  onClick={() => {
+                    void logout().then(() => navigate({ to: "/login" }));
+                  }}
+                >
                   <LogOut className="mr-2 h-4 w-4" /> Sign out
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -250,7 +324,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div className="font-display text-lg font-bold tracking-tight">{user.name}</div>
             </div>
             <div className="text-xs text-muted-foreground">
-              Currently logged into <span className="font-semibold text-foreground">{user.clinic}</span>
+              Currently logged into{" "}
+              <span className="font-semibold text-foreground">{user.clinic}</span>
             </div>
           </div>
         </div>
