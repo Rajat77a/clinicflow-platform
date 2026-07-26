@@ -117,7 +117,9 @@ function Login() {
         </div>
 
         <div className="relative text-xs opacity-75">
-          Demo environment · production compliance validation pending
+          {isDemoMode
+            ? "Demo environment · sample data only"
+            : "Dedicated hospital environment · compliance validation required before clinical use"}
         </div>
       </div>
 
