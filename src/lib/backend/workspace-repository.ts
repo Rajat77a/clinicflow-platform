@@ -15,25 +15,36 @@ import type {
   ReceptionistInput,
   StaffMember,
   WorkspaceSnapshot,
+  AuditEntry,
 } from "../workspace-data";
 
-export interface PatientPage {
-  rows: Patient[];
+export interface RecordPage<T> {
+  rows: T[];
   total: number;
   limit: number;
   offset: number;
 }
 
-export interface PatientSearch {
+export interface RecordPageInput {
   query?: string;
   limit?: number;
   offset?: number;
+  patientId?: string;
+  recordId?: string;
 }
+
+export type PatientPage = RecordPage<Patient>;
+export type PatientSearch = RecordPageInput;
 
 export interface WorkspaceRepository {
   load(): Promise<WorkspaceSnapshot>;
   searchPatients(input?: PatientSearch): Promise<PatientPage>;
   getPatient(id: string): Promise<Patient | null>;
+  listAppointments(input?: RecordPageInput): Promise<RecordPage<Appointment>>;
+  listPrescriptions(input?: RecordPageInput): Promise<RecordPage<Prescription>>;
+  listLabReports(input?: RecordPageInput): Promise<RecordPage<LabReport>>;
+  listBills(input?: RecordPageInput): Promise<RecordPage<Bill>>;
+  listAuditLogs(input?: RecordPageInput): Promise<RecordPage<AuditEntry>>;
   createDoctor(input: DoctorInput): Promise<Doctor>;
   createReceptionist(input: ReceptionistInput): Promise<Receptionist>;
   inviteClinicAdmin(input: ClinicAdminInput): Promise<StaffMember>;

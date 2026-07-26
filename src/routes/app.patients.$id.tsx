@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { PaginationFooter } from "@/components/data/pagination-footer";
 import {
   useWorkspaceData,
   type Bill,
@@ -13,7 +14,7 @@ import {
   type Patient,
   type Prescription,
 } from "@/lib/workspace-data";
-import { downloadCSV, printDocument } from "@/lib/exporters";
+import { printDocument } from "@/lib/exporters";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { useAuth } from "@/lib/auth";
 import { hasPermission } from "@/lib/access-control";
@@ -21,6 +22,7 @@ import {
   Phone, MessageCircle, Calendar, FileText, Receipt,
   FolderOpen, FlaskConical, Download, Send, Printer, Edit, Eye,
 } from "lucide-react";
+import { useRecordPage } from "@/lib/use-record-page";
 
 export const Route = createFileRoute("/app/patients/$id")({
   component: PatientProfile,
@@ -29,17 +31,28 @@ export const Route = createFileRoute("/app/patients/$id")({
 function PatientProfile() {
   const { user } = useAuth();
   const { id } = Route.useParams();
-  const { patients, prescriptions, bills, appointments, labReports, getPatient } = useWorkspaceData();
+  const {
+    patients,
+    getPatient,
+    listAppointments,
+    listPrescriptions,
+    listLabReports,
+    listBills,
+  } = useWorkspaceData();
   const snapshotPatient = patients.find(candidate => candidate.id === id);
   const [loadedPatient, setLoadedPatient] = useState<Patient | null>(null);
   const [recordLoading, setRecordLoading] = useState(!snapshotPatient);
   const [viewingBill, setViewingBill] = useState<Bill | null>(null);
   const [viewingLab, setViewingLab] = useState<LabReport | null>(null);
   const patient = snapshotPatient ?? loadedPatient;
-  const visits = appointments.filter(a => a.patientId === id);
-  const myRx = prescriptions.filter(r => r.patientId === id);
-  const myBills = bills.filter(b => b.patientId === id);
-  const myLabs = labReports.filter(l => l.patientId === id);
+  const visitsPage = useRecordPage(listAppointments, { patientId: id });
+  const prescriptionsPage = useRecordPage(listPrescriptions, { patientId: id });
+  const billsPage = useRecordPage(listBills, { patientId: id });
+  const labsPage = useRecordPage(listLabReports, { patientId: id });
+  const visits = visitsPage.rows;
+  const myRx = prescriptionsPage.rows;
+  const myBills = billsPage.rows;
+  const myLabs = labsPage.rows;
 
   useEffect(() => {
     if (snapshotPatient) {
@@ -72,14 +85,6 @@ function PatientProfile() {
   const canAddLab = Boolean(user && hasPermission(user.role, "labs.write"));
   const canBook = Boolean(user && hasPermission(user.role, "appointments.create"));
 
-  const exportAll = () => {
-    downloadCSV(`${patient.id}-profile.csv`, [{ ...patient }]);
-    downloadCSV(`${patient.id}-appointments.csv`, visits);
-    downloadCSV(`${patient.id}-prescriptions.csv`, myRx.map(r => ({ ...r, medicines: r.medicines.map(m => m.name).join("; ") })));
-    downloadCSV(`${patient.id}-bills.csv`, myBills);
-    downloadCSV(`${patient.id}-lab-reports.csv`, myLabs);
-  };
-
   const printRx = (rx: Prescription) => {
     printDocument(`
       <h2>${user?.clinic ?? "ClinicFlow"}</h2>
@@ -106,7 +111,6 @@ function PatientProfile() {
       <PageHeader title={patient.name} description={`Patient ID ${patient.medicalRecordNumber ?? patient.id}`}
         actions={
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" onClick={exportAll}><Download className="mr-1.5 h-4 w-4" />Download all</Button>
             {canEditRx && <Button asChild variant="outline"><Link to="/app/prescriptions/new">New prescription</Link></Button>}
             {canBook && <Button asChild><Link to="/app/appointments/new">Book follow-up</Link></Button>}
           </div>
@@ -147,7 +151,9 @@ function PatientProfile() {
             </TabsList>
 
             <TabsContent value="rx" className="mt-4 space-y-3">
-              {myRx.length === 0 && <EmptyCard label="No prescriptions yet" />}
+              {prescriptionsPage.isLoading && <EmptyCard label="Loading prescriptions..." />}
+              {!prescriptionsPage.isLoading && prescriptionsPage.error && <EmptyCard label={prescriptionsPage.error} />}
+              {!prescriptionsPage.isLoading && !prescriptionsPage.error && myRx.length === 0 && <EmptyCard label="No prescriptions yet" />}
               {myRx.map(r => (
                 <div key={r.id} className="rounded-2xl border bg-card p-5 shadow-soft">
                   <div className="flex items-start justify-between gap-3">
@@ -174,6 +180,13 @@ function PatientProfile() {
                   </ul>
                 </div>
               ))}
+              <PaginationFooter
+                offset={prescriptionsPage.offset}
+                limit={prescriptionsPage.limit}
+                total={prescriptionsPage.total}
+                onOffsetChange={prescriptionsPage.setOffset}
+                disabled={prescriptionsPage.isLoading}
+              />
             </TabsContent>
 
             <TabsContent value="labs" className="mt-4 space-y-3">
@@ -186,7 +199,9 @@ function PatientProfile() {
                   </Button>
                 </div>
               )}
-              {myLabs.length === 0 && <EmptyCard label="No lab reports yet" />}
+              {labsPage.isLoading && <EmptyCard label="Loading lab reports..." />}
+              {!labsPage.isLoading && labsPage.error && <EmptyCard label={labsPage.error} />}
+              {!labsPage.isLoading && !labsPage.error && myLabs.length === 0 && <EmptyCard label="No lab reports yet" />}
               {myLabs.map(l => (
                 <button
                   key={l.id}
@@ -212,13 +227,22 @@ function PatientProfile() {
                   <div className="mt-3 text-xs text-muted-foreground">Uploaded by {l.uploadedBy}</div>
                 </button>
               ))}
+              <PaginationFooter
+                offset={labsPage.offset}
+                limit={labsPage.limit}
+                total={labsPage.total}
+                onOffsetChange={labsPage.setOffset}
+                disabled={labsPage.isLoading}
+              />
             </TabsContent>
 
             <TabsContent value="bills" className="mt-4 rounded-2xl border bg-card shadow-soft">
               <Table>
                 <TableHeader><TableRow><TableHead>Invoice</TableHead><TableHead>Date</TableHead><TableHead className="text-right">Amount</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow></TableHeader>
                 <TableBody>
-                  {myBills.length ? myBills.map(b => (
+                  {billsPage.isLoading && <TableRow><TableCell colSpan={5} className="py-6 text-center text-sm text-muted-foreground">Loading bills...</TableCell></TableRow>}
+                  {!billsPage.isLoading && billsPage.error && <TableRow><TableCell colSpan={5} className="py-6 text-center text-sm text-destructive">{billsPage.error}</TableCell></TableRow>}
+                  {!billsPage.isLoading && !billsPage.error && (myBills.length ? myBills.map(b => (
                     <TableRow key={b.id} className="cursor-pointer hover:bg-muted/40" onClick={() => setViewingBill(b)}>
                       <TableCell className="font-mono text-xs">{b.id}</TableCell>
                       <TableCell>{b.date}</TableCell>
@@ -230,20 +254,36 @@ function PatientProfile() {
                         </Button>
                       </TableCell>
                     </TableRow>
-                  )) : <TableRow><TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-6">No bills</TableCell></TableRow>}
+                  )) : <TableRow><TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-6">No bills</TableCell></TableRow>)}
                 </TableBody>
               </Table>
+              <PaginationFooter
+                offset={billsPage.offset}
+                limit={billsPage.limit}
+                total={billsPage.total}
+                onOffsetChange={billsPage.setOffset}
+                disabled={billsPage.isLoading}
+              />
             </TabsContent>
 
             <TabsContent value="history" className="mt-4 rounded-2xl border bg-card shadow-soft">
               <Table>
                 <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Doctor</TableHead><TableHead>Type</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
                 <TableBody>
-                  {visits.length ? visits.map(v => (
+                  {visitsPage.isLoading && <TableRow><TableCell colSpan={4} className="py-6 text-center text-sm text-muted-foreground">Loading visits...</TableCell></TableRow>}
+                  {!visitsPage.isLoading && visitsPage.error && <TableRow><TableCell colSpan={4} className="py-6 text-center text-sm text-destructive">{visitsPage.error}</TableCell></TableRow>}
+                  {!visitsPage.isLoading && !visitsPage.error && (visits.length ? visits.map(v => (
                     <TableRow key={v.id}><TableCell>{v.date} · {v.time}</TableCell><TableCell>{v.doctor}</TableCell><TableCell>{v.type}</TableCell><TableCell><Badge variant="secondary">{v.status}</Badge></TableCell></TableRow>
-                  )) : <TableRow><TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-6">No visits yet</TableCell></TableRow>}
+                  )) : <TableRow><TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-6">No visits yet</TableCell></TableRow>)}
                 </TableBody>
               </Table>
+              <PaginationFooter
+                offset={visitsPage.offset}
+                limit={visitsPage.limit}
+                total={visitsPage.total}
+                onOffsetChange={visitsPage.setOffset}
+                disabled={visitsPage.isLoading}
+              />
             </TabsContent>
 
             <TabsContent value="docs" className="mt-4 rounded-2xl border bg-card p-8 text-center shadow-soft">
@@ -259,7 +299,7 @@ function PatientProfile() {
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Invoice {viewingBill?.id}</DialogTitle></DialogHeader>
           {viewingBill && (() => {
-            const linkedRx = myRx[0];
+            const linkedRx = null as Prescription | null;
             return (
               <div className="space-y-4 text-sm">
                 <div className="grid grid-cols-2 gap-3">

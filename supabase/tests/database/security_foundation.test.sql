@@ -231,4 +231,24 @@ begin
 end
 $$;
 
+do $$
+declare
+  missing_indexes text[];
+begin
+  select array_agg(index_name order by index_name)
+  into missing_indexes
+  from unnest(array[
+    'public.prescriptions_hospital_created_idx',
+    'public.invoices_hospital_created_idx',
+    'public.lab_results_recorded_idx',
+    'public.audit_events_action_search_idx'
+  ]) index_name
+  where to_regclass(index_name) is null;
+
+  if missing_indexes is not null then
+    raise exception 'Paginated clinical record indexes are missing: %', missing_indexes;
+  end if;
+end
+$$;
+
 rollback;
