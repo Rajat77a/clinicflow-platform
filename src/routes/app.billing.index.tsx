@@ -24,17 +24,26 @@ function BillingPage() {
   const pending = bills.filter(b => b.status === "Pending").reduce((s, b) => s + b.amount, 0);
   const overdue = bills.filter(b => b.status === "Overdue").reduce((s, b) => s + b.amount, 0);
 
-  const setStatus = (id: string, status: string, method?: string) => {
+  const [isRecordingPayment, setIsRecordingPayment] = useState(false);
+
+  const setStatus = async (id: string, status: string, method?: string) => {
     const bill = bills.find(item => item.id === id);
     if (!bill) return;
-    updateBill({ ...bill, status, method: method ?? bill.method });
+    await updateBill({ ...bill, status, method: method ?? bill.method });
     toast.success(`Invoice ${id} marked ${status.toLowerCase()}`);
   };
 
-  const markPaidFromDialog = () => {
+  const markPaidFromDialog = async () => {
     if (!viewing) return;
-    setStatus(viewing.id, "Paid", payMethod);
-    setViewing({ ...viewing, status: "Paid", method: payMethod });
+    setIsRecordingPayment(true);
+    try {
+      await setStatus(viewing.id, "Paid", payMethod);
+      setViewing(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to record the payment");
+    } finally {
+      setIsRecordingPayment(false);
+    }
   };
 
   const linkedRx = viewing ? prescriptions.find(p => p.patient === viewing.patient) : undefined;
@@ -61,16 +70,7 @@ function BillingPage() {
                 <TableCell className="text-right tabular-nums">₹{b.amount.toFixed(2)}</TableCell>
                 <TableCell>{b.method}</TableCell>
                 <TableCell>
-                  <Select value={b.status} onValueChange={(v) => setStatus(b.id, v)}>
-                    <SelectTrigger className="h-8 w-32">
-                      <Badge variant={b.status === "Paid" ? "secondary" : b.status === "Overdue" ? "destructive" : "outline"}>{b.status}</Badge>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Paid">Paid</SelectItem>
-                      <SelectItem value="Pending">Pending</SelectItem>
-                      <SelectItem value="Overdue">Overdue</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Badge variant={b.status === "Paid" ? "secondary" : b.status === "Overdue" ? "destructive" : "outline"}>{b.status}</Badge>
                 </TableCell>
                 <TableCell className="text-right">
                   <Button variant="ghost" size="sm" onClick={() => { setViewing(b); setPayMethod(b.method === "—" ? "Card" : b.method); }}>
@@ -134,7 +134,10 @@ function BillingPage() {
           )}
           <DialogFooter>
             {viewing && viewing.status !== "Paid" && (
-              <Button onClick={markPaidFromDialog}><CheckCircle2 className="mr-1.5 h-4 w-4" />Mark as paid</Button>
+              <Button onClick={markPaidFromDialog} disabled={isRecordingPayment}>
+                <CheckCircle2 className="mr-1.5 h-4 w-4" />
+                {isRecordingPayment ? "Recording..." : "Mark as paid"}
+              </Button>
             )}
             <Button variant="outline" onClick={() => setViewing(null)}>Close</Button>
           </DialogFooter>

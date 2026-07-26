@@ -42,6 +42,7 @@ function NewAppointment() {
   const [time, setTime] = useState(initial.time);
   const [type, setType] = useState("Consultation");
   const [notes, setNotes] = useState("");
+  const [saving, setSaving] = useState(false);
 
   const resetToNow = () => {
     const n = nowDefaults();
@@ -49,20 +50,27 @@ function NewAppointment() {
     toast.success("Set to current time");
   };
 
-  const onSubmit = (e: React.FormEvent) => {
+  const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!patient) { toast.error("Please select a patient"); return; }
     if (!doctor) { toast.error("Please select a doctor"); return; }
-    const appointment = createAppointment({
-      patientId: patient.id,
-      doctorId: doctor.id,
-      date,
-      time,
-      type,
-      notes: notes.trim() || undefined,
-    });
-    toast.success(`Appointment ${appointment.id} booked`);
-    navigate({ to: "/app/appointments" });
+    setSaving(true);
+    try {
+      const appointment = await createAppointment({
+        patientId: patient.id,
+        doctorId: doctor.id,
+        date,
+        time,
+        type,
+        notes: notes.trim() || undefined,
+      });
+      toast.success(`Appointment ${appointment.id} booked`);
+      navigate({ to: "/app/appointments" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to book appointment");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -105,7 +113,7 @@ function NewAppointment() {
         </section>
         <div className="flex gap-2">
           <Button type="button" variant="outline" className="flex-1" onClick={() => navigate({ to: "/app/appointments" })}>Cancel</Button>
-          <Button type="submit" className="flex-1">Book appointment</Button>
+          <Button type="submit" className="flex-1" disabled={saving}>{saving ? "Booking..." : "Book appointment"}</Button>
         </div>
       </form>
     </>

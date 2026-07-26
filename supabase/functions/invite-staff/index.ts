@@ -46,6 +46,8 @@ Deno.serve(async (request) => {
     const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
     const fullName = typeof payload.fullName === "string" ? payload.fullName.trim() : "";
     const roleCode = typeof payload.roleCode === "string" ? payload.roleCode : "";
+    const specialty = typeof payload.specialty === "string" ? payload.specialty.trim() : null;
+    const shift = typeof payload.shift === "string" ? payload.shift.trim() : null;
     const facilityId = typeof payload.facilityId === "string" ? payload.facilityId : null;
     const departmentId = typeof payload.departmentId === "string" ? payload.departmentId : null;
     const redirectTo = typeof payload.redirectTo === "string" ? payload.redirectTo : allowedOrigin;
@@ -139,6 +141,8 @@ Deno.serve(async (request) => {
       role_code: roleCode,
       facility_id: facilityId,
       department_id: departmentId,
+      specialty: roleCode === "doctor" ? specialty : null,
+      shift: roleCode === "receptionist" ? shift : null,
     });
     if (membershipError) {
       await adminClient.auth.admin.deleteUser(invited.user.id);

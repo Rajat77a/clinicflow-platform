@@ -51,14 +51,22 @@ function AppointmentsPage() {
   const { appointments: rows, updateAppointment } = useWorkspaceData();
   const [editing, setEditing] = useState<Appt | null>(null);
   const [draft, setDraft] = useState<Appt | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const openEdit = (a: Appt) => { setEditing(a); setDraft({ ...a }); };
-  const save = () => {
+  const save = async () => {
     if (!draft) return;
     if (!draft.date || !draft.time) { toast.error("Date and time are required"); return; }
-    updateAppointment(draft);
-    toast.success(`Appointment ${draft.id} updated`);
-    setEditing(null);
+    setSaving(true);
+    try {
+      await updateAppointment(draft);
+      toast.success(`Appointment ${draft.id} updated`);
+      setEditing(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to update appointment");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -146,7 +154,7 @@ function AppointmentsPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditing(null)}>Cancel</Button>
-            <Button onClick={save}>Save changes</Button>
+            <Button onClick={save} disabled={saving}>{saving ? "Saving..." : "Save changes"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

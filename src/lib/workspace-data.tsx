@@ -1,6 +1,17 @@
-import { createContext, useContext, useMemo, useReducer, type ReactNode } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useReducer,
+  useState,
+  type ReactNode,
+} from "react";
 import { useAuth, type AuthUser } from "./auth";
 import { hasPermission, type Permission } from "./access-control";
+import { supabaseConfig } from "./supabase/config";
+import { SupabaseWorkspaceRepository } from "./supabase/workspace-repository";
 import {
   appointments as seedAppointments,
   auditLogs as seedAuditLogs,
@@ -18,14 +29,38 @@ import {
 const DEFAULT_CLINIC_ID = "CL-001";
 
 export type Clinic = (typeof seedClinics)[number];
-export type Patient = (typeof seedPatients)[number] & { clinicId: string };
+export type Patient = (typeof seedPatients)[number] & {
+  clinicId: string;
+  dateOfBirth?: string;
+  medicalRecordNumber?: string;
+  version?: number;
+};
 export type Doctor = (typeof seedDoctors)[number] & { clinicId: string };
 export type Receptionist = (typeof seedReceptionists)[number] & { clinicId: string };
-export type Appointment = (typeof seedAppointments)[number] & { clinicId: string; notes?: string };
+export type Appointment = (typeof seedAppointments)[number] & {
+  clinicId: string;
+  doctorId?: string;
+  durationMinutes?: number;
+  notes?: string;
+  version?: number;
+};
 export type Prescription = SeedPrescription & { clinicId: string };
 export type LabReport = SeedLabReport & { clinicId: string };
-export type Bill = (typeof seedBills)[number] & { clinicId: string; patientId: string };
+export type Bill = (typeof seedBills)[number] & {
+  clinicId: string;
+  patientId: string;
+  databaseId?: string;
+};
 export type AuditEntry = (typeof seedAuditLogs)[number] & { id: string; clinicId: string | null };
+export type StaffMember = {
+  id: string;
+  clinicId: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: AuthUser["role"];
+  status: "Active" | "Invited" | "Inactive";
+};
 
 export interface WorkspaceSnapshot {
   clinics: Clinic[];
@@ -37,14 +72,15 @@ export interface WorkspaceSnapshot {
   labReports: LabReport[];
   bills: Bill[];
   auditLogs: AuditEntry[];
+  staffMembers: StaffMember[];
 }
 
 export interface PatientInput {
   name: string;
-  age: number;
+  dateOfBirth: string;
   gender: string;
   phone: string;
-  doctor: string;
+  doctorId: string;
 }
 
 export interface AppointmentInput {
@@ -53,6 +89,7 @@ export interface AppointmentInput {
   date: string;
   time: string;
   type: string;
+  durationMinutes?: number;
   notes?: string;
 }
 
@@ -86,12 +123,19 @@ export interface ReceptionistInput {
   shift: string;
 }
 
+export interface ClinicAdminInput {
+  name: string;
+  email: string;
+  phone: string;
+}
+
 export interface ClinicInput {
   name: string;
   city: string;
 }
 
 type Command =
+  | { type: "snapshot.loaded"; value: WorkspaceSnapshot }
   | { type: "clinic.created"; value: Clinic; actor: AuthUser }
   | { type: "doctor.created"; value: Doctor; actor: AuthUser }
   | { type: "receptionist.created"; value: Receptionist; actor: AuthUser }
@@ -101,7 +145,8 @@ type Command =
   | { type: "prescription.saved"; value: Prescription; actor: AuthUser }
   | { type: "labs.saved"; values: LabReport[]; actor: AuthUser }
   | { type: "bill.created"; value: Bill; actor: AuthUser }
-  | { type: "bill.updated"; value: Bill; actor: AuthUser };
+  | { type: "bill.updated"; value: Bill; actor: AuthUser }
+  | { type: "staff.invited"; value: StaffMember; actor: AuthUser };
 
 function createId(prefix: string) {
   const suffix = globalThis.crypto?.randomUUID?.().slice(0, 8).toUpperCase()
@@ -129,6 +174,41 @@ function initialSnapshot(): WorkspaceSnapshot {
       id: `AUD-${index + 1}`,
       clinicId: entry.user === "Helena Vance" ? null : DEFAULT_CLINIC_ID,
     })),
+    staffMembers: [
+      ...seedDoctors.map(doctor => ({
+        id: doctor.id,
+        clinicId: DEFAULT_CLINIC_ID,
+        name: doctor.name,
+        email: doctor.email,
+        phone: doctor.phone,
+        role: "doctor" as const,
+        status: doctor.status as StaffMember["status"],
+      })),
+      ...seedReceptionists.map(receptionist => ({
+        id: receptionist.id,
+        clinicId: DEFAULT_CLINIC_ID,
+        name: receptionist.name,
+        email: receptionist.email,
+        phone: receptionist.phone,
+        role: "receptionist" as const,
+        status: receptionist.status as StaffMember["status"],
+      })),
+    ],
+  };
+}
+
+function emptySnapshot(): WorkspaceSnapshot {
+  return {
+    clinics: [],
+    patients: [],
+    doctors: [],
+    receptionists: [],
+    appointments: [],
+    prescriptions: [],
+    labReports: [],
+    bills: [],
+    auditLogs: [],
+    staffMembers: [],
   };
 }
 
@@ -147,6 +227,8 @@ function appendAudit(state: WorkspaceSnapshot, actor: AuthUser, action: string):
 
 function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot {
   switch (command.type) {
+    case "snapshot.loaded":
+      return command.value;
     case "clinic.created":
       return appendAudit(
         { ...state, clinics: [command.value, ...state.clinics] },
@@ -229,10 +311,18 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         command.actor,
         `Updated invoice ${command.value.id} to ${command.value.status}`,
       );
+    case "staff.invited":
+      return appendAudit(
+        { ...state, staffMembers: [command.value, ...state.staffMembers] },
+        command.actor,
+        `Invited ${command.value.role} ${command.value.email}`,
+      );
   }
 }
 
 interface WorkspaceData {
+  isLoading: boolean;
+  error: string | null;
   clinics: Clinic[];
   patients: Patient[];
   doctors: Doctor[];
@@ -242,16 +332,19 @@ interface WorkspaceData {
   labReports: LabReport[];
   bills: Bill[];
   auditLogs: AuditEntry[];
-  createClinic: (input: ClinicInput) => Clinic;
-  createDoctor: (input: DoctorInput) => Doctor;
-  createReceptionist: (input: ReceptionistInput) => Receptionist;
-  createPatient: (input: PatientInput) => Patient;
-  createAppointment: (input: AppointmentInput) => Appointment;
-  updateAppointment: (appointment: Appointment) => void;
-  savePrescription: (input: PrescriptionInput) => Prescription;
-  saveLabReports: (reports: Omit<LabReport, "clinicId">[]) => LabReport[];
-  createBill: (input: BillInput) => Bill;
-  updateBill: (bill: Bill) => void;
+  staffMembers: StaffMember[];
+  refresh: () => Promise<void>;
+  createClinic: (input: ClinicInput) => Promise<Clinic>;
+  createDoctor: (input: DoctorInput) => Promise<Doctor>;
+  createReceptionist: (input: ReceptionistInput) => Promise<Receptionist>;
+  inviteClinicAdmin: (input: ClinicAdminInput) => Promise<StaffMember>;
+  createPatient: (input: PatientInput) => Promise<Patient>;
+  createAppointment: (input: AppointmentInput) => Promise<Appointment>;
+  updateAppointment: (appointment: Appointment) => Promise<Appointment>;
+  savePrescription: (input: PrescriptionInput) => Promise<Prescription>;
+  saveLabReports: (reports: Omit<LabReport, "clinicId">[]) => Promise<LabReport[]>;
+  createBill: (input: BillInput) => Promise<Bill>;
+  updateBill: (bill: Bill) => Promise<Bill>;
 }
 
 const WorkspaceCtx = createContext<WorkspaceData | null>(null);
@@ -269,7 +362,44 @@ function requireClinic(user: AuthUser) {
 
 export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
-  const [state, dispatch] = useReducer(reducer, undefined, initialSnapshot);
+  const [state, dispatch] = useReducer(
+    reducer,
+    supabaseConfig.demoMode,
+    (demoMode) => (demoMode ? initialSnapshot() : emptySnapshot()),
+  );
+  const [isLoading, setIsLoading] = useState(!supabaseConfig.demoMode);
+  const [error, setError] = useState<string | null>(null);
+  const repository = useMemo(
+    () => (supabaseConfig.demoMode || typeof window === "undefined"
+      ? null
+      : new SupabaseWorkspaceRepository()),
+    [],
+  );
+
+  const refresh = useCallback(async () => {
+    if (!repository || !user) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      dispatch({ type: "snapshot.loaded", value: await repository.load() });
+    } catch (cause) {
+      const message = cause instanceof Error ? cause.message : "Unable to load hospital data";
+      setError(message);
+      throw cause;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [repository, user]);
+
+  useEffect(() => {
+    if (!repository) return;
+    if (!user) {
+      dispatch({ type: "snapshot.loaded", value: emptySnapshot() });
+      setIsLoading(false);
+      return;
+    }
+    void refresh().catch(() => undefined);
+  }, [refresh, repository, user]);
 
   const value = useMemo<WorkspaceData>(() => {
     const clinicId = user?.clinicId;
@@ -296,6 +426,9 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       : clinicPrescriptions;
 
     return {
+      isLoading,
+      error,
+      refresh,
       clinics: state.clinics,
       patients,
       doctors: clinicScope(state.doctors),
@@ -311,8 +444,14 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       auditLogs: user?.role === "super_admin"
         ? state.auditLogs
         : state.auditLogs.filter(entry => entry.clinicId === clinicId),
-      createClinic: input => {
+      staffMembers: user && hasPermission(user.role, "people.manage")
+        ? clinicScope(state.staffMembers)
+        : [],
+      createClinic: async (input) => {
         const actor = requireUser(user, "platform.clinics.manage");
+        if (repository) {
+          throw new Error("This installation is dedicated to one hospital");
+        }
         const expires = new Date();
         expires.setDate(expires.getDate() + 14);
         const clinic: Clinic = {
@@ -329,8 +468,13 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "clinic.created", value: clinic, actor });
         return clinic;
       },
-      createDoctor: input => {
+      createDoctor: async (input) => {
         const actor = requireUser(user, "people.manage");
+        if (repository) {
+          const doctor = await repository.createDoctor(input);
+          await refresh();
+          return doctor;
+        }
         const tenantId = requireClinic(actor);
         const doctor: Doctor = {
           ...input,
@@ -342,8 +486,13 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "doctor.created", value: doctor, actor });
         return doctor;
       },
-      createReceptionist: input => {
+      createReceptionist: async (input) => {
         const actor = requireUser(user, "people.manage");
+        if (repository) {
+          const receptionist = await repository.createReceptionist(input);
+          await refresh();
+          return receptionist;
+        }
         const tenantId = requireClinic(actor);
         const receptionist: Receptionist = {
           ...input,
@@ -354,11 +503,58 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "receptionist.created", value: receptionist, actor });
         return receptionist;
       },
-      createPatient: input => {
+      inviteClinicAdmin: async (input) => {
+        const actor = requireUser(user, "people.manage");
+        if (actor.role !== "super_admin") {
+          throw new Error("Only a super admin can invite a clinic admin");
+        }
+        if (repository) {
+          const membership = await repository.inviteClinicAdmin(input);
+          await refresh();
+          return membership;
+        }
+        const installationClinicId = actor.clinicId ?? state.clinics[0]?.id;
+        if (!installationClinicId) throw new Error("A clinic workspace is required");
+        const membership: StaffMember = {
+          id: createId("AD"),
+          clinicId: installationClinicId,
+          name: input.name,
+          email: input.email,
+          phone: input.phone,
+          role: "clinic_admin",
+          status: "Invited",
+        };
+        dispatch({ type: "staff.invited", value: membership, actor });
+        return membership;
+      },
+      createPatient: async (input) => {
         const actor = requireUser(user, "patients.create");
+        if (repository) {
+          const patient = await repository.createPatient(input);
+          await refresh();
+          return patient;
+        }
         const tenantId = requireClinic(actor);
+        const doctor = state.doctors.find(
+          (item) => item.id === input.doctorId && item.clinicId === tenantId,
+        );
+        if (!doctor) throw new Error("Assigned doctor must belong to the active clinic");
+        const birthDate = new Date(`${input.dateOfBirth}T00:00:00`);
+        const today = new Date();
+        let age = today.getFullYear() - birthDate.getFullYear();
+        if (
+          today.getMonth() < birthDate.getMonth()
+          || (today.getMonth() === birthDate.getMonth() && today.getDate() < birthDate.getDate())
+        ) {
+          age -= 1;
+        }
         const patient: Patient = {
-          ...input,
+          name: input.name,
+          age,
+          dateOfBirth: input.dateOfBirth,
+          gender: input.gender,
+          phone: input.phone,
+          doctor: doctor.name,
           id: createId("PT"),
           clinicId: tenantId,
           lastVisit: new Date().toISOString().slice(0, 10),
@@ -367,8 +563,13 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "patient.created", value: patient, actor });
         return patient;
       },
-      createAppointment: input => {
+      createAppointment: async (input) => {
         const actor = requireUser(user, "appointments.create");
+        if (repository) {
+          const appointment = await repository.createAppointment(input);
+          await refresh();
+          return appointment;
+        }
         const tenantId = requireClinic(actor);
         const patient = state.patients.find(item => item.id === input.patientId && item.clinicId === tenantId);
         const doctor = state.doctors.find(item => item.id === input.doctorId && item.clinicId === tenantId);
@@ -382,8 +583,10 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           patient: patient.name,
           patientId: patient.id,
           doctor: doctor.name,
+          doctorId: doctor.id,
           date: input.date,
           time: input.time,
+          durationMinutes: input.durationMinutes ?? 30,
           type: input.type,
           status: "Pending",
           notes: input.notes,
@@ -391,13 +594,24 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "appointment.created", value: appointment, actor });
         return appointment;
       },
-      updateAppointment: appointment => {
+      updateAppointment: async (appointment) => {
         const actor = requireUser(user, "appointments.update");
+        if (repository) {
+          const updated = await repository.updateAppointment(appointment);
+          await refresh();
+          return updated;
+        }
         if (appointment.clinicId !== requireClinic(actor)) throw new Error("Cross-clinic updates are not allowed");
         dispatch({ type: "appointment.updated", value: appointment, actor });
+        return appointment;
       },
-      savePrescription: input => {
+      savePrescription: async (input) => {
         const actor = requireUser(user, "prescriptions.write");
+        if (repository) {
+          const prescription = await repository.savePrescription(input);
+          await refresh();
+          return prescription;
+        }
         const tenantId = requireClinic(actor);
         const patient = state.patients.find(item => item.id === input.patientId && item.clinicId === tenantId);
         const doctor = state.doctors.find(item => item.id === input.doctorId && item.clinicId === tenantId);
@@ -417,8 +631,13 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "prescription.saved", value: prescription, actor });
         return prescription;
       },
-      saveLabReports: reports => {
+      saveLabReports: async (reports) => {
         const actor = requireUser(user, "labs.write");
+        if (repository) {
+          const saved = await repository.saveLabReports(reports);
+          await refresh();
+          return saved;
+        }
         const tenantId = requireClinic(actor);
         if (reports.some(report => !state.patients.some(patient => patient.id === report.patientId && patient.clinicId === tenantId))) {
           throw new Error("Lab reports must belong to a patient in the active clinic");
@@ -427,8 +646,13 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "labs.saved", values, actor });
         return values;
       },
-      createBill: input => {
+      createBill: async (input) => {
         const actor = requireUser(user, "billing.write");
+        if (repository) {
+          const bill = await repository.createBill(input);
+          await refresh();
+          return bill;
+        }
         const tenantId = requireClinic(actor);
         const patient = state.patients.find(item => item.id === input.patientId && item.clinicId === tenantId);
         if (!patient) throw new Error("Patient must belong to the active clinic");
@@ -445,13 +669,19 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "bill.created", value: bill, actor });
         return bill;
       },
-      updateBill: bill => {
+      updateBill: async (bill) => {
         const actor = requireUser(user, "billing.write");
+        if (repository) {
+          const updated = await repository.updateBill(bill);
+          await refresh();
+          return updated;
+        }
         if (bill.clinicId !== requireClinic(actor)) throw new Error("Cross-clinic updates are not allowed");
         dispatch({ type: "bill.updated", value: bill, actor });
+        return bill;
       },
     };
-  }, [state, user]);
+  }, [error, isLoading, refresh, repository, state, user]);
 
   return <WorkspaceCtx.Provider value={value}>{children}</WorkspaceCtx.Provider>;
 }
