@@ -42,7 +42,20 @@ export type Patient = (typeof seedPatients)[number] & {
   medicalRecordNumber?: string;
   version?: number;
 };
-export type Doctor = (typeof seedDoctors)[number] & { clinicId: string };
+export type Doctor = (typeof seedDoctors)[number] & {
+  clinicId: string;
+  phone?: string;
+  gender?: string;
+  qualification?: string;
+  medicalRegistrationNumber?: string;
+  experienceYears?: number;
+  consultationFee?: number;
+  workingHours?: string;
+  notes?: string;
+  avatarPath?: string;
+  avatarUrl?: string;
+  photoWarning?: string;
+};
 export type Receptionist = (typeof seedReceptionists)[number] & { clinicId: string };
 export type Appointment = (typeof seedAppointments)[number] & {
   clinicId: string;
@@ -121,6 +134,14 @@ export interface DoctorInput {
   specialty: string;
   email: string;
   phone: string;
+  gender: "female" | "male" | "other" | "";
+  qualification: string;
+  medicalRegistrationNumber: string;
+  experienceYears: number;
+  consultationFee: number;
+  workingHours: string;
+  notes: string;
+  photo?: File | null;
 }
 
 export interface ReceptionistInput {

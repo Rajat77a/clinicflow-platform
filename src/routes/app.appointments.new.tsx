@@ -37,8 +37,9 @@ function NewAppointment() {
       toPatientOptions((await searchPatients({ query, limit: 12 })).rows),
     [searchPatients],
   );
+  const activeDoctors = doctors.filter(item => item.status === "Active");
   const doctorOptions = toDoctorOptions(
-    user?.role === "doctor" ? doctors.filter(item => item.name === user.name) : doctors
+    user?.role === "doctor" ? activeDoctors.filter(item => item.name === user.name) : activeDoctors
   );
   const [patient, setPatient] = useState<PatientOption | null>(null);
   const [doctor, setDoctor] = useState<DoctorOption | null>(doctorOptions[0] ?? null);

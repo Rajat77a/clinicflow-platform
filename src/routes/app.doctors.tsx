@@ -28,6 +28,7 @@ function DoctorsPage() {
             <TableRow>
               <TableHead>Doctor</TableHead>
               <TableHead>Specialty</TableHead>
+              <TableHead>Availability</TableHead>
               <TableHead className="text-right">Patients</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Status</TableHead>
@@ -38,18 +39,34 @@ function DoctorsPage() {
               <TableRow key={d.id}>
                 <TableCell>
                   <div className="flex items-center gap-3">
-                    <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-primary to-info text-primary-foreground text-xs font-semibold">
-                      {d.name.split(" ").slice(-1)[0][0]}
-                    </div>
+                    {d.avatarUrl ? (
+                      <img src={d.avatarUrl} alt="" className="h-9 w-9 rounded-full object-cover" />
+                    ) : (
+                      <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-primary to-info text-primary-foreground text-xs font-semibold">
+                        {d.name.split(" ").slice(-1)[0][0]}
+                      </div>
+                    )}
                     <div>
                       <div className="font-semibold">{d.name}</div>
                       <div className="text-xs text-muted-foreground">{d.id}</div>
                     </div>
                   </div>
                 </TableCell>
-                <TableCell>{d.specialty}</TableCell>
+                <TableCell>
+                  <div>{d.specialty}</div>
+                  <div className="text-xs text-muted-foreground">
+                    {[d.qualification, d.medicalRegistrationNumber].filter(Boolean).join(" · ")}
+                  </div>
+                </TableCell>
+                <TableCell>
+                  <div>{d.workingHours || "Not assigned"}</div>
+                  {d.consultationFee != null && <div className="text-xs text-muted-foreground">₹{d.consultationFee.toLocaleString("en-IN")}</div>}
+                </TableCell>
                 <TableCell className="text-right tabular-nums">{d.patients}</TableCell>
-                <TableCell className="text-muted-foreground">{d.email}</TableCell>
+                <TableCell className="text-muted-foreground">
+                  <div>{d.email}</div>
+                  <div className="text-xs">{d.phone}</div>
+                </TableCell>
                 <TableCell><Badge variant={d.status === "Active" ? "secondary" : "outline"}>{d.status}</Badge></TableCell>
               </TableRow>
             ))}

@@ -151,11 +151,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     ] = await Promise.all([
       this.client.from("hospitals").select("id,name,configuration").maybeSingle(),
       this.client.rpc("list_active_doctors_with_counts"),
-      this.client
-        .from("staff_memberships")
-        .select(
-          "user_id,hospital_id,role_code,active,specialty,shift,profiles!staff_memberships_user_id_fkey(display_name,email,phone)",
-        ),
+      this.client.rpc("list_current_staff"),
       this.client.rpc("search_patients", {
         p_query: "",
         p_limit: 50,
@@ -220,9 +216,32 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       specialty: row.specialty || "General Medicine",
       email: row.email || "",
       phone: row.phone || "",
+      gender: row.gender || undefined,
+      qualification: row.qualification || undefined,
+      medicalRegistrationNumber: row.medical_registration_number || undefined,
+      experienceYears: row.experience_years ?? undefined,
+      consultationFee: row.consultation_fee == null ? undefined : Number(row.consultation_fee),
+      workingHours: row.working_hours || undefined,
+      notes: row.administrative_notes || undefined,
+      avatarPath: row.avatar_path || undefined,
       patients: Number(row.patient_count ?? 0),
-      status: "Active",
+      status: row.status || "Invited",
     }));
+    const avatarPaths = doctors
+      .map((doctor) => doctor.avatarPath)
+      .filter((path): path is string => Boolean(path));
+    if (avatarPaths.length > 0) {
+      const { data: signedAvatars } = await this.client.storage
+        .from("staff-avatars")
+        .createSignedUrls(avatarPaths, 60 * 60);
+      const avatarUrlByPath = new Map(
+        (signedAvatars ?? []).map((avatar) => [avatar.path, avatar.signedUrl]),
+      );
+      for (const doctor of doctors) {
+        const avatarUrl = doctor.avatarPath ? avatarUrlByPath.get(doctor.avatarPath) : null;
+        if (avatarUrl) doctor.avatarUrl = avatarUrl;
+      }
+    }
     const doctorById = new Map(doctors.map((doctor) => [doctor.id, doctor]));
 
     const careTeamDoctor = new Map<string, string>();
@@ -240,27 +259,25 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     const receptionists: Receptionist[] = ((membershipsResult.data ?? []) as Row[])
       .filter((row) => row.role_code === "receptionist")
       .map((row) => {
-        const profile = firstRelation(row.profiles);
         return {
           id: row.user_id,
           clinicId: row.hospital_id,
-          name: profile?.display_name ?? "Invited staff",
-          email: profile?.email ?? "",
-          phone: profile?.phone ?? "",
+          name: row.display_name ?? "Invited staff",
+          email: row.email ?? "",
+          phone: row.phone ?? "",
           shift: row.shift || "Unassigned",
-          status: row.active ? "Active" : "Inactive",
+          status: row.status || "Invited",
         };
       });
     const staffMembers: StaffMember[] = ((membershipsResult.data ?? []) as Row[]).map((row) => {
-      const profile = firstRelation(row.profiles);
       return {
         id: row.user_id,
         clinicId: row.hospital_id,
-        name: profile?.display_name ?? "Invited staff",
-        email: profile?.email ?? "",
-        phone: profile?.phone ?? "",
+        name: row.display_name ?? "Invited staff",
+        email: row.email ?? "",
+        phone: row.phone ?? "",
         role: row.role_code,
-        status: row.active ? "Active" : "Inactive",
+        status: row.status || "Invited",
       };
     });
 
@@ -649,6 +666,13 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         roleCode,
         specialty: "specialty" in input ? input.specialty : undefined,
         shift: "shift" in input ? input.shift : undefined,
+        gender: "gender" in input ? input.gender : undefined,
+        qualification: "qualification" in input ? input.qualification : undefined,
+        medicalRegistrationNumber: "medicalRegistrationNumber" in input ? input.medicalRegistrationNumber : undefined,
+        experienceYears: "experienceYears" in input ? input.experienceYears : undefined,
+        consultationFee: "consultationFee" in input ? input.consultationFee : undefined,
+        workingHours: "workingHours" in input ? input.workingHours : undefined,
+        notes: "notes" in input ? input.notes : undefined,
         redirectTo: `${globalThis.location.origin}/login`,
       },
     });
@@ -661,7 +685,36 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
 
   async createDoctor(input: DoctorInput) {
     const id = await this.inviteStaff(input, "doctor");
-    return this.reloadAndFind<Doctor>("doctors", id);
+    let photoWarning: string | undefined;
+    if (input.photo) {
+      try {
+        if (!["image/jpeg", "image/png"].includes(input.photo.type) || input.photo.size > 5 * 1024 * 1024) {
+          throw new Error("Doctor photo must be a JPG or PNG up to 5 MB");
+        }
+        const { data: hospital, error: hospitalError } = await this.client
+          .from("hospitals")
+          .select("id")
+          .single();
+        throwIfError(hospitalError);
+        if (!hospital) throw new Error("The active hospital could not be loaded");
+        const extension = input.photo.type === "image/png" ? "png" : "jpg";
+        const path = `${hospital.id}/${id}/avatar.${extension}`;
+        const { error: uploadError } = await this.client.storage
+          .from("staff-avatars")
+          .upload(path, input.photo, { contentType: input.photo.type, upsert: true });
+        throwIfError(uploadError);
+        const { error: avatarError } = await this.client.rpc("set_staff_avatar_path", {
+          p_user_id: id,
+          p_avatar_path: path,
+        });
+        throwIfError(avatarError);
+      } catch {
+        photoWarning = "The invitation was sent, but the doctor photo could not be saved";
+      }
+    }
+    const doctor = await this.reloadAndFind<Doctor>("doctors", id);
+    doctor.photoWarning = photoWarning;
+    return doctor;
   }
 
   async createReceptionist(input: ReceptionistInput) {
