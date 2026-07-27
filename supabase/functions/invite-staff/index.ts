@@ -2,15 +2,29 @@ import { createClient } from "npm:@supabase/supabase-js@2.110.8";
 
 const allowedRoles = new Set(["clinic_admin", "doctor", "receptionist"]);
 const allowedOrigin = Deno.env.get("CLINICFLOW_ALLOWED_ORIGIN") ?? "";
+const allowedHeaders = [
+  "authorization",
+  "apikey",
+  "content-type",
+  "idempotency-key",
+  "x-client-info",
+].join(", ");
 
 function response(status: number, body: Record<string, unknown> | null) {
+  if (status >= 400) {
+    console.warn(JSON.stringify({
+      event: "invite_staff_rejected",
+      status,
+      reason: typeof body?.error === "string" ? body.error : "unknown",
+    }));
+  }
   return new Response(body ? JSON.stringify(body) : null, {
     status,
     headers: {
       "Content-Type": "application/json",
       "Cache-Control": "no-store",
       "Access-Control-Allow-Origin": allowedOrigin,
-      "Access-Control-Allow-Headers": "authorization, apikey, content-type, idempotency-key",
+      "Access-Control-Allow-Headers": allowedHeaders,
       "Access-Control-Allow-Methods": "POST, OPTIONS",
       Vary: "Origin",
     },
@@ -45,10 +59,11 @@ Deno.serve(async (request) => {
     const payload = await request.json();
     const email = typeof payload.email === "string" ? payload.email.trim().toLowerCase() : "";
     const fullName = typeof payload.fullName === "string" ? payload.fullName.trim() : "";
+    const phone = typeof payload.phone === "string" ? payload.phone.trim() : "";
     const roleCode = typeof payload.roleCode === "string" ? payload.roleCode : "";
     const specialty = typeof payload.specialty === "string" ? payload.specialty.trim() : null;
     const shift = typeof payload.shift === "string" ? payload.shift.trim() : null;
-    const facilityId = typeof payload.facilityId === "string" ? payload.facilityId : null;
+    let facilityId = typeof payload.facilityId === "string" ? payload.facilityId : null;
     const departmentId = typeof payload.departmentId === "string" ? payload.departmentId : null;
     const redirectTo = typeof payload.redirectTo === "string" ? payload.redirectTo : allowedOrigin;
 
@@ -113,32 +128,76 @@ Deno.serve(async (request) => {
     }
 
     if (facilityId) {
-      const { data: facility } = await adminClient
+      const { data: facility, error: facilityError } = await userClient
         .from("facilities")
         .select("id")
         .eq("id", facilityId)
         .eq("hospital_id", actor.hospital_id)
         .eq("active", true)
         .maybeSingle();
-      if (!facility) return response(422, { error: "Invalid facility" });
+      if (facilityError || !facility) return response(422, { error: "Invalid facility" });
+    } else {
+      const { data: facility, error: facilityError } = await userClient
+        .from("facilities")
+        .select("id")
+        .eq("hospital_id", actor.hospital_id)
+        .eq("active", true)
+        .order("created_at")
+        .limit(1)
+        .maybeSingle();
+      facilityId = facility?.id ?? null;
+      if (facilityError || !facilityId) {
+        return response(422, { error: "Create an active facility before inviting staff" });
+      }
     }
     if (departmentId) {
-      const { data: department } = await adminClient
+      const { data: department, error: departmentError } = await userClient
         .from("departments")
-        .select("id")
+        .select("id, facility_id")
         .eq("id", departmentId)
         .eq("hospital_id", actor.hospital_id)
         .eq("active", true)
         .maybeSingle();
-      if (!department) return response(422, { error: "Invalid department" });
+      if (departmentError || !department || department.facility_id !== facilityId) {
+        return response(422, { error: "Invalid department for the selected facility" });
+      }
     }
 
     const { data: invited, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(
       email,
-      { data: { full_name: fullName }, redirectTo },
+      { data: { full_name: fullName, phone }, redirectTo },
     );
     if (inviteError || !invited.user) {
-      return response(409, { error: "The invitation could not be created" });
+      const providerMessage = inviteError?.message.toLowerCase() ?? "";
+      if (inviteError?.status === 429) {
+        return response(429, {
+          error: "Email invitation limit reached. Try again later or configure hospital SMTP.",
+        });
+      }
+      if (providerMessage.includes("not authorized")) {
+        return response(503, {
+          error: "Staff email delivery is not configured. Connect custom SMTP in Supabase Auth.",
+        });
+      }
+      if (
+        providerMessage.includes("already") ||
+        providerMessage.includes("registered") ||
+        providerMessage.includes("exists")
+      ) {
+        return response(409, { error: "An account or invitation already exists for this email" });
+      }
+      return response(503, {
+        error: "The email provider rejected the invitation. Check Supabase Auth email settings.",
+      });
+    }
+
+    const { error: profileError } = await adminClient
+      .from("profiles")
+      .update({ display_name: fullName, email, phone: phone || null })
+      .eq("id", invited.user.id);
+    if (profileError) {
+      await adminClient.auth.admin.deleteUser(invited.user.id);
+      return response(409, { error: "The staff profile could not be created" });
     }
 
     const { error: membershipError } = await adminClient.from("staff_memberships").insert({
