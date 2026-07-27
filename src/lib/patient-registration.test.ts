@@ -23,3 +23,15 @@ test("patient registration establishes the identifier before RLS visibility", ()
   assert.match(migrationSource, /insert into public\.patients \(\s*id,/);
   assert.doesNotMatch(migrationSource, /returning id into patient_id/);
 });
+
+test("receptionists resolve doctor assignments without reading private staff rows", () => {
+  assert.match(
+    migrationSource,
+    /function private\.active_doctor_assignment\(target_doctor_user_id uuid\)/,
+  );
+  assert.match(migrationSource, /private\.has_permission\('appointments\.write'\)/);
+  assert.match(
+    migrationSource,
+    /from private\.active_doctor_assignment\(p_doctor_user_id\)/,
+  );
+});
