@@ -73,9 +73,9 @@ function NewPatient() {
               <Field label="Gender" span={2}>
                 <Select value={gender} onValueChange={setGender}><SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="m">Male</SelectItem>
-                    <SelectItem value="f">Female</SelectItem>
-                    <SelectItem value="o">Other</SelectItem>
+                    <SelectItem value="male">Male</SelectItem>
+                    <SelectItem value="female">Female</SelectItem>
+                    <SelectItem value="unknown">Other</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>
