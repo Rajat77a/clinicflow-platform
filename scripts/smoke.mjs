@@ -6,6 +6,7 @@ if (!baseUrl) {
 }
 
 const timeoutMs = 10_000;
+const functionUrl = process.env.SUPABASE_FUNCTION_URL;
 
 async function get(pathname) {
   const response = await fetch(`${baseUrl}${pathname}`, {
@@ -42,5 +43,30 @@ const login = await get("/login");
 requireSecurityHeaders(login, "/login");
 assert.match(login.headers.get("cache-control") ?? "", /no-store/);
 assert.match(login.headers.get("x-robots-tag") ?? "", /noindex/);
+
+if (functionUrl) {
+  const preflight = await fetch(functionUrl, {
+    method: "OPTIONS",
+    headers: {
+      Origin: baseUrl,
+      "Access-Control-Request-Method": "POST",
+      "Access-Control-Request-Headers":
+        "authorization, apikey, content-type, idempotency-key, x-client-info",
+    },
+    signal: AbortSignal.timeout(timeoutMs),
+  });
+  assert.equal(preflight.status, 204, `invite-staff preflight returned ${preflight.status}`);
+  assert.equal(preflight.headers.get("access-control-allow-origin"), baseUrl);
+  const allowedHeaders = preflight.headers.get("access-control-allow-headers") ?? "";
+  for (const header of [
+    "authorization",
+    "apikey",
+    "content-type",
+    "idempotency-key",
+    "x-client-info",
+  ]) {
+    assert.match(allowedHeaders, new RegExp(`(?:^|,\\s*)${header}(?:,|$)`, "i"));
+  }
+}
 
 console.log(`ClinicFlow smoke check passed for ${baseUrl}`);

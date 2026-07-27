@@ -25,4 +25,5 @@ jobs:
       - name: Check production health and security
         env:
           BASE_URL: https://clinicflow-platform.vercel.app
+          SUPABASE_FUNCTION_URL: https://lwdzykeyiuohkfhdlyua.supabase.co/functions/v1/invite-staff
         run: node scripts/smoke.mjs

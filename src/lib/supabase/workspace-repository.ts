@@ -27,6 +27,7 @@ import type {
 } from "../workspace-data";
 import { getSupabaseBrowserClient } from "./client";
 import { normalizePageInput } from "../record-page";
+import { throwIfFunctionError } from "./function-error";
 
 // Supabase query results are validated and normalized at this repository boundary.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -644,13 +645,17 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       body: {
         email: input.email,
         fullName: input.name,
+        phone: input.phone,
         roleCode,
         specialty: "specialty" in input ? input.specialty : undefined,
         shift: "shift" in input ? input.shift : undefined,
         redirectTo: `${globalThis.location.origin}/login`,
       },
     });
-    throwIfError(error);
+    await throwIfFunctionError(error);
+    if (!data || typeof data.userId !== "string") {
+      throw new Error("The invitation service returned an invalid response");
+    }
     return data.userId as string;
   }
 
