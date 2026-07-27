@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Activity, ArrowRight, Building2, ShieldCheck, Stethoscope, UserCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -36,7 +36,14 @@ const ROLE_ICONS: Record<Role, React.ComponentType<{ className?: string }>> = {
 };
 
 function Login() {
-  const { isDemoMode, login, requestPasswordReset, updatePassword } = useAuth();
+  const {
+    isDemoMode,
+    passwordSetupRequired,
+    login,
+    requestPasswordReset,
+    updatePassword,
+    completePasswordSetup,
+  } = useAuth();
   const navigate = useNavigate();
   const [role, setRole] = useState<Role>("clinic_admin");
   const [email, setEmail] = useState("");
@@ -157,8 +164,13 @@ function Login() {
                 <Label htmlFor="password">Password</Label>
                 <ForgotPasswordDialog
                   isDemoMode={isDemoMode}
+                  passwordSetupRequired={passwordSetupRequired}
                   requestPasswordReset={requestPasswordReset}
                   updatePassword={updatePassword}
+                  onPasswordSetupComplete={() => {
+                    completePasswordSetup();
+                    navigate({ to: "/app" });
+                  }}
                 />
               </div>
               <Input
@@ -239,18 +251,29 @@ function Login() {
 
 function ForgotPasswordDialog({
   isDemoMode,
+  passwordSetupRequired,
   requestPasswordReset,
   updatePassword,
+  onPasswordSetupComplete,
 }: {
   isDemoMode: boolean;
+  passwordSetupRequired: boolean;
   requestPasswordReset: (email: string) => Promise<void>;
   updatePassword: (password: string) => Promise<void>;
+  onPasswordSetupComplete: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState<"request" | "reset">("request");
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
+
+  useEffect(() => {
+    if (passwordSetupRequired) {
+      setStep("reset");
+      setOpen(true);
+    }
+  }, [passwordSetupRequired]);
 
   const reset = () => {
     setStep("request");
@@ -300,7 +323,8 @@ function ForgotPasswordDialog({
 
     try {
       await updatePassword(pw);
-      toast.success("Password updated - you can sign in now");
+      toast.success("Password updated");
+      onPasswordSetupComplete();
       setOpen(false);
       reset();
     } catch (error) {
@@ -312,6 +336,7 @@ function ForgotPasswordDialog({
     <Dialog
       open={open}
       onOpenChange={(o) => {
+        if (!o && passwordSetupRequired) return;
         setOpen(o);
         if (!o) reset();
       }}
