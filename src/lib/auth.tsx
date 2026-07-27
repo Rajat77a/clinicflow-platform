@@ -68,11 +68,13 @@ interface AuthCtx {
   user: AuthUser | null;
   isReady: boolean;
   isDemoMode: boolean;
+  passwordSetupRequired: boolean;
   login: (email: string, password: string, demoRole?: Role) => Promise<void>;
   logout: () => Promise<void>;
   setRole: (role: Role) => void;
   requestPasswordReset: (email: string) => Promise<void>;
   updatePassword: (password: string) => Promise<void>;
+  completePasswordSetup: () => void;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
@@ -93,6 +95,11 @@ function isAuthUser(value: unknown): value is AuthUser {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const [passwordSetupRequired, setPasswordSetupRequired] = useState(() => {
+    if (typeof window === "undefined") return false;
+    const authFlowType = new URLSearchParams(window.location.hash.slice(1)).get("type");
+    return authFlowType === "invite" || authFlowType === "recovery";
+  });
 
   const hydrateSupabaseUser = useCallback(async (authUser: User | null) => {
     if (!authUser) {
@@ -174,7 +181,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         });
 
       const { data: listener } = supabase.auth.onAuthStateChange(
-        (_event: AuthChangeEvent, session: Session | null) => {
+        (event: AuthChangeEvent, session: Session | null) => {
+          if (event === "PASSWORD_RECOVERY") setPasswordSetupRequired(true);
+          if (event === "SIGNED_OUT") setPasswordSetupRequired(false);
           queueMicrotask(() => {
             void hydrateSupabaseUser(session?.user ?? null).catch(() => setUser(null));
           });
@@ -221,6 +230,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         isReady,
         isDemoMode: supabaseConfig.demoMode,
+        passwordSetupRequired,
         login: async (email, password, demoRole = "clinic_admin") => {
           if (supabaseConfig.demoMode) {
             persist({
@@ -263,6 +273,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const { error } = await getSupabaseBrowserClient().auth.updateUser({ password });
           if (error) throw error;
         },
+        completePasswordSetup: () => setPasswordSetupRequired(false),
       }}
     >
       {children}
