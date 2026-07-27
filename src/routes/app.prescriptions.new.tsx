@@ -46,7 +46,7 @@ function NewPrescription() {
       toPatientOptions((await searchPatients({ query, limit: 12 })).rows),
     [searchPatients],
   );
-  const doctorOptions = toDoctorOptions(doctors);
+  const doctorOptions = toDoctorOptions(doctors.filter(doctor => doctor.status === "Active"));
   const { edit, mode, patient: patientParam } = Route.useSearch();
   const isReceptionist = user?.role === "receptionist";
   const isLabMode = mode === "lab";

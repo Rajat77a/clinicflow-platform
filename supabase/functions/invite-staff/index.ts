@@ -63,6 +63,15 @@ Deno.serve(async (request) => {
     const roleCode = typeof payload.roleCode === "string" ? payload.roleCode : "";
     const specialty = typeof payload.specialty === "string" ? payload.specialty.trim() : null;
     const shift = typeof payload.shift === "string" ? payload.shift.trim() : null;
+    const gender = typeof payload.gender === "string" ? payload.gender : null;
+    const qualification = typeof payload.qualification === "string" ? payload.qualification.trim() : null;
+    const medicalRegistrationNumber = typeof payload.medicalRegistrationNumber === "string"
+      ? payload.medicalRegistrationNumber.trim()
+      : null;
+    const experienceYears = Number.isInteger(payload.experienceYears) ? payload.experienceYears : null;
+    const consultationFee = typeof payload.consultationFee === "number" ? payload.consultationFee : null;
+    const workingHours = typeof payload.workingHours === "string" ? payload.workingHours.trim() : null;
+    const administrativeNotes = typeof payload.notes === "string" ? payload.notes.trim() : null;
     let facilityId = typeof payload.facilityId === "string" ? payload.facilityId : null;
     const departmentId = typeof payload.departmentId === "string" ? payload.departmentId : null;
     const redirectTo = typeof payload.redirectTo === "string" ? payload.redirectTo : allowedOrigin;
@@ -191,27 +200,27 @@ Deno.serve(async (request) => {
       });
     }
 
-    const { error: profileError } = await adminClient
-      .from("profiles")
-      .update({ display_name: fullName, email, phone: phone || null })
-      .eq("id", invited.user.id);
-    if (profileError) {
-      await adminClient.auth.admin.deleteUser(invited.user.id);
-      return response(409, { error: "The staff profile could not be created" });
-    }
-
-    const { error: membershipError } = await adminClient.from("staff_memberships").insert({
-      user_id: invited.user.id,
-      hospital_id: actor.hospital_id,
-      role_code: roleCode,
-      facility_id: facilityId,
-      department_id: departmentId,
-      specialty: roleCode === "doctor" ? specialty : null,
-      shift: roleCode === "receptionist" ? shift : null,
+    const { error: provisionError } = await userClient.rpc("provision_invited_staff", {
+      p_user_id: invited.user.id,
+      p_email: email,
+      p_full_name: fullName,
+      p_phone: phone,
+      p_role_code: roleCode,
+      p_facility_id: facilityId,
+      p_department_id: departmentId,
+      p_specialty: specialty,
+      p_shift: shift,
+      p_gender: gender,
+      p_qualification: qualification,
+      p_medical_registration_number: medicalRegistrationNumber,
+      p_experience_years: experienceYears,
+      p_consultation_fee: consultationFee,
+      p_working_hours: workingHours,
+      p_administrative_notes: administrativeNotes,
     });
-    if (membershipError) {
+    if (provisionError) {
       await adminClient.auth.admin.deleteUser(invited.user.id);
-      return response(409, { error: "The staff membership could not be created" });
+      return response(409, { error: "The staff account could not be provisioned" });
     }
 
     const result = { userId: invited.user.id, status: "invited" };

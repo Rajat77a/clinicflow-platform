@@ -24,11 +24,12 @@ function Field({ label, span = 6, children }: { label: string; span?: number; ch
 function NewPatient() {
   const navigate = useNavigate();
   const { createPatient, doctors } = useWorkspaceData();
+  const activeDoctors = doctors.filter(doctor => doctor.status === "Active");
   const [name, setName] = useState("");
   const [dateOfBirth, setDateOfBirth] = useState("");
   const [gender, setGender] = useState("");
   const [phone, setPhone] = useState("");
-  const [doctorId, setDoctorId] = useState(doctors[0]?.id ?? "");
+  const [doctorId, setDoctorId] = useState(activeDoctors[0]?.id ?? "");
   const [saving, setSaving] = useState(false);
 
   const submit = async (event: React.FormEvent) => {
@@ -86,7 +87,7 @@ function NewPatient() {
               <Field label="Assigned doctor" span={6}>
                 <Select value={doctorId} onValueChange={setDoctorId}>
                   <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Select doctor" /></SelectTrigger>
-                  <SelectContent>{doctors.map(item => <SelectItem key={item.id} value={item.id}>{item.name} · {item.specialty}</SelectItem>)}</SelectContent>
+                  <SelectContent>{activeDoctors.map(item => <SelectItem key={item.id} value={item.id}>{item.name} · {item.specialty}</SelectItem>)}</SelectContent>
                 </Select>
               </Field>
             </div>

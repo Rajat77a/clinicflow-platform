@@ -9,6 +9,7 @@ interface FileUploaderProps {
   variant?: "photo" | "document";
   hint?: string;
   onFile?: (file: File | null) => void;
+  maxSizeBytes?: number;
 }
 
 export function FileUploader({
@@ -17,6 +18,7 @@ export function FileUploader({
   variant = "photo",
   hint,
   onFile,
+  maxSizeBytes,
 }: FileUploaderProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [preview, setPreview] = useState<string | null>(null);
@@ -26,6 +28,11 @@ export function FileUploader({
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0] ?? null;
+    if (f && maxSizeBytes && f.size > maxSizeBytes) {
+      toast.error(`File must be smaller than ${Math.round(maxSizeBytes / 1024 / 1024)} MB`);
+      e.target.value = "";
+      return;
+    }
     setFile(f);
     onFile?.(f);
     if (f && f.type.startsWith("image/")) {
