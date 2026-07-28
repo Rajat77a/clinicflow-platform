@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth, type Role } from "@/lib/auth";
 import { useWorkspaceData } from "@/lib/workspace-data";
 import { UserPlus } from "lucide-react";
@@ -61,10 +61,12 @@ function UsersPage() {
               <Button><UserPlus className="mr-1.5 h-4 w-4" />Invite Clinic Admin</Button>
             </DialogTrigger>
             <DialogContent className="max-w-md">
-              <DialogHeader><DialogTitle>Invite Clinic Admin</DialogTitle></DialogHeader>
-              <p className="text-sm text-muted-foreground">
-                Supabase will email a one-time invitation. ClinicFlow never creates or displays a temporary password.
-              </p>
+              <DialogHeader>
+                <DialogTitle>Invite Clinic Admin</DialogTitle>
+                <DialogDescription>
+                  Supabase will email a one-time invitation. ClinicFlow never creates or displays a temporary password.
+                </DialogDescription>
+              </DialogHeader>
               <div className="space-y-3">
                 <div className="space-y-1.5">
                   <Label>Full name</Label>
