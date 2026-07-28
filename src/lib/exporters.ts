@@ -1,3 +1,5 @@
+import DOMPurify from "dompurify";
+
 // Lightweight client-side CSV export helpers
 export function toCSV(rows: Record<string, unknown>[]): string {
   if (rows.length === 0) return "";
@@ -34,19 +36,19 @@ const PRINT_TAGS = new Set(["B", "BODY", "BR", "DIV", "H1", "H2", "H3", "P", "SP
 const PRINT_CLASSES = new Set(["card", "muted", "row", "total"]);
 
 function sanitizePrintContent(html: string) {
-  const parsed = new DOMParser().parseFromString(html, "text/html");
-  parsed.querySelectorAll("script,style,iframe,object,embed").forEach(element => element.remove());
-  Array.from(parsed.body.querySelectorAll("*")).forEach(element => {
-    if (!PRINT_TAGS.has(element.tagName)) {
-      element.replaceWith(...Array.from(element.childNodes));
-      return;
-    }
-    const classes = Array.from(element.classList).filter(className => PRINT_CLASSES.has(className));
-    Array.from(element.attributes).forEach(attribute => element.removeAttribute(attribute.name));
-    if (classes.length) element.className = classes.join(" ");
+  const fragment = DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: Array.from(PRINT_TAGS, tag => tag.toLowerCase()),
+    ALLOWED_ATTR: ["class"],
+    RETURN_DOM_FRAGMENT: true,
   });
-  const fragment = parsed.createDocumentFragment();
-  fragment.append(...Array.from(parsed.body.childNodes));
+  Array.from(fragment.querySelectorAll("*")).forEach(element => {
+    const classes = Array.from(element.classList).filter(className => PRINT_CLASSES.has(className));
+    if (classes.length) {
+      element.className = classes.join(" ");
+    } else {
+      element.removeAttribute("class");
+    }
+  });
   return fragment;
 }
 
