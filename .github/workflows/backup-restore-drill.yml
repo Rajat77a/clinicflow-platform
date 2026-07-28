@@ -52,6 +52,9 @@ jobs:
             "select count(*) from public.hospitals")"
 
           supabase db dump --local --data-only --schema public \
+            --exclude public.permissions \
+            --exclude public.roles \
+            --exclude public.role_permissions \
             --file "$backup_file"
           test -s "$backup_file"
 

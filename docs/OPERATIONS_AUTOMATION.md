@@ -52,6 +52,9 @@ local Supabase stack. It:
 5. compares a known record count; and
 6. reruns the database security tests.
 
+The authorization catalog tables are excluded from the data dump because
+migrations recreate that immutable bootstrap data before restoration.
+
 The temporary dump is deleted and is never uploaded as an artifact. This proves
 that the repository's schema and backup procedure remain restorable. It does
 not back up production data.
