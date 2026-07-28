@@ -10,6 +10,13 @@ const migrationSource = await readFile(
   new URL("../../supabase/migrations/20260727173000_fix_patient_registration.sql", import.meta.url),
   "utf8",
 );
+const registrationDoctorLookupSource = await readFile(
+  new URL(
+    "../../supabase/migrations/20260728223000_fix_registration_doctor_lookup.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 test("patient form submits canonical database sex values", () => {
   assert.match(formSource, /value="male">Male/);
@@ -31,7 +38,11 @@ test("receptionists resolve doctor assignments without reading private staff row
   );
   assert.match(migrationSource, /private\.has_permission\('appointments\.write'\)/);
   assert.match(
-    migrationSource,
+    registrationDoctorLookupSource,
     /from private\.active_doctor_assignment\(p_doctor_user_id\)/,
+  );
+  assert.doesNotMatch(
+    registrationDoctorLookupSource,
+    /from public\.staff_memberships[\s\S]*where user_id = p_doctor_user_id/,
   );
 });
