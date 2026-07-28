@@ -16,6 +16,7 @@ test("production exposes database-backed hospital workflows", () => {
     "/app/receptionists",
     "/app/users",
     "/app/audit-logs",
+    "/app/settings",
   ]) {
     assert.equal(isProductionReadyPath(path), true, `${path} should be enabled`);
   }
@@ -30,7 +31,6 @@ test("production blocks screens that still contain sample data or placeholder ac
     "/app/notifications",
     "/app/payments",
     "/app/reports",
-    "/app/settings",
     "/app/subscriptions",
     "/app/support",
   ]) {

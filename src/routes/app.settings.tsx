@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useState, type FormEvent } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,15 +8,140 @@ import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
+import { MIN_PASSWORD_LENGTH, passwordPolicyError } from "@/lib/password-policy";
 import { SUBSCRIPTION_PRICE } from "@/lib/sample-data";
+import { supabaseConfig } from "@/lib/supabase/config";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/settings")({ component: SettingsPage });
 
 function SettingsPage() {
   const { user } = useAuth();
+  if (!supabaseConfig.demoMode) return <ProductionAccountSettings />;
+
   if (user?.role === "super_admin") return <PlatformSettings />;
   return <ClinicSettings />;
+}
+
+function ProductionAccountSettings() {
+  const { user, changePassword } = useAuth();
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+
+  const submitPassword = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const policyError = passwordPolicyError(newPassword);
+    if (policyError) {
+      toast.error(policyError);
+      return;
+    }
+    if (newPassword !== confirmation) {
+      toast.error("Passwords do not match");
+      return;
+    }
+    if (currentPassword === newPassword) {
+      toast.error("Choose a password different from your current password");
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await changePassword(currentPassword, newPassword);
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmation("");
+      toast.success("Password updated and other sessions revoked");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to update password");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  return (
+    <>
+      <PageHeader
+        title="Account security"
+        description="Review your assigned hospital identity and protect your account."
+      />
+      <div className="grid gap-6 lg:grid-cols-2">
+        <section className="rounded-lg border bg-card p-6">
+          <h2 className="font-display text-base font-semibold">Assigned identity</h2>
+          <div className="mt-4 grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="account-name">Full name</Label>
+              <Input id="account-name" value={user?.name ?? ""} disabled />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="account-email">Work email</Label>
+              <Input id="account-email" value={user?.email ?? ""} disabled />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="account-role">Role</Label>
+              <Input
+                id="account-role"
+                value={user?.role.replace("_", " ") ?? ""}
+                disabled
+              />
+            </div>
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="account-hospital">Hospital</Label>
+              <Input id="account-hospital" value={user?.clinic ?? ""} disabled />
+            </div>
+          </div>
+        </section>
+
+        <form className="rounded-lg border bg-card p-6" onSubmit={submitPassword}>
+          <h2 className="font-display text-base font-semibold">Change password</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Updating your password revokes your other signed-in sessions.
+          </p>
+          <div className="mt-4 space-y-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="current-password">Current password</Label>
+              <Input
+                id="current-password"
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(event) => setCurrentPassword(event.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="new-password">New password</Label>
+              <Input
+                id="new-password"
+                type="password"
+                autoComplete="new-password"
+                minLength={MIN_PASSWORD_LENGTH}
+                value={newPassword}
+                onChange={(event) => setNewPassword(event.target.value)}
+                required
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="confirm-password">Confirm new password</Label>
+              <Input
+                id="confirm-password"
+                type="password"
+                autoComplete="new-password"
+                minLength={MIN_PASSWORD_LENGTH}
+                value={confirmation}
+                onChange={(event) => setConfirmation(event.target.value)}
+                required
+              />
+            </div>
+          </div>
+          <Button className="mt-4" type="submit" disabled={isSaving}>
+            {isSaving ? "Updating..." : "Update password"}
+          </Button>
+        </form>
+      </div>
+    </>
+  );
 }
 
 /* ----------------- Super Admin: Platform settings ----------------- */
