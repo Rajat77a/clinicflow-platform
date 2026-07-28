@@ -13,6 +13,10 @@ and written approval from the hospital and ClinicFlow.
 Implemented foundations:
 
 - Supabase authentication with public registration disabled.
+- Mandatory TOTP MFA for clinic and super administrators, enforced before
+  workspace loading and again by database permissions and privileged functions.
+- Strong password policy, current-password verification, other-session
+  revocation, and a 30-minute inactivity timeout.
 - Dedicated hospital membership and four roles: super admin, clinic admin,
   doctor, and receptionist.
 - Database row-level security and patient care-team scoping.
@@ -30,7 +34,7 @@ Implemented foundations:
 | Hospital requirements and clinical workflow sign-off | Signed workflow and role matrix | Unassigned | Blocked |
 | Privacy and regulatory assessment | Counsel-approved obligations, consent, retention, and data residency | Unassigned | Blocked |
 | Infrastructure agreements | Approved paid plans and required provider contracts | Unassigned | Blocked |
-| Production identity | SSO or MFA enrollment, recovery, offboarding, and emergency access test | Unassigned | Blocked |
+| Production identity | Complete administrator MFA enrollment, recovery, offboarding, and emergency access test | Unassigned | Blocked |
 | Email delivery | Hospital-approved SMTP, SPF, DKIM, DMARC, and invite/reset test | Unassigned | Blocked |
 | Backup and recovery | Automated backups plus witnessed restore drill | Unassigned | Blocked |
 | Monitoring and alerting | Availability, auth abuse, database, audit, and error alerts tested | Unassigned | Blocked |
