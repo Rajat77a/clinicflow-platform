@@ -9,6 +9,7 @@
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "test": "node --test --experimental-strip-types src/lib/*.test.ts",
+    "test:integration:db": "node scripts/integration/supabase-workflows.mjs",
     "test:e2e": "playwright test",
     "smoke": "node scripts/smoke.mjs",
     "typecheck": "tsc --noEmit",

@@ -1,5 +1,8 @@
 begin;
 
+create extension if not exists pgtap with schema extensions;
+select plan(1);
+
 do $$
 declare
   unprotected_tables text[];
@@ -250,5 +253,8 @@ begin
   end if;
 end
 $$;
+
+select pass('ClinicFlow database security foundation is intact');
+select * from finish();
 
 rollback;
