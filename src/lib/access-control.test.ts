@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  canAccessLocation,
   canAccessPath,
   hasPermission,
+  permissionForLocation,
   permissionForPath,
   rolesForPermission,
 } from "./access-control.ts";
@@ -38,6 +40,18 @@ test("clinical duties remain separated by permission", () => {
   assert.equal(hasPermission("doctor", "billing.read"), false);
   assert.equal(hasPermission("receptionist", "billing.write"), true);
   assert.equal(hasPermission("clinic_admin", "people.manage"), true);
+});
+
+test("lab entry uses lab permissions without granting prescription access", () => {
+  const labSearch = { mode: "lab", patient: "PT-10293" };
+
+  assert.equal(permissionForLocation("/app/prescriptions/new", labSearch), "labs.write");
+  assert.equal(canAccessLocation("clinic_admin", "/app/prescriptions/new", labSearch), true);
+  assert.equal(canAccessLocation("doctor", "/app/prescriptions/new", labSearch), true);
+  assert.equal(canAccessLocation("receptionist", "/app/prescriptions/new", labSearch), false);
+  assert.equal(canAccessLocation("super_admin", "/app/prescriptions/new", labSearch), false);
+  assert.equal(canAccessLocation("clinic_admin", "/app/prescriptions/new"), false);
+  assert.equal(canAccessLocation("doctor", "/app/prescriptions/new"), true);
 });
 
 test("route matching covers nested records and creation screens", () => {

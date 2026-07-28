@@ -9,7 +9,7 @@ import { EntityPicker, toPatientOptions, toDoctorOptions, type PatientOption, ty
 import { useAuth } from "@/lib/auth";
 import { type LabReport } from "@/lib/sample-data";
 import { useWorkspaceData } from "@/lib/workspace-data";
-import { Activity, Plus, Trash2, Send, Printer, FlaskConical, Upload } from "lucide-react";
+import { Activity, Plus, Trash2, Send, Printer, FlaskConical } from "lucide-react";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { printDocument } from "@/lib/exporters";
 import { toast } from "sonner";
@@ -48,7 +48,6 @@ function NewPrescription() {
   );
   const doctorOptions = toDoctorOptions(doctors.filter(doctor => doctor.status === "Active"));
   const { edit, mode, patient: patientParam } = Route.useSearch();
-  const isReceptionist = user?.role === "receptionist";
   const isLabMode = mode === "lab";
   const patientLocked = Boolean(patientParam);
 
@@ -103,21 +102,8 @@ function NewPrescription() {
     toast.success("Lab report added");
   };
 
-  const uploadLab = (file: File) => {
-    const id = `LR-${2300 + labs.length + 1}`;
-    setLabs([...labs, {
-      id, prescriptionId: edit ?? "RX-DRAFT",
-      patient: patient?.primary ?? "", patientId: patient?.id ?? "",
-      test: file.name.replace(/\.[^.]+$/, ""), date: new Date().toISOString().slice(0, 10),
-      result: "Attached PDF", reference: "See attached", fileName: file.name,
-      uploadedBy: user?.name ?? "User",
-    }]);
-    toast.success(`Uploaded ${file.name}`);
-  };
-
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isReceptionist && !isLabMode) return; // guard
     if (!isOwnRx) { toast.error("You can only edit prescriptions you issued"); return; }
     if (!patient) { toast.error("Please select a patient"); return; }
     if (isLabMode) {
@@ -198,18 +184,16 @@ function NewPrescription() {
       ) : (
       <>
       <PageHeader
-        title={edit ? `Edit ${edit}` : isLabMode ? "Add lab report" : isReceptionist ? "Lab report" : "New prescription"}
+        title={edit ? `Edit ${edit}` : isLabMode ? "Add lab report" : "New prescription"}
         description={
           isLabMode
             ? "Attach a lab report to this patient. Doctor is optional."
-            : isReceptionist
-              ? "You can add or upload lab reports to a prescription."
-              : "Compose, sign and share a prescription."
+            : "Compose, sign and share a prescription."
         }
       />
       <div className="grid gap-6 lg:grid-cols-5">
         <form onSubmit={onSubmit} className="lg:col-span-3 space-y-6">
-          <fieldset disabled={isReceptionist && !isLabMode} className="space-y-6 disabled:opacity-70">
+          <fieldset className="space-y-6">
             <section className="rounded-2xl border bg-card p-6 shadow-soft space-y-4">
               <div className="space-y-1.5">
                 <Label>Patient <span className="text-destructive">*</span></Label>
@@ -292,19 +276,12 @@ function NewPrescription() {
             )}
           </fieldset>
 
-          {/* Lab reports — accessible by everyone */}
+          {/* Access is enforced by the shared route guard and database RLS. */}
           <section className="rounded-2xl border bg-card p-6 shadow-soft">
-            <div className="mb-3 flex items-center justify-between">
+            <div className="mb-3">
               <h2 className="font-display text-base font-semibold flex items-center gap-2">
                 <FlaskConical className="h-4 w-4 text-info" />Lab reports
               </h2>
-              <label className="inline-flex items-center gap-2 cursor-pointer">
-                <input type="file" accept="application/pdf,image/*" className="hidden"
-                  onChange={e => { const f = e.target.files?.[0]; if (f) uploadLab(f); e.currentTarget.value = ""; }} />
-                <span className="inline-flex items-center rounded-md border h-8 px-3 text-xs font-medium hover:bg-muted">
-                  <Upload className="mr-1 h-3.5 w-3.5" /> Upload file
-                </span>
-              </label>
             </div>
 
             {labs.length > 0 && (
@@ -347,11 +324,9 @@ function NewPrescription() {
               ? <Button type="submit" className="flex-1" disabled={isSaving}>
                   {isSaving ? "Saving..." : "Save lab report"}
                 </Button>
-              : !isReceptionist
-                ? <Button type="submit" className="flex-1" disabled={isSaving}>
-                    {isSaving ? "Saving..." : edit ? "Save changes" : "Save & sign"}
-                  </Button>
-                : <Button type="button" className="flex-1" onClick={() => { toast.success("Lab reports saved"); navigate({ to: "/app/prescriptions" }); }}>Save lab reports</Button>}
+              : <Button type="submit" className="flex-1" disabled={isSaving}>
+                  {isSaving ? "Saving..." : edit ? "Save changes" : "Save & sign"}
+                </Button>}
           </div>
         </form>
 
