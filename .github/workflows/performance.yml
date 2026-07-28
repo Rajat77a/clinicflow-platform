@@ -1,17 +1,21 @@
-name: Production smoke
+name: Production performance
 
 on:
   schedule:
-    - cron: "23,53 * * * *"
+    - cron: "41 3 * * 0"
   workflow_dispatch:
 
 permissions:
   contents: read
 
+concurrency:
+  group: production-performance
+  cancel-in-progress: true
+
 jobs:
-  smoke:
+  bounded-load-check:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
@@ -22,10 +26,11 @@ jobs:
         with:
           node-version: 22
 
-      - name: Check production health and security
+      - name: Run bounded production load check
         env:
           BASE_URL: https://clinicflow-platform.vercel.app
-          SUPABASE_FUNCTION_URL: https://lwdzykeyiuohkfhdlyua.supabase.co/functions/v1/invite-staff
-          SUPABASE_AUTH_HEALTH_URL: https://lwdzykeyiuohkfhdlyua.supabase.co/auth/v1/health
-          SMOKE_MAX_LATENCY_MS: "3000"
-        run: node scripts/smoke.mjs
+          LOAD_REQUESTS: "80"
+          LOAD_CONCURRENCY: "4"
+          LOAD_P95_MS: "3000"
+          LOAD_MAX_ERROR_RATE: "0.01"
+        run: node scripts/load-smoke.mjs

@@ -15,6 +15,14 @@ frequency, retention, replica strategy, and staffing.
 - Alerts for missed backups, failed jobs, and storage capacity.
 - A recovery environment isolated from production.
 
+## Repository Drill
+
+The weekly `Backup restore drill` GitHub Action validates migrations, a
+synthetic data dump, restoration, and database security tests without handling
+production data. Its successful result is engineering evidence only. It does
+not satisfy the production backup gate because Supabase Free does not provide
+downloadable automatic backups or point-in-time recovery.
+
 ## Restore Drill
 
 1. Open an incident/change record and record the chosen recovery point.
