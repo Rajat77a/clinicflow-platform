@@ -82,14 +82,16 @@ async function createIdentity(label, roleCode, hospitalId, facilityId) {
       hospital_id,
       facility_id,
       role_code,
-      specialty
+      specialty,
+      active
     )
     values (
       ${data.user.id},
       ${hospitalId},
       ${facilityId},
       ${roleCode},
-      ${roleCode === "doctor" ? "Integration medicine" : null}
+      ${roleCode === "doctor" ? "Integration medicine" : null},
+      true
     )
   `;
 
