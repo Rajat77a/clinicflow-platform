@@ -313,6 +313,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           const client = getSupabaseBrowserClient();
           const { error } = await client.auth.updateUser({ password });
           if (error) throw error;
+          await client.rpc("record_security_event", {
+            p_action: "password.changed",
+          });
           const { error: revokeError } = await client.auth.signOut({ scope: "others" });
           if (revokeError) throw revokeError;
         },
@@ -331,6 +334,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             password: newPassword,
           });
           if (updateError) throw updateError;
+          await client.rpc("record_security_event", {
+            p_action: "password.changed",
+          });
 
           const { error: revokeError } = await client.auth.signOut({ scope: "others" });
           if (revokeError) {

@@ -10,9 +10,10 @@ import {
 import { type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
-import { AuthProvider } from "@/lib/auth";
+import { AuthProvider, useAuth } from "@/lib/auth";
 import { WorkspaceDataProvider } from "@/lib/workspace-data";
 import { Toaster } from "@/components/ui/sonner";
+import { PrivilegedMfaGate } from "@/components/auth/privileged-mfa-gate";
 
 function NotFoundComponent() {
   return (
@@ -108,11 +109,21 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <WorkspaceDataProvider>
-          <Outlet />
-          <Toaster richColors position="top-right" />
-        </WorkspaceDataProvider>
+        <AuthenticatedWorkspace />
       </AuthProvider>
     </QueryClientProvider>
+  );
+}
+
+function AuthenticatedWorkspace() {
+  const { user } = useAuth();
+
+  return (
+    <PrivilegedMfaGate key={user?.userId ?? "anonymous"}>
+      <WorkspaceDataProvider>
+        <Outlet />
+        <Toaster richColors position="top-right" />
+      </WorkspaceDataProvider>
+    </PrivilegedMfaGate>
   );
 }
