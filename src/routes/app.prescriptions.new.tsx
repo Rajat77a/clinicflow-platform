@@ -237,7 +237,7 @@ function NewPrescription() {
               {!isLabMode && (
                 <>
                   <div className="space-y-1.5"><Label>Diagnosis <span className="text-destructive">*</span></Label>
-                    <Input className="h-11 rounded-xl" value={diagnosis} onChange={e => setDiagnosis(e.target.value)} />
+                    <Input data-testid="prescription-diagnosis" className="h-11 rounded-xl" value={diagnosis} onChange={e => setDiagnosis(e.target.value)} />
                   </div>
                   <div className="space-y-1.5"><Label>Treatment notes</Label>
                     <Textarea rows={3} className="rounded-xl" value={notes} onChange={e => setNotes(e.target.value)} />

@@ -1,3 +1,5 @@
+import DOMPurify from "dompurify";
+
 // Lightweight client-side CSV export helpers
 export function toCSV(rows: Record<string, unknown>[]): string {
   if (rows.length === 0) return "";
@@ -33,49 +35,42 @@ export function downloadCSV(filename: string, rows: Record<string, unknown>[]) {
 const PRINT_TAGS = new Set(["B", "BODY", "BR", "DIV", "H1", "H2", "H3", "P", "SPAN", "TABLE", "TBODY", "TD", "TH", "THEAD", "TR"]);
 const PRINT_CLASSES = new Set(["card", "muted", "row", "total"]);
 
-function sanitizePrintHtml(html: string) {
-  const parsed = new DOMParser().parseFromString(html, "text/html");
-  parsed.querySelectorAll("script,style,iframe,object,embed").forEach(element => element.remove());
-  Array.from(parsed.body.querySelectorAll("*")).forEach(element => {
-    if (!PRINT_TAGS.has(element.tagName)) {
-      element.replaceWith(...Array.from(element.childNodes));
-      return;
-    }
-    const classes = Array.from(element.classList).filter(className => PRINT_CLASSES.has(className));
-    Array.from(element.attributes).forEach(attribute => element.removeAttribute(attribute.name));
-    if (classes.length) element.className = classes.join(" ");
+function sanitizePrintContent(html: string) {
+  const fragment = DOMPurify.sanitize(html, {
+    ALLOWED_TAGS: Array.from(PRINT_TAGS, tag => tag.toLowerCase()),
+    ALLOWED_ATTR: ["class"],
+    RETURN_DOM_FRAGMENT: true,
   });
-  return parsed.body.innerHTML;
-}
-
-function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, character => ({
-    "&": "&amp;",
-    "<": "&lt;",
-    ">": "&gt;",
-    '"': "&quot;",
-    "'": "&#39;",
-  })[character] ?? character);
+  Array.from(fragment.querySelectorAll("*")).forEach(element => {
+    const classes = Array.from(element.classList).filter(className => PRINT_CLASSES.has(className));
+    if (classes.length) {
+      element.className = classes.join(" ");
+    } else {
+      element.removeAttribute("class");
+    }
+  });
+  return fragment;
 }
 
 export function printDocument(html: string, title = "ClinicFlow") {
   if (typeof window === "undefined") return;
   const w = window.open("", "_blank", "width=800,height=900");
   if (!w) return;
-  const safeHtml = sanitizePrintHtml(html);
-  const safeTitle = escapeHtml(title);
-  w.document.write(`<!doctype html><html><head><title>${safeTitle}</title>
-    <style>
-      body{font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;padding:32px;color:#0f172a}
-      h1,h2,h3{margin:0 0 8px}
-      table{width:100%;border-collapse:collapse;margin-top:12px}
-      td,th{padding:8px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:14px}
-      .muted{color:#64748b;font-size:12px}
-      .row{display:flex;justify-content:space-between;margin:4px 0}
-      .card{border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-top:12px}
-      .total{font-weight:700;font-size:18px;border-top:2px solid #0f172a;padding-top:8px;margin-top:8px}
-    </style></head><body>${safeHtml}
-    <script>window.onload=()=>{window.print()}</script>
-    </body></html>`);
+  const safeContent = sanitizePrintContent(html);
+  const style = w.document.createElement("style");
+  style.textContent = `
+    body{font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;padding:32px;color:#0f172a}
+    h1,h2,h3{margin:0 0 8px}
+    table{width:100%;border-collapse:collapse;margin-top:12px}
+    td,th{padding:8px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:14px}
+    .muted{color:#64748b;font-size:12px}
+    .row{display:flex;justify-content:space-between;margin:4px 0}
+    .card{border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-top:12px}
+    .total{font-weight:700;font-size:18px;border-top:2px solid #0f172a;padding-top:8px;margin-top:8px}
+  `;
+  w.document.title = title;
+  w.document.head.appendChild(style);
+  w.document.body.appendChild(w.document.importNode(safeContent, true));
+  w.addEventListener("load", () => w.print(), { once: true });
   w.document.close();
 }
