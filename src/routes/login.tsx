@@ -14,6 +14,7 @@ import {
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
 import { useAuth, type Role, ROLE_LABELS } from "@/lib/auth";
+import { MIN_PASSWORD_LENGTH, passwordPolicyError } from "@/lib/password-policy";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -311,8 +312,9 @@ function ForgotPasswordDialog({
   const savePw = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (pw.length < 8) {
-      toast.error("Password must be at least 8 characters");
+    const policyError = passwordPolicyError(pw);
+    if (policyError) {
+      toast.error(policyError);
       return;
     }
 
@@ -357,7 +359,7 @@ function ForgotPasswordDialog({
           <DialogDescription>
             {step === "request"
               ? "Enter your work email and we'll send a secure reset link."
-              : "Choose a strong password with at least 8 characters."}
+              : `Choose a strong password with at least ${MIN_PASSWORD_LENGTH} characters, including upper and lowercase letters, a number and a symbol.`}
           </DialogDescription>
         </DialogHeader>
 
@@ -388,7 +390,7 @@ function ForgotPasswordDialog({
                 type="password"
                 value={pw}
                 onChange={(e) => setPw(e.target.value)}
-                placeholder="At least 8 characters"
+                placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
                 className="h-11 rounded-xl"
                 autoFocus
               />

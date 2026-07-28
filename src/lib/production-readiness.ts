@@ -6,7 +6,6 @@ const DEMO_ONLY_ROUTE_RULES: ReadonlyArray<RegExp> = [
   /^\/app\/notifications(?:\/|$)/,
   /^\/app\/payments(?:\/|$)/,
   /^\/app\/reports(?:\/|$)/,
-  /^\/app\/settings(?:\/|$)/,
   /^\/app\/subscriptions(?:\/|$)/,
   /^\/app\/support(?:\/|$)/,
 ];

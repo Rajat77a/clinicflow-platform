@@ -74,6 +74,7 @@ interface AuthCtx {
   setRole: (role: Role) => void;
   requestPasswordReset: (email: string) => Promise<void>;
   updatePassword: (password: string) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   completePasswordSetup: () => void;
 }
 
@@ -95,6 +96,7 @@ function isAuthUser(value: unknown): value is AuthUser {
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isReady, setIsReady] = useState(false);
+  const authenticatedUserId = user?.userId;
   const [passwordSetupRequired, setPasswordSetupRequired] = useState(() => {
     if (typeof window === "undefined") return false;
     const authFlowType = new URLSearchParams(window.location.hash.slice(1)).get("type");
@@ -212,6 +214,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setIsReady(true);
   }, [hydrateSupabaseUser]);
 
+  useEffect(() => {
+    if (supabaseConfig.demoMode || !authenticatedUserId || typeof window === "undefined") return;
+
+    let expired = false;
+    let timeoutId: ReturnType<typeof setTimeout>;
+
+    const expireSession = () => {
+      if (expired) return;
+      expired = true;
+      void getSupabaseBrowserClient()
+        .auth.signOut()
+        .finally(() => setUser(null));
+    };
+    const resetTimeout = () => {
+      if (expired) return;
+      clearTimeout(timeoutId);
+      timeoutId = setTimeout(expireSession, supabaseConfig.sessionIdleTimeoutMs);
+    };
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") resetTimeout();
+    };
+    const activityEvents = ["pointerdown", "keydown", "touchstart"] as const;
+
+    for (const event of activityEvents) {
+      window.addEventListener(event, resetTimeout, { passive: true });
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    resetTimeout();
+
+    return () => {
+      clearTimeout(timeoutId);
+      for (const event of activityEvents) {
+        window.removeEventListener(event, resetTimeout);
+      }
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [authenticatedUserId]);
+
   const persist = (u: AuthUser | null) => {
     setUser(u);
 
@@ -270,8 +310,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         },
         updatePassword: async (password) => {
           if (supabaseConfig.demoMode) return;
-          const { error } = await getSupabaseBrowserClient().auth.updateUser({ password });
+          const client = getSupabaseBrowserClient();
+          const { error } = await client.auth.updateUser({ password });
           if (error) throw error;
+          const { error: revokeError } = await client.auth.signOut({ scope: "others" });
+          if (revokeError) throw revokeError;
+        },
+        changePassword: async (currentPassword, newPassword) => {
+          if (supabaseConfig.demoMode) return;
+          if (!user?.email) throw new Error("An authenticated account is required");
+
+          const client = getSupabaseBrowserClient();
+          const { error: verificationError } = await client.auth.signInWithPassword({
+            email: user.email,
+            password: currentPassword,
+          });
+          if (verificationError) throw new Error("Current password is incorrect");
+
+          const { error: updateError } = await client.auth.updateUser({
+            password: newPassword,
+          });
+          if (updateError) throw updateError;
+
+          const { error: revokeError } = await client.auth.signOut({ scope: "others" });
+          if (revokeError) {
+            throw new Error("Password changed, but other sessions could not be revoked");
+          }
         },
         completePasswordSetup: () => setPasswordSetupRequired(false),
       }}
