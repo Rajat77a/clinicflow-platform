@@ -21,7 +21,7 @@ function ClinicsPage() {
       plan: c.plan, status: c.status, renews: c.expires,
     }];
     downloadCSV(`${c.id}-summary.csv`, summary);
-    toast.success(`Exported ${c.name} · logged in audit`);
+    toast.success(`Exported ${c.name}`);
   };
 
   const exportAll = () => {
@@ -31,7 +31,7 @@ function ClinicsPage() {
       plan: c.plan, status: c.status, renews: c.expires,
     }));
     downloadCSV("clinicflow-all-clinics.csv", combined);
-    toast.success("Exported all clinics · logged in audit");
+    toast.success("Exported all clinics");
   };
 
   return (
@@ -39,26 +39,26 @@ function ClinicsPage() {
       <PageHeader
         title={supabaseConfig.demoMode ? "Clinics" : "Hospital"}
         description={supabaseConfig.demoMode ? "All clinics on ClinicFlow." : "This dedicated ClinicFlow installation."}
-        actions={
+        actions={supabaseConfig.demoMode ? (
           <div className="flex gap-2">
             <Button variant="outline" onClick={exportAll}>
               <Download className="mr-1.5 h-4 w-4" />Download
             </Button>
-            {supabaseConfig.demoMode && (
-              <Button asChild>
-                <Link to="/app/clinics/new"><Plus className="mr-1.5 h-4 w-4" /> Add Clinic</Link>
-              </Button>
-            )}
+            <Button asChild>
+              <Link to="/app/clinics/new"><Plus className="mr-1.5 h-4 w-4" /> Add Clinic</Link>
+            </Button>
           </div>
-        } />
+        ) : undefined} />
       <div className="rounded-2xl border bg-card shadow-soft">
-        <div className="flex flex-wrap items-center gap-3 border-b p-4">
-          <div className="relative min-w-[240px] flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Search clinics, cities…" className="h-10 rounded-xl bg-muted/30 pl-9" />
+        {supabaseConfig.demoMode && (
+          <div className="flex flex-wrap items-center gap-3 border-b p-4">
+            <div className="relative min-w-[240px] flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input placeholder="Search clinics, cities…" className="h-10 rounded-xl bg-muted/30 pl-9" />
+            </div>
+            <Button variant="outline">Filter</Button>
           </div>
-          <Button variant="outline">Filter</Button>
-        </div>
+        )}
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -70,7 +70,7 @@ function ClinicsPage() {
                 <TableHead className="text-right">Patients</TableHead>
                 <TableHead>Renews</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Export</TableHead>
+                {supabaseConfig.demoMode && <TableHead className="text-right">Export</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -97,11 +97,13 @@ function ClinicsPage() {
                       {c.status}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">
-                    <Button size="sm" variant="ghost" onClick={() => exportClinic(c)}>
-                      <Download className="mr-1 h-3.5 w-3.5" />CSV
-                    </Button>
-                  </TableCell>
+                  {supabaseConfig.demoMode && (
+                    <TableCell className="text-right">
+                      <Button size="sm" variant="ghost" onClick={() => exportClinic(c)}>
+                        <Download className="mr-1 h-3.5 w-3.5" />CSV
+                      </Button>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
