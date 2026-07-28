@@ -31,6 +31,7 @@ const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     "platform.clinics.manage",
     "platform.subscriptions.manage",
     "platform.payments.manage",
+    "people.manage",
     "users.manage",
     "reports.read",
     "audit.read",
