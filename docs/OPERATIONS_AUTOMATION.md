@@ -30,15 +30,14 @@ material free-tier cost. It is not the hospital capacity test. Before go-live,
 replace its limits with a signed volume model and run an approved staging soak
 and failure test.
 
-The first baseline on 2026-07-29 did not pass: repeated 10-second timeouts were
-observed from both `/login` and `/healthz`, including at concurrency 1. The
-normal single-request smoke check remained healthy. This blocks any claim that
-the current free Vercel deployment has hospital capacity; the scheduled test is
-intentionally allowed to fail until the hosting path meets its budget.
+The first baseline on 2026-07-29 exposed repeated 10-second timeouts from both
+`/login` and `/healthz`. The repository then enabled Vercel Fluid Compute and
+placed the single Hobby function region in Mumbai (`bom1`), next to the
+Supabase Mumbai database.
 
-The repository now enables Vercel Fluid Compute and places the single Hobby
-function region in Mumbai (`bom1`), next to the Supabase Mumbai database. The
-baseline must be rerun after this configuration reaches production.
+After production deployment, the same 80-request, concurrency-4 probe completed
+with zero failures: p50 273 ms, p95 658 ms, and maximum 1001 ms. This is a useful
+regression baseline, but it is not evidence of full hospital capacity.
 
 ## Synthetic Backup Restore Drill
 
