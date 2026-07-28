@@ -12,6 +12,7 @@
     "test:integration:db": "node scripts/integration/supabase-workflows.mjs",
     "test:e2e": "playwright test",
     "smoke": "node scripts/smoke.mjs",
+    "load:smoke": "node scripts/load-smoke.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write ."

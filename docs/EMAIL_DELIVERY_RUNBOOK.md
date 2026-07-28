@@ -6,18 +6,24 @@ their mailbox and chooses a password that satisfies the application policy.
 
 ## Current Live State
 
-Verified on 2026-07-28:
+Verified on 2026-07-29:
 
 - The production site URL is `https://clinicflow-platform.vercel.app`.
 - The allowed Auth redirect is
   `https://clinicflow-platform.vercel.app/login`.
 - Password, email, phone, sign-in method, and MFA security notifications are
   enabled.
-- Custom SMTP is not configured. Supabase's default sender is for development,
-  has delivery restrictions, and is not a production hospital email service.
+- Custom SMTP is enabled through the personal Gmail account
+  `rajatkrishnan321@gmail.com`. Supabase warns that this provider is designed
+  for personal rather than transactional email and that deliverability may be
+  affected.
+- The production password-recovery endpoint accepted a synthetic reset request
+  for that address. Mailbox receipt, one-time-link behavior, and provider
+  delivery evidence have not yet been independently confirmed.
 
-Invitations and password recovery therefore remain a release blocker even when
-the application and Edge Function behave correctly.
+This is sufficient only for development testing. Invitations and password
+recovery remain a release blocker for hospital use even when the application
+and Edge Function behave correctly.
 
 ## Required Configuration
 
