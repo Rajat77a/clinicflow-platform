@@ -63,5 +63,12 @@ jobs:
           SUPABASE_DB_URL="$DB_URL" \
           bun run test:integration:db
 
+      - name: Report Realtime diagnostics
+        if: failure()
+        run: |
+          docker ps --all --filter name=supabase_realtime
+          docker ps --all --quiet --filter name=supabase_realtime \
+            | xargs --no-run-if-empty docker logs --tail 250
+
       - name: Reject database lint errors
         run: supabase db lint --local --level error

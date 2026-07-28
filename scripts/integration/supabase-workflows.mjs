@@ -220,6 +220,11 @@ async function main() {
     },
   );
   assertNoError(patientError, "receptionist registers patient");
+  assert.deepEqual(
+    await visibleIds(receptionist.client, "patients", patientId),
+    [patientId],
+    "receptionist must retain RLS visibility of the registered patient",
+  );
   const realtimePatientId = await Promise.race([
     realtimeEvent,
     new Promise((_, reject) =>
