@@ -125,9 +125,30 @@ export function permissionForPath(pathname: string): Permission | null {
   return ROUTE_RULES.find((rule) => rule.matches.test(pathname))?.permission ?? null;
 }
 
+export function permissionForLocation(
+  pathname: string,
+  search: Readonly<Record<string, unknown>> = {},
+): Permission | null {
+  if (/^\/app\/prescriptions\/new\/?$/.test(pathname) && search.mode === "lab") {
+    return "labs.write";
+  }
+  return permissionForPath(pathname);
+}
+
 export function canAccessPath(role: Role, pathname: string) {
   if (/^\/app\/?$/.test(pathname)) return true;
   const permission = permissionForPath(pathname);
+  if (permission === null) return !pathname.startsWith("/app/");
+  return hasPermission(role, permission);
+}
+
+export function canAccessLocation(
+  role: Role,
+  pathname: string,
+  search: Readonly<Record<string, unknown>> = {},
+) {
+  if (/^\/app\/?$/.test(pathname)) return true;
+  const permission = permissionForLocation(pathname, search);
   if (permission === null) return !pathname.startsWith("/app/");
   return hasPermission(role, permission);
 }

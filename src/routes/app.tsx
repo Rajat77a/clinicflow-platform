@@ -1,7 +1,7 @@
 import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { useAuth } from "@/lib/auth";
-import { canAccessPath } from "@/lib/access-control";
+import { canAccessLocation } from "@/lib/access-control";
 import { isProductionReadyPath } from "@/lib/production-readiness";
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,12 @@ export const Route = createFileRoute("/app")({
 function AppLayout() {
   const { user, isReady, isDemoMode } = useAuth();
   const navigate = useNavigate();
-  const pathname = useRouterState({ select: state => state.location.pathname });
+  const location = useRouterState({
+    select: state => ({
+      pathname: state.location.pathname,
+      search: state.location.search,
+    }),
+  });
 
   useEffect(() => {
     if (isReady && !user) navigate({ to: "/login", replace: true });
@@ -28,7 +33,7 @@ function AppLayout() {
     );
   }
 
-  if (!canAccessPath(user.role, pathname)) {
+  if (!canAccessLocation(user.role, location.pathname, location.search)) {
     return (
       <AppShell>
         <div className="grid min-h-[60vh] place-items-center">
@@ -47,7 +52,7 @@ function AppLayout() {
     );
   }
 
-  if (!isDemoMode && !isProductionReadyPath(pathname)) {
+  if (!isDemoMode && !isProductionReadyPath(location.pathname)) {
     return (
       <AppShell>
         <div className="grid min-h-[60vh] place-items-center">
