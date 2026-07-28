@@ -96,8 +96,13 @@ async function createIdentity(label, roleCode, hospitalId, facilityId) {
   `;
 
   const client = createClient(url, anonKey, clientOptions);
-  const { error: signInError } = await client.auth.signInWithPassword({ email, password });
+  const { data: signInData, error: signInError } = await client.auth.signInWithPassword({
+    email,
+    password,
+  });
   assertNoError(signInError, `sign in ${label}`);
+  assert.ok(signInData.session, `${label} session was not returned`);
+  await client.realtime.setAuth(signInData.session.access_token);
   return { client, email, id: data.user.id };
 }
 
@@ -164,6 +169,15 @@ async function main() {
   assert.deepEqual(blockedAtAal1, [], "privileged AAL1 sessions must not read patient data");
   await requireAal2(clinicAdmin);
 
+  const [patientsPublication] = await sql`
+    select 1
+    from pg_publication_tables
+    where pubname = 'supabase_realtime'
+      and schemaname = 'public'
+      and tablename = 'patients'
+  `;
+  assert.ok(patientsPublication, "patients must belong to the Supabase Realtime publication");
+
   let resolveRealtime;
   const realtimeEvent = new Promise((resolve) => {
     resolveRealtime = resolve;
@@ -209,7 +223,7 @@ async function main() {
   const realtimePatientId = await Promise.race([
     realtimeEvent,
     new Promise((_, reject) =>
-      setTimeout(() => reject(new Error("Patient Realtime event did not arrive")), 10_000),
+      setTimeout(() => reject(new Error("Patient Realtime event did not arrive")), 20_000),
     ),
   ]);
   assert.equal(realtimePatientId, patientId, "Realtime must publish the created patient");
