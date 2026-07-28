@@ -60,6 +60,7 @@ jobs:
           SUPABASE_URL="$API_URL" \
           SUPABASE_ANON_KEY="$ANON_KEY" \
           SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" \
+          SUPABASE_DB_URL="$DB_URL" \
           bun run test:integration:db
 
       - name: Reject database lint errors

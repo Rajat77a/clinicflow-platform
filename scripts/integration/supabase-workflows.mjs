@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import postgres from "postgres";
 
 const url = process.env.SUPABASE_URL;
 const anonKey = process.env.SUPABASE_ANON_KEY;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const databaseUrl = process.env.SUPABASE_DB_URL;
 
-if (!url || !anonKey || !serviceRoleKey) {
-  throw new Error("SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY are required");
+if (!url || !anonKey || !serviceRoleKey || !databaseUrl) {
+  throw new Error(
+    "SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, and SUPABASE_DB_URL are required",
+  );
 }
 
 const clientOptions = {
@@ -18,6 +22,7 @@ const clientOptions = {
   },
 };
 const admin = createClient(url, serviceRoleKey, clientOptions);
+const sql = postgres(databaseUrl, { max: 1 });
 const password = "Integration!2026#ClinicFlow";
 
 function assertNoError(error, context) {
@@ -66,20 +71,27 @@ async function createIdentity(label, roleCode, hospitalId, facilityId) {
   assertNoError(error, `create ${label} identity`);
   assert.ok(data.user, `${label} identity was not returned`);
 
-  const { error: profileError } = await admin
-    .from("profiles")
-    .update({ display_name: `Integration ${label}` })
-    .eq("id", data.user.id);
-  assertNoError(profileError, `name ${label} profile`);
-
-  const { error: membershipError } = await admin.from("staff_memberships").insert({
-    user_id: data.user.id,
-    hospital_id: hospitalId,
-    facility_id: facilityId,
-    role_code: roleCode,
-    specialty: roleCode === "doctor" ? "Integration medicine" : null,
-  });
-  assertNoError(membershipError, `assign ${label} membership`);
+  await sql`
+    update public.profiles
+    set display_name = ${`Integration ${label}`}
+    where id = ${data.user.id}
+  `;
+  await sql`
+    insert into public.staff_memberships (
+      user_id,
+      hospital_id,
+      facility_id,
+      role_code,
+      specialty
+    )
+    values (
+      ${data.user.id},
+      ${hospitalId},
+      ${facilityId},
+      ${roleCode},
+      ${roleCode === "doctor" ? "Integration medicine" : null}
+    )
+  `;
 
   const client = createClient(url, anonKey, clientOptions);
   const { error: signInError } = await client.auth.signInWithPassword({ email, password });
@@ -112,17 +124,15 @@ async function visibleIds(client, table, id) {
 }
 
 async function main() {
-  const { data: hospital, error: hospitalError } = await admin
-    .from("hospitals")
-    .select("id")
-    .single();
-  assertNoError(hospitalError, "load seeded hospital");
-  const { data: facility, error: facilityError } = await admin
-    .from("facilities")
-    .select("id")
-    .eq("hospital_id", hospital.id)
-    .single();
-  assertNoError(facilityError, "load seeded facility");
+  const [hospital] = await sql`select id from public.hospitals limit 1`;
+  assert.ok(hospital, "seeded hospital must exist");
+  const [facility] = await sql`
+    select id
+    from public.facilities
+    where hospital_id = ${hospital.id}
+    limit 1
+  `;
+  assert.ok(facility, "seeded facility must exist");
 
   const clinicAdmin = await createIdentity(
     "clinic-admin",
@@ -328,4 +338,8 @@ async function main() {
   console.log("Cross-portal Supabase integration passed");
 }
 
-await main();
+try {
+  await main();
+} finally {
+  await sql.end({ timeout: 5 });
+}
