@@ -30,6 +30,7 @@ function addDaysISO(iso: string, days: number) {
 
 function SubTable({ rows, onExtend }: { rows: Sub[]; onExtend: (clinic: string, days: number) => void }) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const [proofs, setProofs] = useState<Record<string, string>>({});
   return (
     <div className="overflow-x-auto rounded-2xl border bg-card shadow-soft">
       <Table>
@@ -40,7 +41,7 @@ function SubTable({ rows, onExtend }: { rows: Sub[]; onExtend: (clinic: string, 
             <TableHead>Renews</TableHead>
             <TableHead>Status</TableHead>
             <TableHead>Extend (days)</TableHead>
-            <TableHead></TableHead>
+            <TableHead className="text-right">Reminder / payment proof</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -73,7 +74,15 @@ function SubTable({ rows, onExtend }: { rows: Sub[]; onExtend: (clinic: string, 
                 </div>
               </TableCell>
               <TableCell className="text-right">
-                <Button size="sm" variant="outline">Send reminder</Button>
+                <div className="flex justify-end gap-2">
+                  <Input
+                    placeholder="Proof ref"
+                    className="h-8 w-28 rounded-lg"
+                    value={proofs[s.clinic] ?? ""}
+                    onChange={(event) => setProofs({ ...proofs, [s.clinic]: event.target.value })}
+                  />
+                  <Button size="sm" variant="outline" onClick={() => toast.success(`Reminder sent to ${s.clinic}`)}>Send reminder</Button>
+                </div>
               </TableCell>
             </TableRow>
           ))}

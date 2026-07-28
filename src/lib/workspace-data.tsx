@@ -158,11 +158,20 @@ export interface ClinicAdminInput {
   name: string;
   email: string;
   phone: string;
+  temporaryPassword?: string;
 }
 
 export interface ClinicInput {
   name: string;
   city: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  logoName?: string;
+  adminName?: string;
+  adminEmail?: string;
+  adminPhone?: string;
+  temporaryPassword?: string;
 }
 
 type Command =
@@ -656,6 +665,18 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           expires: expires.toISOString().slice(0, 10),
         };
         dispatch({ type: "clinic.created", value: clinic, actor });
+        if (input.adminName && input.adminEmail) {
+          const membership: StaffMember = {
+            id: createId("AD"),
+            clinicId: clinic.id,
+            name: input.adminName,
+            email: input.adminEmail,
+            phone: input.adminPhone ?? "",
+            role: "clinic_admin",
+            status: "Invited",
+          };
+          dispatch({ type: "staff.invited", value: membership, actor });
+        }
         return clinic;
       },
       createDoctor: async (input) => {
