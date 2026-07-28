@@ -11,9 +11,15 @@ import {
 
 test("each portal can reach its own operational routes", () => {
   assert.equal(canAccessPath("super_admin", "/app/clinics"), true);
+  assert.equal(canAccessPath("super_admin", "/app/users"), true);
   assert.equal(canAccessPath("clinic_admin", "/app/doctors"), true);
   assert.equal(canAccessPath("doctor", "/app/followups"), true);
   assert.equal(canAccessPath("receptionist", "/app/billing/new"), true);
+});
+
+test("super administrators can perform the staff invite operation", () => {
+  assert.equal(hasPermission("super_admin", "users.manage"), true);
+  assert.equal(hasPermission("super_admin", "people.manage"), true);
 });
 
 test("platform administrators cannot open clinical records", () => {
