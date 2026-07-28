@@ -5,12 +5,15 @@ import {
   useEffect,
   useMemo,
   useReducer,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 import { useAuth, type AuthUser } from "./auth";
 import { hasPermission, type Permission } from "./access-control";
 import { supabaseConfig } from "./supabase/config";
+import { getSupabaseBrowserClient } from "./supabase/client";
+import { subscribeToWorkspaceChanges } from "./supabase/workspace-realtime";
 import { SupabaseWorkspaceRepository } from "./supabase/workspace-repository";
 import type {
   PatientPage,
@@ -404,6 +407,8 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   );
   const [isLoading, setIsLoading] = useState(!supabaseConfig.demoMode);
   const [error, setError] = useState<string | null>(null);
+  const loadSequence = useRef(0);
+  const visibleLoads = useRef(0);
   const repository = useMemo(
     () => (supabaseConfig.demoMode || typeof window === "undefined"
       ? null
@@ -411,20 +416,34 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const refresh = useCallback(async () => {
+  const loadSnapshot = useCallback(async (showLoading: boolean) => {
     if (!repository || !user) return;
-    setIsLoading(true);
-    setError(null);
+    const sequence = ++loadSequence.current;
+    if (showLoading) {
+      visibleLoads.current += 1;
+      setIsLoading(true);
+      setError(null);
+    }
     try {
-      dispatch({ type: "snapshot.loaded", value: await repository.load() });
+      const snapshot = await repository.load();
+      if (sequence === loadSequence.current) {
+        dispatch({ type: "snapshot.loaded", value: snapshot });
+      }
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : "Unable to load hospital data";
-      setError(message);
+      if (showLoading && sequence === loadSequence.current) {
+        setError(message);
+      }
       throw cause;
     } finally {
-      setIsLoading(false);
+      if (showLoading) {
+        visibleLoads.current = Math.max(0, visibleLoads.current - 1);
+        if (visibleLoads.current === 0) setIsLoading(false);
+      }
     }
   }, [repository, user]);
+
+  const refresh = useCallback(() => loadSnapshot(true), [loadSnapshot]);
 
   useEffect(() => {
     if (!repository) return;
@@ -435,6 +454,50 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     }
     void refresh().catch(() => undefined);
   }, [refresh, repository, user]);
+
+  useEffect(() => {
+    if (!repository || !user?.clinicId) return;
+
+    let disposed = false;
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    let refreshInFlight = false;
+    let refreshPending = false;
+
+    const runRefresh = async () => {
+      if (refreshInFlight) {
+        refreshPending = true;
+        return;
+      }
+
+      refreshInFlight = true;
+      do {
+        refreshPending = false;
+        await loadSnapshot(false).catch(() => undefined);
+      } while (!disposed && refreshPending);
+      refreshInFlight = false;
+    };
+
+    const scheduleRefresh = () => {
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => {
+        if (!disposed) void runRefresh();
+      }, 250);
+    };
+
+    const unsubscribe = subscribeToWorkspaceChanges({
+      client: getSupabaseBrowserClient(),
+      hospitalId: user.clinicId,
+      role: user.role,
+      userId: user.userId,
+      onChange: scheduleRefresh,
+    });
+
+    return () => {
+      disposed = true;
+      clearTimeout(refreshTimer);
+      void unsubscribe();
+    };
+  }, [loadSnapshot, repository, user?.clinicId, user?.role, user?.userId]);
 
   const value = useMemo<WorkspaceData>(() => {
     const clinicId = user?.clinicId;
