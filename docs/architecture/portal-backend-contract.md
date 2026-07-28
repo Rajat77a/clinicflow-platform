@@ -1,9 +1,11 @@
 # ClinicFlow Portal Backend Contract
 
 This document defines the security and data invariants that every production
-backend adapter must preserve. The current `WorkspaceDataProvider` is an
-in-memory development adapter. It proves cross-portal behavior, but it is not a
-production medical-record store.
+backend adapter must preserve. `WorkspaceDataProvider` selects an in-memory
+adapter only when `VITE_DEMO_MODE=true`; configured non-demo deployments use
+`SupabaseWorkspaceRepository` and hospital-filtered Realtime subscriptions.
+Demo tests prove interface behavior, while database and production-backed tests
+must prove the same behavior at the authorization boundary.
 
 ## Portal identities
 
@@ -81,11 +83,10 @@ Before real hospital use, the backend must provide:
 Marketing claims such as HIPAA, GDPR, or ISO certification must not be presented
 as achieved until they have been independently verified.
 
-## Adapter migration
+## Adapter verification
 
-Replace the in-memory command implementations behind
-`WorkspaceDataProvider` with authenticated API calls and React Query cache
-updates. Keep route permissions and tenant-scoped selectors as defense in depth,
-then add equivalent server middleware and database policies. The UI must handle
+Keep route permissions and tenant-scoped selectors as defense in depth. Every
+Supabase command must remain transactional, idempotent where retried, protected
+by row-level security, and covered by denied-access tests. The UI must handle
 loading, validation, conflict, offline, unauthorized, and retry states for every
 command before production rollout.

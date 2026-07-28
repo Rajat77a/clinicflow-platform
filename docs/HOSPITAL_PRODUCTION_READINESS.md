@@ -27,6 +27,8 @@ Implemented foundations:
 - Placeholder and sample-data modules hidden and blocked in production.
 - CI runs unit tests, four-role browser workflows, typecheck, lint, and the
   production build before merge.
+- Database CI replays every migration on a clean Supabase stack, runs the
+  security foundation suite, and rejects database lint errors.
 
 ## Critical Release Gates
 
