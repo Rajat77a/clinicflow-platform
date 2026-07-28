@@ -182,16 +182,27 @@ async function main() {
   const realtimeEvent = new Promise((resolve) => {
     resolveRealtime = resolve;
   });
-  const channel = receptionist.client.channel(`integration-${randomUUID()}`).on(
-    "postgres_changes",
-    {
-      event: "INSERT",
-      schema: "public",
-      table: "patients",
-      filter: `hospital_id=eq.${hospital.id}`,
-    },
-    (payload) => resolveRealtime(payload.new.id),
-  );
+  let resolvePostgresReady;
+  const postgresReady = new Promise((resolve) => {
+    resolvePostgresReady = resolve;
+  });
+  const channel = receptionist.client
+    .channel(`integration-${randomUUID()}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "INSERT",
+        schema: "public",
+        table: "patients",
+        filter: `hospital_id=eq.${hospital.id}`,
+      },
+      (payload) => resolveRealtime(payload.new.id),
+    )
+    .on("system", {}, (payload) => {
+      if (payload.extension === "postgres_changes" && payload.status === "ok") {
+        resolvePostgresReady();
+      }
+    });
   await new Promise((resolve, reject) => {
     const timeout = setTimeout(() => reject(new Error("Realtime subscription timed out")), 10_000);
     channel.subscribe((status) => {
@@ -205,6 +216,12 @@ async function main() {
       }
     });
   });
+  await Promise.race([
+    postgresReady,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Postgres Changes subscription was not ready")), 10_000),
+    ),
+  ]);
 
   const idempotencyKey = () => `integration-${randomUUID()}`;
   const { data: patientId, error: patientError } = await receptionist.client.rpc(
