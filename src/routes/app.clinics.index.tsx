@@ -1,4 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -6,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useWorkspaceData, type Clinic } from "@/lib/workspace-data";
 import { supabaseConfig } from "@/lib/supabase/config";
-import { Search, Plus, Download } from "lucide-react";
+import { Search, Plus, Download, Power, MapPin } from "lucide-react";
 import { downloadCSV } from "@/lib/exporters";
 import { toast } from "sonner";
 
@@ -14,11 +15,12 @@ export const Route = createFileRoute("/app/clinics/")({ component: ClinicsPage }
 
 function ClinicsPage() {
   const { clinics } = useWorkspaceData();
+  const [access, setAccess] = useState<Record<string, "Allowed" | "Suspended">>({});
   const exportClinic = (c: Clinic) => {
     const summary = [{
-      clinicId: c.id, clinicName: c.name, city: c.city,
+      clinicId: c.id, clinicName: c.name, location: c.city,
       doctors: c.doctors, receptionists: c.receptionists, patients: c.patients,
-      plan: c.plan, status: c.status, renews: c.expires,
+      plan: c.plan, subscriptionStatus: c.status, renews: c.expires, access: access[c.id] ?? "Allowed",
     }];
     downloadCSV(`${c.id}-summary.csv`, summary);
     toast.success(`Exported ${c.name}`);
@@ -26,9 +28,9 @@ function ClinicsPage() {
 
   const exportAll = () => {
     const combined = clinics.map(c => ({
-      clinicId: c.id, clinicName: c.name, city: c.city,
+      clinicId: c.id, clinicName: c.name, location: c.city,
       doctors: c.doctors, receptionists: c.receptionists, patients: c.patients,
-      plan: c.plan, status: c.status, renews: c.expires,
+      plan: c.plan, subscriptionStatus: c.status, renews: c.expires, access: access[c.id] ?? "Allowed",
     }));
     downloadCSV("clinicflow-all-clinics.csv", combined);
     toast.success("Exported all clinics");
@@ -38,7 +40,7 @@ function ClinicsPage() {
     <>
       <PageHeader
         title={supabaseConfig.demoMode ? "Clinics" : "Hospital"}
-        description={supabaseConfig.demoMode ? "All clinics on ClinicFlow." : "This dedicated ClinicFlow installation."}
+        description={supabaseConfig.demoMode ? "Manage clinic subscriptions, access, staff counts and exports." : "This dedicated ClinicFlow installation."}
         actions={supabaseConfig.demoMode ? (
           <div className="flex gap-2">
             <Button variant="outline" onClick={exportAll}>
@@ -69,7 +71,8 @@ function ClinicsPage() {
                 <TableHead className="text-right">Receptionists</TableHead>
                 <TableHead className="text-right">Patients</TableHead>
                 <TableHead>Renews</TableHead>
-                <TableHead>Status</TableHead>
+                <TableHead>Subscription</TableHead>
+                <TableHead>Access</TableHead>
                 {supabaseConfig.demoMode && <TableHead className="text-right">Export</TableHead>}
               </TableRow>
             </TableHeader>
@@ -87,7 +90,12 @@ function ClinicsPage() {
                       </div>
                     </div>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{c.city}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    <div className="flex items-center gap-1.5">
+                      <MapPin className="h-3.5 w-3.5" />
+                      {c.city}
+                    </div>
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{c.doctors}</TableCell>
                   <TableCell className="text-right tabular-nums">{c.receptionists}</TableCell>
                   <TableCell className="text-right tabular-nums">{c.patients.toLocaleString()}</TableCell>
@@ -96,6 +104,20 @@ function ClinicsPage() {
                     <Badge variant={c.status === "Active" ? "secondary" : c.status === "Expiring" ? "outline" : "destructive"}>
                       {c.status}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      size="sm"
+                      variant={(access[c.id] ?? "Allowed") === "Allowed" ? "outline" : "destructive"}
+                      onClick={() => {
+                        const next = (access[c.id] ?? "Allowed") === "Allowed" ? "Suspended" : "Allowed";
+                        setAccess({ ...access, [c.id]: next });
+                        toast.success(`${c.name} access set to ${next.toLowerCase()}`);
+                      }}
+                    >
+                      <Power className="mr-1 h-3.5 w-3.5" />
+                      {access[c.id] ?? "Allowed"}
+                    </Button>
                   </TableCell>
                   {supabaseConfig.demoMode && (
                     <TableCell className="text-right">

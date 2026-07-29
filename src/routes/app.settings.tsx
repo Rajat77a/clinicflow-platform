@@ -188,17 +188,11 @@ function PlatformSettings() {
             <div className="space-y-1.5"><Label>Current password</Label><Input type="password" className="h-11 rounded-xl" /></div>
             <div className="space-y-1.5"><Label>New password</Label><Input type="password" className="h-11 rounded-xl" /></div>
             <div className="space-y-1.5"><Label>Confirm new password</Label><Input type="password" className="h-11 rounded-xl" /></div>
-            <Button onClick={() => toast.success("Password updated")}>Update password</Button>
+            <div className="space-y-1.5"><Label>Email OTP confirmation</Label><Input inputMode="numeric" maxLength={6} className="h-11 rounded-xl" placeholder="6-digit OTP" /></div>
+            <Button onClick={() => toast.success("Password updated after OTP confirmation")}>Update password</Button>
           </div>
           <div className="rounded-2xl border bg-card p-6 shadow-soft space-y-3">
-            <h3 className="font-display text-base font-semibold">Security settings</h3>
-            <div className="flex items-center justify-between rounded-xl bg-muted/40 p-3">
-              <div>
-                <div className="text-sm font-medium">Two-factor authentication</div>
-                <div className="text-xs text-muted-foreground">Use an authenticator app for sign-in.</div>
-              </div>
-              <Switch />
-            </div>
+            <h3 className="font-display text-base font-semibold">Session protection</h3>
             <div className="flex items-center justify-between rounded-xl bg-muted/40 p-3">
               <div>
                 <div className="text-sm font-medium">Login alerts</div>

@@ -70,7 +70,10 @@ function DownloadCenter() {
     active.forEach(d => {
       const prefix = role === "super_admin" && scope !== "all"
         ? `${scope}-` : "";
-      downloadCSV(`clinicflow-${prefix}${d.key}-${stamp}.csv`, d.rows);
+      const rows = role === "super_admin" && scope !== "all"
+        ? d.rows.filter(row => row.clinicId === scope || row.id === scope)
+        : d.rows;
+      downloadCSV(`clinicflow-${prefix}${d.key}-${stamp}.csv`, rows);
     });
     toast.success(`Exported ${active.length} file${active.length === 1 ? "" : "s"} · audit log recorded`);
   };
