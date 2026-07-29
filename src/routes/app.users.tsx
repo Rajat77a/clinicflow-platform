@@ -25,10 +25,8 @@ function UsersPage() {
   const { user } = useAuth();
   const { staffMembers, inviteClinicAdmin } = useWorkspaceData();
   const [dialogOpen, setDialogOpen] = useState(false);
-  const [superDialogOpen, setSuperDialogOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "" });
-  const [superForm, setSuperForm] = useState({ name: "", email: "", temporaryPassword: "" });
 
   const submit = async () => {
     if (!form.name.trim() || !form.email.trim()) {
@@ -52,43 +50,13 @@ function UsersPage() {
     }
   };
 
-  const submitSuperAdmin = async () => {
-    if (!superForm.name.trim() || !superForm.email.trim() || !superForm.temporaryPassword.trim()) {
-      toast.error("Name, email and temporary password are required");
-      return;
-    }
-    toast.success(`Super Admin credentials queued for ${superForm.email.trim()}`);
-    setSuperDialogOpen(false);
-    setSuperForm({ name: "", email: "", temporaryPassword: "" });
-  };
-
   return (
     <>
       <PageHeader
         title="Users"
         description="Hospital staff with access to ClinicFlow."
         actions={user?.role === "super_admin" ? (
-          <div className="flex flex-wrap gap-2">
-            <Dialog open={superDialogOpen} onOpenChange={setSuperDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline"><UserPlus className="mr-1.5 h-4 w-4" />Add Super Admin</Button>
-              </DialogTrigger>
-              <DialogContent className="max-w-md">
-                <DialogHeader>
-                  <DialogTitle>Add Super Admin</DialogTitle>
-                  <DialogDescription>
-                    Create another platform administrator. The role is fixed and cannot be changed from settings.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="space-y-3">
-                  <div className="space-y-1.5"><Label>Full name</Label><Input className="h-11 rounded-xl" value={superForm.name} onChange={event => setSuperForm({ ...superForm, name: event.target.value })} /></div>
-                  <div className="space-y-1.5"><Label>Email</Label><Input type="email" className="h-11 rounded-xl" value={superForm.email} onChange={event => setSuperForm({ ...superForm, email: event.target.value })} /></div>
-                  <div className="space-y-1.5"><Label>Temporary password</Label><Input type="password" className="h-11 rounded-xl" value={superForm.temporaryPassword} onChange={event => setSuperForm({ ...superForm, temporaryPassword: event.target.value })} /></div>
-                </div>
-                <DialogFooter><Button onClick={submitSuperAdmin} className="w-full">Create Super Admin</Button></DialogFooter>
-              </DialogContent>
-            </Dialog>
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
                 <Button><UserPlus className="mr-1.5 h-4 w-4" />Invite Clinic Admin</Button>
               </DialogTrigger>
@@ -136,8 +104,7 @@ function UsersPage() {
                 </Button>
               </DialogFooter>
               </DialogContent>
-            </Dialog>
-          </div>
+          </Dialog>
         ) : undefined}
       />
 

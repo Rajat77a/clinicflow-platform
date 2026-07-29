@@ -18,19 +18,19 @@ const migrationSource = await readFile(
   ),
   "utf8",
 );
-const superAdminMfaOverrideSource = await readFile(
+const restoredMfaSource = await readFile(
   new URL(
-    "../../supabase/migrations/20260729100000_remove_super_admin_mfa_requirement.sql",
+    "../../supabase/migrations/20260729113000_restore_privileged_mfa_requirement.sql",
     import.meta.url,
   ),
   "utf8",
 );
 
-test("clinic admin MFA blocks workspace loading until AAL2 verification", () => {
+test("privileged MFA blocks workspace loading until AAL2 verification", () => {
   assert.match(rootSource, /<PrivilegedMfaGate[\s\S]*<WorkspaceDataProvider>/);
   assert.match(rootSource, /key=\{user\?\.userId \?\? "anonymous"\}/);
+  assert.match(componentSource, /user\?\.role === "super_admin"/);
   assert.match(componentSource, /user\?\.role === "clinic_admin"/);
-  assert.doesNotMatch(componentSource, /user\?\.role === "super_admin"/);
   assert.match(componentSource, /currentLevel === "aal2"/);
   assert.match(componentSource, /challengeAndVerify/);
 });
@@ -46,17 +46,17 @@ test("database permissions deny privileged AAL1 tokens", () => {
   assert.match(migrationSource, /m\.role_code not in \('super_admin', 'clinic_admin'\)/);
   assert.match(migrationSource, /auth\.jwt\(\) ->> 'aal'/);
   assert.match(migrationSource, /= 'aal2'/);
-  assert.match(superAdminMfaOverrideSource, /m\.role_code <> 'clinic_admin'/);
-  assert.doesNotMatch(superAdminMfaOverrideSource, /super_admin.+aal2/s);
+  assert.match(restoredMfaSource, /m\.role_code not in \('super_admin', 'clinic_admin'\)/);
+  assert.match(restoredMfaSource, /auth\.jwt\(\) ->> 'aal'/);
+  assert.match(restoredMfaSource, /= 'aal2'/);
 });
 
-test("clinic admin staff invitation verifies AAL before service-role work", () => {
+test("privileged staff invitation verifies AAL before service-role work", () => {
   const aalCheck = functionSource.indexOf("getAuthenticatorAssuranceLevel");
   const adminInvite = functionSource.indexOf("admin.inviteUserByEmail");
   assert.ok(aalCheck > 0);
   assert.ok(adminInvite > aalCheck);
-  assert.match(functionSource, /actor\.role_code === "clinic_admin"/);
-  assert.doesNotMatch(functionSource, /actor\.role_code === "super_admin" \|\| actor\.role_code === "clinic_admin"/);
+  assert.match(functionSource, /actor\.role_code === "super_admin" \|\| actor\.role_code === "clinic_admin"/);
   assert.match(functionSource, /assurance\.currentLevel !== "aal2"/);
 });
 

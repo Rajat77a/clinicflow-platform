@@ -72,7 +72,7 @@ function ClinicsPage() {
                 <TableHead className="text-right">Patients</TableHead>
                 <TableHead>Renews</TableHead>
                 <TableHead>Subscription</TableHead>
-                <TableHead>Access</TableHead>
+                {supabaseConfig.demoMode && <TableHead>Access</TableHead>}
                 {supabaseConfig.demoMode && <TableHead className="text-right">Export</TableHead>}
               </TableRow>
             </TableHeader>
@@ -105,20 +105,22 @@ function ClinicsPage() {
                       {c.status}
                     </Badge>
                   </TableCell>
-                  <TableCell>
-                    <Button
-                      size="sm"
-                      variant={(access[c.id] ?? "Allowed") === "Allowed" ? "outline" : "destructive"}
-                      onClick={() => {
-                        const next = (access[c.id] ?? "Allowed") === "Allowed" ? "Suspended" : "Allowed";
-                        setAccess({ ...access, [c.id]: next });
-                        toast.success(`${c.name} access set to ${next.toLowerCase()}`);
-                      }}
-                    >
-                      <Power className="mr-1 h-3.5 w-3.5" />
-                      {access[c.id] ?? "Allowed"}
-                    </Button>
-                  </TableCell>
+                  {supabaseConfig.demoMode && (
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant={(access[c.id] ?? "Allowed") === "Allowed" ? "outline" : "destructive"}
+                        onClick={() => {
+                          const next = (access[c.id] ?? "Allowed") === "Allowed" ? "Suspended" : "Allowed";
+                          setAccess({ ...access, [c.id]: next });
+                          toast.success(`Demo access set to ${next.toLowerCase()} for ${c.name}`);
+                        }}
+                      >
+                        <Power className="mr-1 h-3.5 w-3.5" />
+                        {access[c.id] ?? "Allowed"}
+                      </Button>
+                    </TableCell>
+                  )}
                   {supabaseConfig.demoMode && (
                     <TableCell className="text-right">
                       <Button size="sm" variant="ghost" onClick={() => exportClinic(c)}>
