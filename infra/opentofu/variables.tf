@@ -38,4 +38,3 @@ variable "demo_mode" {
     error_message = "Demo mode must be disabled in production."
   }
 }
-

@@ -6,4 +6,3 @@ output "runtime_environment" {
     VITE_SUPABASE_URL          = var.supabase_url
   }
 }
-

@@ -58,4 +58,3 @@ stop workers and add a corrective migration; never edit an applied migration.
 
 Do not enable document permissions, external patient sharing, or production
 deployment from this phase without a separate reviewed approval.
-

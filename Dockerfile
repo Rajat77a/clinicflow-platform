@@ -17,4 +17,3 @@ COPY --chown=bun:bun --from=build /app/.output ./.output
 USER bun
 EXPOSE 3000
 CMD ["bun", ".output/server/index.mjs"]
-

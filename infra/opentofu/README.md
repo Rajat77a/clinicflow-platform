@@ -13,4 +13,3 @@ Copy `production.tfvars.example` to an ignored `production.tfvars` and replace
 the example values. Keep publishable and secret keys in the selected host's
 secret manager. A provider-specific module should be added only after a hospital
 selects its approved infrastructure and data residency region.
-
