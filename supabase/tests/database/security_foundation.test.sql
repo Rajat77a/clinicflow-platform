@@ -73,6 +73,82 @@ end
 $$;
 
 do $$
+declare
+  missing_queues text[];
+begin
+  select array_agg(required_queue order by required_queue)
+  into missing_queues
+  from unnest(array[
+    'document_scanning',
+    'notification_delivery',
+    'security_alerts'
+  ]) required_queue
+  where not exists (
+    select 1
+    from pgmq.list_queues() existing
+    where existing.queue_name = required_queue
+  );
+
+  if missing_queues is not null then
+    raise exception 'Required system queues are missing: %', missing_queues;
+  end if;
+
+  if has_schema_privilege('authenticated', 'pgmq', 'USAGE')
+    or has_schema_privilege('anon', 'pgmq', 'USAGE') then
+    raise exception 'Browser roles can access raw queue payloads';
+  end if;
+
+  if has_function_privilege(
+    'authenticated',
+    'public.enqueue_system_job(text, jsonb, integer)',
+    'EXECUTE'
+  ) or has_function_privilege(
+    'authenticated',
+    'public.read_system_jobs(text, integer, integer)',
+    'EXECUTE'
+  ) then
+    raise exception 'Authenticated clients can enqueue or claim system jobs';
+  end if;
+end
+$$;
+
+do $$
+begin
+  if not exists (
+    select 1
+    from storage.buckets
+    where id = 'hospital-document-quarantine'
+      and public = false
+      and file_size_limit = 26214400
+      and allowed_mime_types @> array[
+        'application/pdf',
+        'image/jpeg',
+        'image/png'
+      ]::text[]
+      and allowed_mime_types <@ array[
+        'application/pdf',
+        'image/jpeg',
+        'image/png'
+      ]::text[]
+  ) then
+    raise exception 'Private document quarantine bucket is missing or unsafe';
+  end if;
+
+  if has_function_privilege(
+    'authenticated',
+    'public.register_document_quarantine(uuid, uuid, uuid, text, text, text, bigint, text, text)',
+    'EXECUTE'
+  ) or has_function_privilege(
+    'authenticated',
+    'public.record_document_scan_result(uuid, boolean, text, text, text, text)',
+    'EXECUTE'
+  ) then
+    raise exception 'Authenticated clients can bypass the document scanner boundary';
+  end if;
+end
+$$;
+
+do $$
 begin
   if has_table_privilege('authenticated', 'public.roles', 'INSERT')
     or has_table_privilege('authenticated', 'public.roles', 'UPDATE')
@@ -135,7 +211,17 @@ begin
     from storage.buckets
     where id = 'hospital-documents'
       and public = false
-      and file_size_limit = 104857600
+      and file_size_limit = 26214400
+      and allowed_mime_types @> array[
+        'application/pdf',
+        'image/jpeg',
+        'image/png'
+      ]::text[]
+      and allowed_mime_types <@ array[
+        'application/pdf',
+        'image/jpeg',
+        'image/png'
+      ]::text[]
   ) then
     raise exception 'Private hospital document bucket is missing or misconfigured';
   end if;

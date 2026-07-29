@@ -26,7 +26,12 @@ const SECURITY_HEADERS: ReadonlyArray<readonly [string, string]> = [
   ["x-permitted-cross-domain-policies", "none"],
 ];
 
-export function applySecurityHeaders(response: Response, pathname: string, requestId: string) {
+export function applySecurityHeaders(
+  response: Response,
+  pathname: string,
+  requestId: string,
+  traceparent?: string | null,
+) {
   const headers = new Headers(response.headers);
 
   for (const [name, value] of SECURITY_HEADERS) {
@@ -34,6 +39,7 @@ export function applySecurityHeaders(response: Response, pathname: string, reque
   }
 
   headers.set("x-request-id", requestId);
+  if (traceparent) headers.set("traceparent", traceparent);
 
   if (pathname === "/login" || pathname.startsWith("/app")) {
     headers.set("cache-control", "private, no-store, max-age=0");
@@ -59,6 +65,23 @@ export function healthResponse(requestId: string) {
       { headers: { "cache-control": "no-store" } },
     ),
     "/healthz",
+    requestId,
+  );
+}
+
+export function readinessResponse(requestId: string, configured: boolean) {
+  return applySecurityHeaders(
+    Response.json(
+      {
+        status: configured ? "ready" : "not_ready",
+        service: "clinicflow",
+      },
+      {
+        status: configured ? 200 : 503,
+        headers: { "cache-control": "no-store" },
+      },
+    ),
+    "/readyz",
     requestId,
   );
 }

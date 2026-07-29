@@ -10,6 +10,7 @@ team.
 `.github/workflows/production-smoke.yml` runs every 30 minutes and checks:
 
 - application and login availability;
+- application readiness without disclosing configuration values;
 - required browser security headers;
 - response-time budgets;
 - Supabase Auth health; and
@@ -18,6 +19,28 @@ team.
 A failed workflow is the initial alert. Repository administrators must enable
 GitHub Actions failure notifications and assign an on-call owner before go-live.
 No patient identifiers, response bodies, tokens, or credentials are recorded.
+
+Application and staff-invitation responses carry `X-Request-ID`. Server logs
+use that identifier with method, path, status, and duration only. Never add
+request bodies, patient names, contact details, prescriptions, or tokens to
+operational logs.
+
+## Durable Work Queues
+
+The database defines service-role-only `pgmq` queues for document scanning,
+notification delivery, and security alerts. Queue contents are inaccessible to
+browser roles. `queue_operational_metrics()` exposes payload-free counts to
+authorized audit users and workers.
+
+Workers are not deployed in Phase 1. Until the corresponding worker and alert
+route are tested, no user-facing workflow may depend on these queues.
+
+## Portable Runtime
+
+`Dockerfile` builds a non-root production image and `compose.yaml` runs it with
+a read-only filesystem, no-new-privileges, and a `/readyz` health check.
+`infra/opentofu` validates the non-secret environment contract. These files do
+not alter Vercel or provision paid resources.
 
 ## Bounded Load Check
 

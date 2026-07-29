@@ -48,6 +48,13 @@ const healthBody = await health.response.json();
 assert.equal(healthBody.status, "ok");
 assert.equal(healthBody.service, "clinicflow");
 
+const readiness = await get("/readyz");
+requireSecurityHeaders(readiness.response, "/readyz");
+const readinessBody = await readiness.response.json();
+assert.equal(readinessBody.status, "ready");
+assert.equal(readinessBody.service, "clinicflow");
+assert.deepEqual(Object.keys(readinessBody).sort(), ["service", "status"]);
+
 const login = await get("/login");
 requireSecurityHeaders(login.response, "/login");
 assert.match(login.response.headers.get("cache-control") ?? "", /no-store/);
@@ -79,7 +86,7 @@ if (functionUrl) {
       Origin: baseUrl,
       "Access-Control-Request-Method": "POST",
       "Access-Control-Request-Headers":
-        "authorization, apikey, content-type, idempotency-key, x-client-info",
+        "authorization, apikey, content-type, idempotency-key, x-client-info, x-request-id",
     },
     signal: AbortSignal.timeout(timeoutMs),
   });
@@ -92,6 +99,7 @@ if (functionUrl) {
     "content-type",
     "idempotency-key",
     "x-client-info",
+    "x-request-id",
   ]) {
     assert.match(allowedHeaders, new RegExp(`(?:^|,\\s*)${header}(?:,|$)`, "i"));
   }
@@ -99,5 +107,6 @@ if (functionUrl) {
 
 console.log(
   `ClinicFlow smoke check passed for ${baseUrl} ` +
-    `(health ${health.latencyMs}ms, login ${login.latencyMs}ms)`,
+    `(health ${health.latencyMs}ms, readiness ${readiness.latencyMs}ms, ` +
+    `login ${login.latencyMs}ms)`,
 );

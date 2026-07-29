@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { applySecurityHeaders, healthResponse } from "./security-headers.ts";
+import {
+  applySecurityHeaders,
+  healthResponse,
+  readinessResponse,
+} from "./security-headers.ts";
 
 test("applies browser security headers to every response", async () => {
   const response = applySecurityHeaders(new Response("ok"), "/", "request-1");
@@ -29,4 +33,17 @@ test("health response contains no deployment secrets", async () => {
   assert.equal(body.status, "ok");
   assert.equal(body.service, "clinicflow");
   assert.deepEqual(Object.keys(body).sort(), ["service", "status", "timestamp"]);
+});
+
+test("readiness reports configuration without exposing dependency details", async () => {
+  const ready = readinessResponse("request-4", true);
+  const unavailable = readinessResponse("request-5", false);
+
+  assert.equal(ready.status, 200);
+  assert.deepEqual(await ready.json(), { service: "clinicflow", status: "ready" });
+  assert.equal(unavailable.status, 503);
+  assert.deepEqual(await unavailable.json(), {
+    service: "clinicflow",
+    status: "not_ready",
+  });
 });
