@@ -158,7 +158,6 @@ export interface ClinicAdminInput {
   name: string;
   email: string;
   phone: string;
-  temporaryPassword?: string;
 }
 
 export interface ClinicInput {
@@ -171,7 +170,6 @@ export interface ClinicInput {
   adminName?: string;
   adminEmail?: string;
   adminPhone?: string;
-  temporaryPassword?: string;
 }
 
 type Command =

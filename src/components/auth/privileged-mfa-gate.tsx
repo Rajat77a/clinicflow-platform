@@ -37,7 +37,8 @@ export function PrivilegedMfaGate({ children }: { children: ReactNode }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const requiresMfa = !isDemoMode && user?.role === "clinic_admin";
+  const requiresMfa =
+    !isDemoMode && (user?.role === "super_admin" || user?.role === "clinic_admin");
 
   const inspectMfa = useCallback(async () => {
     if (!requiresMfa) {

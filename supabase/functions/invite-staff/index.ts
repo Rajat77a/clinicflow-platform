@@ -108,7 +108,7 @@ Deno.serve(async (request) => {
       return response(403, { error: "Active hospital membership required" });
     }
 
-    if (actor.role_code === "clinic_admin") {
+    if (actor.role_code === "super_admin" || actor.role_code === "clinic_admin") {
       const { data: assurance, error: assuranceError } =
         await userClient.auth.mfa.getAuthenticatorAssuranceLevel(
           authorization.slice("Bearer ".length),

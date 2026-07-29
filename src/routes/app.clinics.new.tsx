@@ -34,7 +34,6 @@ function AddClinic() {
     adminName: "",
     adminEmail: "",
     adminPhone: "",
-    temporaryPassword: "",
   });
   const [isSaving, setIsSaving] = useState(false);
 
@@ -55,8 +54,8 @@ function AddClinic() {
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!form.name.trim() || !form.address.trim()) return toast.error("Clinic name and address are required");
-    if (!form.adminName.trim() || !form.adminEmail.trim() || !form.temporaryPassword.trim()) {
-      return toast.error("Primary admin name, email and temporary password are required");
+    if (!form.adminName.trim() || !form.adminEmail.trim()) {
+      return toast.error("Primary admin name and email are required");
     }
 
     setIsSaving(true);
@@ -72,9 +71,8 @@ function AddClinic() {
         adminName: form.adminName.trim(),
         adminEmail: form.adminEmail.trim(),
         adminPhone: form.adminPhone.trim(),
-        temporaryPassword: form.temporaryPassword,
       });
-      toast.success(`Clinic ${clinic.id} created and admin credentials queued for email`);
+      toast.success(`Demo clinic ${clinic.id} and invited admin created`);
       navigate({ to: "/app/clinics" });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to create the clinic");
@@ -121,12 +119,9 @@ function AddClinic() {
               <Field label="Phone" span={3}>
                 <Input className="h-11 rounded-xl" value={form.adminPhone} onChange={event => setForm({ ...form, adminPhone: event.target.value })} />
               </Field>
-              <Field label="Temporary password" span={3}>
-                <Input type="password" className="h-11 rounded-xl" value={form.temporaryPassword} onChange={event => setForm({ ...form, temporaryPassword: event.target.value })} />
-              </Field>
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
-              Clinic Admins cannot self-register. Super Admin creates the account and the credentials are shared through the controlled onboarding email.
+              Production onboarding uses a one-time Supabase invitation. ClinicFlow never creates, stores, or emails temporary passwords.
             </p>
           </section>
         </div>
