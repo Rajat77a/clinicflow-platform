@@ -24,6 +24,7 @@ const repositorySource = await readFile(
   new URL("./supabase/workspace-repository.ts", import.meta.url),
   "utf8",
 );
+const workspaceSource = await readFile(new URL("./workspace-data.tsx", import.meta.url), "utf8");
 const usersSource = await readFile(new URL("../routes/app.users.tsx", import.meta.url), "utf8");
 const offboardingMigration = await readFile(
   new URL("../../supabase/migrations/20260730100000_safe_staff_offboarding.sql", import.meta.url),
@@ -58,6 +59,8 @@ test("invite and recovery password setup survives the PKCE redirect", () => {
 
 test("staff offboarding revokes access without deleting hospital history", () => {
   assert.match(repositorySource, /rpc\("deactivate_staff_member"/);
+  assert.match(workspaceSource, /target\.id === actor\.userId/);
+  assert.doesNotMatch(workspaceSource, /target\.id === actor\.id/);
   assert.match(usersSource, /Existing clinical and audit records will be preserved/);
   assert.match(offboardingMigration, /not private\.has_permission\('people\.manage'\)/);
   assert.match(offboardingMigration, /p_user_id = auth\.uid\(\)/);

@@ -761,7 +761,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         const actor = requireUser(user, "people.manage");
         const target = state.staffMembers.find((member) => member.id === userId);
         if (!target) throw new Error("Staff member was not found");
-        if (target.id === actor.id) throw new Error("You cannot deactivate your own account");
+        if (target.id === actor.userId) throw new Error("You cannot deactivate your own account");
         if (
           target.role === "super_admin"
           || (actor.role === "clinic_admin" && target.role === "clinic_admin")
