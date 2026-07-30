@@ -1,6 +1,15 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Activity, ArrowRight, Building2, ShieldCheck, Stethoscope, UserCog } from "lucide-react";
+import {
+  Activity,
+  ArrowRight,
+  Building2,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+  Stethoscope,
+  UserCog,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -49,6 +58,7 @@ function Login() {
   const [role, setRole] = useState<Role>("clinic_admin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -174,16 +184,29 @@ function Login() {
                   }}
                 />
               </div>
-              <Input
-                id="password"
-                type="password"
-                placeholder="Enter your password"
-                className="h-11 rounded-xl"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                autoComplete="current-password"
-                required
-              />
+              <div className="relative">
+                <Input
+                  id="password"
+                  type={showPassword ? "text" : "password"}
+                  placeholder="Enter your password"
+                  className="h-11 rounded-xl pr-11"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  autoComplete="current-password"
+                  required
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1 h-9 w-9"
+                  onClick={() => setShowPassword((visible) => !visible)}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                  title={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
             </div>
 
             {isDemoMode && (
@@ -268,6 +291,8 @@ function ForgotPasswordDialog({
   const [email, setEmail] = useState("");
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
+  const [showPw, setShowPw] = useState(false);
+  const [showPw2, setShowPw2] = useState(false);
 
   useEffect(() => {
     if (passwordSetupRequired) {
@@ -281,6 +306,8 @@ function ForgotPasswordDialog({
     setEmail("");
     setPw("");
     setPw2("");
+    setShowPw(false);
+    setShowPw2(false);
   };
 
   const sendCode = async (e: React.FormEvent) => {
@@ -386,25 +413,53 @@ function ForgotPasswordDialog({
           <form onSubmit={savePw} className="space-y-3">
             <div className="space-y-1.5">
               <Label>New password</Label>
-              <Input
-                type="password"
-                value={pw}
-                onChange={(e) => setPw(e.target.value)}
-                placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
-                className="h-11 rounded-xl"
-                autoFocus
-              />
+              <div className="relative">
+                <Input
+                  type={showPw ? "text" : "password"}
+                  value={pw}
+                  onChange={(e) => setPw(e.target.value)}
+                  placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+                  className="h-11 rounded-xl pr-11"
+                  autoComplete="new-password"
+                  autoFocus
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1 h-9 w-9"
+                  onClick={() => setShowPw((visible) => !visible)}
+                  aria-label={showPw ? "Hide new password" : "Show new password"}
+                  title={showPw ? "Hide new password" : "Show new password"}
+                >
+                  {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
             </div>
 
             <div className="space-y-1.5">
               <Label>Confirm new password</Label>
-              <Input
-                type="password"
-                value={pw2}
-                onChange={(e) => setPw2(e.target.value)}
-                placeholder="Re-enter password"
-                className="h-11 rounded-xl"
-              />
+              <div className="relative">
+                <Input
+                  type={showPw2 ? "text" : "password"}
+                  value={pw2}
+                  onChange={(e) => setPw2(e.target.value)}
+                  placeholder="Re-enter password"
+                  className="h-11 rounded-xl pr-11"
+                  autoComplete="new-password"
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1 h-9 w-9"
+                  onClick={() => setShowPw2((visible) => !visible)}
+                  aria-label={showPw2 ? "Hide confirmation password" : "Show confirmation password"}
+                  title={showPw2 ? "Hide confirmation password" : "Show confirmation password"}
+                >
+                  {showPw2 ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
             </div>
 
             <DialogFooter className="gap-2 sm:gap-2">

@@ -5,11 +5,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth, type Role } from "@/lib/auth";
-import { useWorkspaceData } from "@/lib/workspace-data";
-import { UserPlus } from "lucide-react";
+import { useWorkspaceData, type StaffMember } from "@/lib/workspace-data";
+import { UserMinus, UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/users")({ component: UsersPage });
@@ -23,10 +24,23 @@ const roleLabels: Record<Role, string> = {
 
 function UsersPage() {
   const { user } = useAuth();
-  const { staffMembers, inviteClinicAdmin } = useWorkspaceData();
+  const { staffMembers, inviteClinicAdmin, deactivateStaff } = useWorkspaceData();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "" });
+  const [deactivationTarget, setDeactivationTarget] = useState<StaffMember | null>(null);
+  const [deactivationReason, setDeactivationReason] = useState("");
+  const [isDeactivating, setIsDeactivating] = useState(false);
+
+  const canDeactivate = (member: StaffMember) => (
+    member.status !== "Inactive"
+    && member.id !== user?.userId
+    && member.role !== "super_admin"
+    && (
+      user?.role === "super_admin"
+      || (user?.role === "clinic_admin" && member.role !== "clinic_admin")
+    )
+  );
 
   const submit = async () => {
     if (!form.name.trim() || !form.email.trim()) {
@@ -47,6 +61,21 @@ function UsersPage() {
       toast.error(error instanceof Error ? error.message : "Unable to send the invitation");
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const confirmDeactivation = async () => {
+    if (!deactivationTarget) return;
+    setIsDeactivating(true);
+    try {
+      await deactivateStaff(deactivationTarget.id, deactivationReason);
+      toast.success(`${deactivationTarget.name} no longer has hospital access`);
+      setDeactivationTarget(null);
+      setDeactivationReason("");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to deactivate staff member");
+    } finally {
+      setIsDeactivating(false);
     }
   };
 
@@ -116,6 +145,7 @@ function UsersPage() {
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="w-20 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -137,11 +167,25 @@ function UsersPage() {
                 <TableCell>
                   <Badge variant={member.status === "Active" ? "secondary" : "outline"}>{member.status}</Badge>
                 </TableCell>
+                <TableCell className="text-right">
+                  {canDeactivate(member) && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      title={`Deactivate ${member.name}`}
+                      aria-label={`Deactivate ${member.name}`}
+                      onClick={() => setDeactivationTarget(member)}
+                    >
+                      <UserMinus className="h-4 w-4" />
+                    </Button>
+                  )}
+                </TableCell>
               </TableRow>
             ))}
             {staffMembers.length === 0 && (
               <TableRow>
-                <TableCell colSpan={4} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
                   No staff memberships are visible for this account.
                 </TableCell>
               </TableRow>
@@ -149,6 +193,55 @@ function UsersPage() {
           </TableBody>
         </Table>
       </div>
+
+      <Dialog
+        open={Boolean(deactivationTarget)}
+        onOpenChange={(open) => {
+          if (!open && !isDeactivating) {
+            setDeactivationTarget(null);
+            setDeactivationReason("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Deactivate staff access</DialogTitle>
+            <DialogDescription>
+              {deactivationTarget?.name} will immediately lose hospital data access and be removed
+              from active care teams. Existing clinical and audit records will be preserved.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-1.5">
+            <Label htmlFor="deactivation-reason">Reason</Label>
+            <Textarea
+              id="deactivation-reason"
+              value={deactivationReason}
+              onChange={(event) => setDeactivationReason(event.target.value)}
+              minLength={8}
+              maxLength={500}
+              placeholder="Example: Employment ended on 30 July 2026"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeactivationTarget(null)}
+              disabled={isDeactivating}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={confirmDeactivation}
+              disabled={isDeactivating || deactivationReason.trim().length < 8}
+            >
+              {isDeactivating ? "Deactivating..." : "Deactivate access"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

@@ -23,7 +23,7 @@ const CATS: Cat[] = ["Consultation", "Procedure", "Medicine", "Lab", "Other"];
 function NewBill() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { patients, prescriptions, searchPatients, createBill } = useWorkspaceData();
+  const { patients, doctors, prescriptions, searchPatients, createBill } = useWorkspaceData();
   const patientOptions = toPatientOptions(patients);
   const searchPatientOptions = useCallback(
     async (query: string) =>
@@ -37,6 +37,32 @@ function NewBill() {
   const [discount, setDiscount] = useState(0);
   const [tax, setTax] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
+
+  const selectPatient = (nextPatient: PatientOption | null) => {
+    setPatient(nextPatient);
+    if (!nextPatient) return;
+
+    const assignedDoctor = doctors.find(
+      (doctor) => doctor.name === nextPatient.raw.doctor && doctor.status === "Active",
+    );
+    if (assignedDoctor?.consultationFee == null) return;
+    const consultationFee = assignedDoctor.consultationFee;
+
+    setLines((current) => {
+      const consultationIndex = current.findIndex((line) => line.category === "Consultation");
+      const consultation: Line = {
+        id: consultationIndex >= 0
+          ? current[consultationIndex].id
+          : crypto.randomUUID(),
+        category: "Consultation",
+        name: `${assignedDoctor.name} consultation`,
+        qty: 1,
+        unit: consultationFee,
+      };
+      if (consultationIndex < 0) return [consultation, ...current];
+      return current.map((line, index) => index === consultationIndex ? consultation : line);
+    });
+  };
 
   const subtotal = lines.reduce((s, l) => s + l.qty * l.unit, 0);
   const total = Math.max(0, subtotal - discount) * (1 + tax / 100);
@@ -117,8 +143,13 @@ function NewBill() {
           <section className="rounded-2xl border bg-card p-6 shadow-soft space-y-4">
             <div className="space-y-1.5">
               <Label>Patient <span className="text-destructive">*</span></Label>
-              <EntityPicker options={patientOptions} onSearch={searchPatientOptions} value={patient} onChange={setPatient}
+              <EntityPicker options={patientOptions} onSearch={searchPatientOptions} value={patient} onChange={selectPatient}
                 placeholder="Search by name, patient ID or phone…" />
+              {patient?.raw.doctor && (
+                <p className="text-xs text-muted-foreground">
+                  Assigned doctor: <span className="font-medium text-foreground">{patient.raw.doctor}</span>
+                </p>
+              )}
             </div>
             <div className="flex flex-wrap gap-2">
               <Button type="button" size="sm" variant="outline" onClick={importFromRx}>
@@ -136,7 +167,10 @@ function NewBill() {
             <h3 className="font-display text-base font-semibold">Line items</h3>
             <div className="space-y-2">
               {lines.map(l => (
-                <div key={l.id} className="grid grid-cols-[130px_1fr_80px_100px_100px_auto] items-center gap-2 rounded-xl border bg-muted/30 p-2">
+                <div
+                  key={l.id}
+                  className="grid gap-2 rounded-xl border bg-muted/30 p-3 md:grid-cols-[minmax(120px,0.8fr)_minmax(240px,2fr)_80px_110px_100px_auto] md:items-center"
+                >
                   <Select value={l.category} onValueChange={(v) => updateLine(l.id, { category: v as Cat })}>
                     <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
                     <SelectContent>{CATS.map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>

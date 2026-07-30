@@ -184,7 +184,8 @@ type Command =
   | { type: "labs.saved"; values: LabReport[]; actor: AuthUser }
   | { type: "bill.created"; value: Bill; actor: AuthUser }
   | { type: "bill.updated"; value: Bill; actor: AuthUser }
-  | { type: "staff.invited"; value: StaffMember; actor: AuthUser };
+  | { type: "staff.invited"; value: StaffMember; actor: AuthUser }
+  | { type: "staff.deactivated"; userId: string; actor: AuthUser };
 
 function createId(prefix: string) {
   const suffix = globalThis.crypto?.randomUUID?.().slice(0, 8).toUpperCase()
@@ -355,6 +356,25 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         command.actor,
         `Invited ${command.value.role} ${command.value.email}`,
       );
+    case "staff.deactivated":
+      return appendAudit(
+        {
+          ...state,
+          staffMembers: state.staffMembers.map((member) =>
+            member.id === command.userId ? { ...member, status: "Inactive" } : member
+          ),
+          doctors: state.doctors.map((doctor) =>
+            doctor.id === command.userId ? { ...doctor, status: "Inactive" } : doctor
+          ),
+          receptionists: state.receptionists.map((receptionist) =>
+            receptionist.id === command.userId
+              ? { ...receptionist, status: "Inactive" }
+              : receptionist
+          ),
+        },
+        command.actor,
+        `Deactivated staff member ${command.userId}`,
+      );
   }
 }
 
@@ -383,6 +403,7 @@ interface WorkspaceData {
   createDoctor: (input: DoctorInput) => Promise<Doctor>;
   createReceptionist: (input: ReceptionistInput) => Promise<Receptionist>;
   inviteClinicAdmin: (input: ClinicAdminInput) => Promise<StaffMember>;
+  deactivateStaff: (userId: string, reason: string) => Promise<void>;
   createPatient: (input: PatientInput) => Promise<Patient>;
   createAppointment: (input: AppointmentInput) => Promise<Appointment>;
   updateAppointment: (appointment: Appointment) => Promise<Appointment>;
@@ -735,6 +756,28 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         };
         dispatch({ type: "staff.invited", value: membership, actor });
         return membership;
+      },
+      deactivateStaff: async (userId, reason) => {
+        const actor = requireUser(user, "people.manage");
+        const target = state.staffMembers.find((member) => member.id === userId);
+        if (!target) throw new Error("Staff member was not found");
+        if (target.id === actor.id) throw new Error("You cannot deactivate your own account");
+        if (
+          target.role === "super_admin"
+          || (actor.role === "clinic_admin" && target.role === "clinic_admin")
+        ) {
+          throw new Error("You cannot deactivate this staff role");
+        }
+        const normalizedReason = reason.trim();
+        if (normalizedReason.length < 8 || normalizedReason.length > 500) {
+          throw new Error("Enter a reason between 8 and 500 characters");
+        }
+        if (repository) {
+          await repository.deactivateStaff(userId, normalizedReason);
+          await refresh();
+          return;
+        }
+        dispatch({ type: "staff.deactivated", userId, actor });
       },
       createPatient: async (input) => {
         const actor = requireUser(user, "patients.create");

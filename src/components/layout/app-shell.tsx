@@ -10,6 +10,7 @@ import {
   Stethoscope,
   Sun,
   ChevronDown,
+  Clock3,
   UserRound,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -48,6 +49,27 @@ function Brand() {
         </div>
       </div>
     </Link>
+  );
+}
+
+function PortalClock() {
+  const [now, setNow] = useState<Date | null>(null);
+
+  useEffect(() => {
+    setNow(new Date());
+    const timer = window.setInterval(() => setNow(new Date()), 1_000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return (
+    <time
+      dateTime={now?.toISOString()}
+      className="inline-flex items-center gap-1.5 tabular-nums"
+      title={now?.toLocaleString()}
+    >
+      <Clock3 className="h-3.5 w-3.5" aria-hidden="true" />
+      <span>{now?.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) ?? "--:--"}</span>
+    </time>
   );
 }
 
@@ -346,9 +368,12 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div className="text-sm text-muted-foreground">Welcome back,</div>
               <div className="font-display text-lg font-bold tracking-tight">{user.name}</div>
             </div>
-            <div className="text-xs text-muted-foreground">
-              Currently logged into{" "}
-              <span className="font-semibold text-foreground">{user.clinic}</span>
+            <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <PortalClock />
+              <span>
+                Currently logged into{" "}
+                <span className="font-semibold text-foreground">{user.clinic}</span>
+              </span>
             </div>
           </div>
         </div>

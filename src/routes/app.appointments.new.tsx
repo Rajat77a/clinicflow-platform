@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,7 +12,12 @@ import { useAuth } from "@/lib/auth";
 import { Clock } from "lucide-react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/app/appointments/new")({ component: NewAppointment });
+export const Route = createFileRoute("/app/appointments/new")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    patient: typeof search.patient === "string" ? search.patient : undefined,
+  }),
+  component: NewAppointment,
+});
 
 // Rounded to next 5-min slot in local time.
 function nowDefaults() {
@@ -29,8 +34,9 @@ function nowDefaults() {
 
 function NewAppointment() {
   const navigate = useNavigate();
+  const { patient: requestedPatientId } = Route.useSearch();
   const { user } = useAuth();
-  const { patients, doctors, searchPatients, createAppointment } = useWorkspaceData();
+  const { patients, doctors, searchPatients, getPatient, createAppointment } = useWorkspaceData();
   const patientOptions = toPatientOptions(patients);
   const searchPatientOptions = useCallback(
     async (query: string) =>
@@ -49,6 +55,23 @@ function NewAppointment() {
   const [type, setType] = useState("Consultation");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!requestedPatientId) return;
+    const available = patients.find((item) => item.id === requestedPatientId);
+    if (available) {
+      setPatient(toPatientOptions([available])[0] ?? null);
+      return;
+    }
+
+    let current = true;
+    void getPatient(requestedPatientId).then((record) => {
+      if (current && record) setPatient(toPatientOptions([record])[0] ?? null);
+    });
+    return () => {
+      current = false;
+    };
+  }, [getPatient, patients, requestedPatientId]);
 
   const resetToNow = () => {
     const n = nowDefaults();
