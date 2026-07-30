@@ -222,7 +222,7 @@ function ClinicAdminDashboard() {
         description={`Authenticated operational data for ${user?.clinic ?? "this hospital"}.`}
         actions={
           <>
-            <Button asChild variant="outline"><Link to="/app/appointments/new">New appointment</Link></Button>
+            <Button asChild variant="outline"><Link to="/app/appointments/new" search={{}}>New appointment</Link></Button>
             <Button asChild><Link to="/app/patients/new">Add patient</Link></Button>
           </>
         }
@@ -386,7 +386,7 @@ function ReceptionistDashboard() {
         description="Register patients, book appointments, and collect payments."
         actions={
           <>
-            <Button asChild variant="outline"><Link to="/app/appointments/new">Book appointment</Link></Button>
+            <Button asChild variant="outline"><Link to="/app/appointments/new" search={{}}>Book appointment</Link></Button>
             <Button asChild><Link to="/app/patients/new">Register patient</Link></Button>
           </>
         }
