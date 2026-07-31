@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
 import postgres from "postgres";
 
@@ -27,6 +27,37 @@ const password = "Integration!2026#ClinicFlow";
 
 function assertNoError(error, context) {
   assert.equal(error, null, `${context}: ${error?.message ?? "unknown error"}`);
+}
+
+function decodeBase32(value) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+  const normalized = value.toUpperCase().replace(/=+$/g, "").replace(/\s/g, "");
+  let bits = "";
+  for (const character of normalized) {
+    const index = alphabet.indexOf(character);
+    assert.notEqual(index, -1, "TOTP secret contains invalid base32 data");
+    bits += index.toString(2).padStart(5, "0");
+  }
+  const bytes = [];
+  for (let offset = 0; offset + 8 <= bits.length; offset += 8) {
+    bytes.push(Number.parseInt(bits.slice(offset, offset + 8), 2));
+  }
+  return Buffer.from(bytes);
+}
+
+function totp(secret, now = Date.now()) {
+  const counter = BigInt(Math.floor(now / 30_000));
+  const input = Buffer.alloc(8);
+  input.writeBigUInt64BE(counter);
+  const digest = createHmac("sha1", decodeBase32(secret)).update(input).digest();
+  const offset = digest[digest.length - 1] & 0x0f;
+  const code =
+    (((digest[offset] & 0x7f) << 24) |
+      ((digest[offset + 1] & 0xff) << 16) |
+      ((digest[offset + 2] & 0xff) << 8) |
+      (digest[offset + 3] & 0xff)) %
+    1_000_000;
+  return code.toString().padStart(6, "0");
 }
 
 async function createIdentity(label, roleCode, hospitalId, facilityId) {
@@ -75,6 +106,23 @@ async function createIdentity(label, roleCode, hospitalId, facilityId) {
   return { client, email, id: data.user.id };
 }
 
+async function requireAal2(identity) {
+  const { data: enrollment, error: enrollmentError } = await identity.client.auth.mfa.enroll({
+    factorType: "totp",
+    friendlyName: `integration-${randomUUID()}`,
+  });
+  assertNoError(enrollmentError, "enroll clinic administrator MFA");
+  const { error: verifyError } = await identity.client.auth.mfa.challengeAndVerify({
+    factorId: enrollment.id,
+    code: totp(enrollment.totp.secret),
+  });
+  assertNoError(verifyError, "verify clinic administrator MFA");
+  const { data: assurance, error: assuranceError } =
+    await identity.client.auth.mfa.getAuthenticatorAssuranceLevel();
+  assertNoError(assuranceError, "read clinic administrator assurance level");
+  assert.equal(assurance.currentLevel, "aal2", "clinic administrator session must reach AAL2");
+}
+
 async function visibleIds(client, table, id) {
   const { data, error } = await client.from(table).select("id").eq("id", id);
   assertNoError(error, `read ${table}`);
@@ -118,12 +166,25 @@ async function main() {
   assertNoError(assuranceError, "read clinic administrator assurance level");
   assert.equal(assurance.currentLevel, "aal1", "integration must exercise password-only access");
 
+  const { data: blockedStaff, error: blockedStaffError } =
+    await clinicAdmin.client.rpc("list_current_staff");
+  assertNoError(blockedStaffError, "deny staff data to an AAL1 clinic administrator");
+  assert.deepEqual(blockedStaff, [], "AAL1 clinic administrator must not receive staff data");
+
+  const { data: blockedPatients, error: blockedPatientsError } = await clinicAdmin.client
+    .from("patients")
+    .select("id");
+  assertNoError(blockedPatientsError, "deny patient data to an AAL1 clinic administrator");
+  assert.deepEqual(blockedPatients, [], "AAL1 clinic administrator must not receive patient data");
+
+  await requireAal2(clinicAdmin);
+
   const { data: visibleStaff, error: visibleStaffError } =
     await clinicAdmin.client.rpc("list_current_staff");
-  assertNoError(visibleStaffError, "list staff as a password-authenticated clinic administrator");
+  assertNoError(visibleStaffError, "list staff as an AAL2 clinic administrator");
   assert.ok(
     visibleStaff.some((member) => member.user_id === doctor.id),
-    "clinic administrator must manage staff without mandatory OTP during development",
+    "AAL2 clinic administrator must manage staff",
   );
 
   const { data: adminDirectory, error: adminDirectoryError } = await clinicAdmin.client.rpc(
