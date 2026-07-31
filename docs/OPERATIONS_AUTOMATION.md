@@ -35,6 +35,13 @@ authorized audit users and workers.
 Workers are not deployed in Phase 1. Until the corresponding worker and alert
 route are tested, no user-facing workflow may depend on these queues.
 
+`npm run ops:audit` checks Supabase Auth and all three payload-free queue metrics
+from a protected operator environment. The manual `Protected operational audit`
+workflow uses the `hospital-production` GitHub Environment and will not work
+until `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are configured there. Do
+not convert it to a schedule until a named responder receives and tests failed
+workflow notifications.
+
 ## Portable Runtime
 
 `Dockerfile` builds a non-root production image and `compose.yaml` runs it with
