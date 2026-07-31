@@ -25,10 +25,17 @@ const restoredMfaSource = await readFile(
   ),
   "utf8",
 );
+const disabledMfaSource = await readFile(
+  new URL(
+    "../../supabase/migrations/20260731100000_disable_mandatory_mfa.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
-test("privileged MFA blocks workspace loading until AAL2 verification", () => {
-  assert.match(rootSource, /<PrivilegedMfaGate[\s\S]*<WorkspaceDataProvider>/);
-  assert.match(rootSource, /key=\{user\?\.userId \?\? "anonymous"\}/);
+test("mandatory MFA is disabled without deleting the reusable TOTP component", () => {
+  assert.doesNotMatch(rootSource, /PrivilegedMfaGate/);
+  assert.match(rootSource, /<WorkspaceDataProvider>/);
   assert.match(componentSource, /user\?\.role === "super_admin"/);
   assert.match(componentSource, /user\?\.role === "clinic_admin"/);
   assert.match(componentSource, /currentLevel === "aal2"/);
@@ -42,7 +49,7 @@ test("privileged users can enroll and verify a TOTP authenticator", () => {
   assert.match(componentSource, /mfa\.enrolled/);
 });
 
-test("database permissions deny privileged AAL1 tokens", () => {
+test("historical migrations document the previous AAL2 policy", () => {
   assert.match(migrationSource, /m\.role_code not in \('super_admin', 'clinic_admin'\)/);
   assert.match(migrationSource, /auth\.jwt\(\) ->> 'aal'/);
   assert.match(migrationSource, /= 'aal2'/);
@@ -51,13 +58,17 @@ test("database permissions deny privileged AAL1 tokens", () => {
   assert.match(restoredMfaSource, /= 'aal2'/);
 });
 
-test("privileged staff invitation verifies AAL before service-role work", () => {
-  const aalCheck = functionSource.indexOf("getAuthenticatorAssuranceLevel");
+test("current permissions and staff invitations accept password-authenticated sessions", () => {
   const adminInvite = functionSource.indexOf("admin.inviteUserByEmail");
-  assert.ok(aalCheck > 0);
-  assert.ok(adminInvite > aalCheck);
-  assert.match(functionSource, /actor\.role_code === "super_admin" \|\| actor\.role_code === "clinic_admin"/);
-  assert.match(functionSource, /assurance\.currentLevel !== "aal2"/);
+  const permissionCheck = functionSource.indexOf('eq("permission_code", "people.manage")');
+  assert.ok(permissionCheck > 0);
+  assert.ok(adminInvite > permissionCheck);
+  assert.doesNotMatch(functionSource, /getAuthenticatorAssuranceLevel/);
+  assert.doesNotMatch(functionSource, /Two-step verification is required/);
+  assert.match(disabledMfaSource, /membership\.active/);
+  assert.match(disabledMfaSource, /permission\.permission_code = permission_name/);
+  assert.doesNotMatch(disabledMfaSource, /auth\.jwt\(\) ->> 'aal'/);
+  assert.doesNotMatch(disabledMfaSource, /= 'aal2'/);
 });
 
 test("security events are validated and append-only audit records are used", () => {
