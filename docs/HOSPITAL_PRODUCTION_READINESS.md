@@ -24,6 +24,12 @@ Implemented foundations:
 - Append-only database audit events for core record changes.
 - Direct browser role assignment blocked.
 - Browser document uploads disabled until scanning is available.
+- A private document quarantine schema, strict file limits, and worker-only
+  scan registration exist; uploads remain disabled until a scanner is connected.
+- Durable browser-inaccessible queues exist for document scanning,
+  notification delivery, and security alerts.
+- Request-correlated safe errors, payload-free operational logging, and separate
+  liveness/readiness endpoints are implemented.
 - Placeholder and sample-data modules hidden and blocked in production.
 - CI runs unit tests, four-role browser workflows, typecheck, lint, and the
   production build before merge.
@@ -48,8 +54,8 @@ Implemented foundations:
 | Production identity                                  | Complete administrator MFA enrollment, recovery, offboarding, and emergency access test                         | Unassigned | Blocked |
 | Email delivery                                       | Hospital-approved SMTP, SPF, DKIM, DMARC, and invite/reset test per `docs/EMAIL_DELIVERY_RUNBOOK.md`            | Unassigned | Blocked |
 | Backup and recovery                                  | Synthetic restore automation exists; production backups plus witnessed restore drill remain                     | Unassigned | Blocked |
-| Monitoring and alerting                              | 30-minute availability baseline exists; auth abuse, database, audit, responder routing, and error alerts remain | Unassigned | Partial |
-| File security                                        | Server-side upload, allowlist, malware scan, quarantine, and patient-scoped download                            | Unassigned | Blocked |
+| Monitoring and alerting                              | Correlated operational logs and availability baseline exist; auth abuse, queue, database, responder routing, and error alerts remain | Unassigned | Partial |
+| File security                                        | Quarantine schema and allowlist exist; scanner worker, object promotion, retention, and patient-scoped download remain | Unassigned | Partial |
 | Security assessment                                  | Independent penetration test with critical/high findings closed                                                 | Unassigned | Blocked |
 | Load and failure testing                             | Bounded weekly probe exists; hospital volume model, soak test, failover test, and capacity report remain        | Unassigned | Partial |
 | Four-portal acceptance                               | Automated demo workflows exist; production-backed tests and denied cross-role/cross-patient cases remain        | Unassigned | Blocked |
@@ -80,3 +86,6 @@ behavior, integration tests, and operational owner are complete.
 The file module additionally requires content-type verification, malware
 scanning, quarantine, immutable hashes, short-lived downloads, and patient
 authorization at download time.
+
+Phase 1 implementation details and worker boundaries are documented in
+`docs/PHASE_1_PRODUCTION_FOUNDATION.md`.

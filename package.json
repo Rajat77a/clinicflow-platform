@@ -13,6 +13,7 @@
     "test:e2e": "playwright test",
     "smoke": "node scripts/smoke.mjs",
     "load:smoke": "node scripts/load-smoke.mjs",
+    "security:secrets": "node scripts/scan-secrets.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write ."

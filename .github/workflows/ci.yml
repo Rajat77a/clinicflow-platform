@@ -34,6 +34,9 @@ jobs:
       - name: Run tests
         run: bun run test
 
+      - name: Scan tracked files for secrets
+        run: bun run security:secrets
+
       - name: Install Chromium
         run: bunx playwright install --with-deps chromium
 
@@ -48,3 +51,6 @@ jobs:
 
       - name: Build production bundle
         run: bun run build
+
+      - name: Build portable container
+        run: docker build --tag clinicflow:${{ github.sha }} .

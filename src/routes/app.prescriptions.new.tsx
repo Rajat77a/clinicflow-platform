@@ -12,6 +12,7 @@ import { useWorkspaceData } from "@/lib/workspace-data";
 import { Activity, Plus, Trash2, Send, Printer, FlaskConical } from "lucide-react";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { printDocument } from "@/lib/exporters";
+import { supabaseConfig } from "@/lib/supabase/config";
 import { toast } from "sonner";
 
 type PrescriptionSearch = {
@@ -174,6 +175,20 @@ function NewPrescription() {
     sendWhatsApp(patient.tertiary ?? "", msg);
   };
 
+  if (edit && !supabaseConfig.demoMode) {
+    return (
+      <>
+        <PageHeader
+          title="Signed prescription"
+          description="Signed prescriptions are immutable. Create a new prescription when treatment changes."
+        />
+        <Button variant="outline" onClick={() => navigate({ to: "/app/prescriptions" })}>
+          Back to prescriptions
+        </Button>
+      </>
+    );
+  }
+
   return (
     <>
       {!isLabMode && !isDoctor ? (
@@ -325,7 +340,7 @@ function NewPrescription() {
                   {isSaving ? "Saving..." : "Save lab report"}
                 </Button>
               : <Button type="submit" className="flex-1" disabled={isSaving}>
-                  {isSaving ? "Saving..." : edit ? "Save changes" : "Save & sign"}
+                  {isSaving ? "Saving..." : edit ? "Save demo changes" : "Save & sign"}
                 </Button>}
           </div>
         </form>
@@ -366,11 +381,13 @@ function NewPrescription() {
             {followup && <div className="mt-3 text-sm"><span className="text-muted-foreground">Follow-up:</span> <span className="font-semibold">{followup}</span></div>}
             <div className="mt-6 flex gap-2">
               <Button type="button" variant="outline" size="sm" className="flex-1" onClick={printRx}>
-                <Printer className="mr-1 h-3.5 w-3.5" />Download
+                <Printer className="mr-1 h-3.5 w-3.5" />Print
               </Button>
-              <Button type="button" size="sm" className="flex-1" onClick={shareRx}>
-                <Send className="mr-1 h-3.5 w-3.5" />WhatsApp
-              </Button>
+              {supabaseConfig.demoMode && (
+                <Button type="button" size="sm" className="flex-1" onClick={shareRx}>
+                  <Send className="mr-1 h-3.5 w-3.5" />WhatsApp
+                </Button>
+              )}
             </div>
           </div>
         </aside>

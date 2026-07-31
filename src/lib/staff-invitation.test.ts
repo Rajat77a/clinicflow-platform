@@ -18,9 +18,16 @@ test("staff invitation CORS permits every header sent by the browser client", ()
     "content-type",
     "idempotency-key",
     "x-client-info",
+    "x-request-id",
   ]) {
     assert.match(functionSource, new RegExp(`"${header}"`));
   }
+});
+
+test("staff invitation failures include a safe code and request ID", () => {
+  assert.match(functionSource, /code: errorCode\(status\)/);
+  assert.match(functionSource, /requestId/);
+  assert.match(functionSource, /"X-Request-ID": requestId/);
 });
 
 test("staff invitations persist contact details and select an active facility", () => {

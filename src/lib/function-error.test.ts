@@ -21,6 +21,6 @@ test("function errors fall back when the response is not JSON", async () => {
       message: "Failed to send a request to the Edge Function",
       context: new Response("upstream unavailable", { status: 503 }),
     }),
-    /Failed to send a request to the Edge Function/,
+    /Unable to contact the hospital service/,
   );
 });

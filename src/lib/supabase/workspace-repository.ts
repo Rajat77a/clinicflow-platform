@@ -28,6 +28,7 @@ import type {
 import { getSupabaseBrowserClient } from "./client";
 import { normalizePageInput } from "../record-page";
 import { throwIfFunctionError } from "./function-error";
+import { toSafeBackendError } from "../backend/safe-error";
 
 // Supabase query results are validated and normalized at this repository boundary.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -50,8 +51,8 @@ function randomKey() {
   return globalThis.crypto.randomUUID();
 }
 
-function throwIfError(error: { message: string } | null) {
-  if (error) throw new Error(error.message);
+function throwIfError(error: { code?: string; message: string } | null) {
+  if (error) throw toSafeBackendError(error);
 }
 
 function yearsSince(date: string) {
@@ -657,8 +658,12 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     input: DoctorInput | ReceptionistInput | ClinicAdminInput,
     roleCode: "clinic_admin" | "doctor" | "receptionist",
   ) {
+    const requestId = randomKey();
     const { data, error } = await this.client.functions.invoke("invite-staff", {
-      headers: { "Idempotency-Key": randomKey() },
+      headers: {
+        "Idempotency-Key": randomKey(),
+        "X-Request-ID": requestId,
+      },
       body: {
         email: input.email,
         fullName: input.name,

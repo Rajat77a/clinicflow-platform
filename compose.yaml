@@ -1,0 +1,29 @@
+services:
+  app:
+    build:
+      context: .
+    environment:
+      VITE_CLINICFLOW_APP_URL: ${VITE_CLINICFLOW_APP_URL:-http://localhost:3000}
+      VITE_CLINICFLOW_DEMO_MODE: "false"
+      VITE_SUPABASE_PUBLISHABLE_KEY: ${VITE_SUPABASE_PUBLISHABLE_KEY:?required}
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL:?required}
+    ports:
+      - "3000:3000"
+    read_only: true
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "bun",
+          "-e",
+          "const r=await fetch('http://127.0.0.1:3000/readyz');process.exit(r.ok?0:1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

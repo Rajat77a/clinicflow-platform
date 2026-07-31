@@ -20,6 +20,11 @@ test-results/
 .env
 .env.*
 !.env.example
+*.tfvars
+!*.tfvars.example
+.terraform/
+*.tfstate
+*.tfstate.*
 
 # Wrangler / Cloudflare
 .wrangler/

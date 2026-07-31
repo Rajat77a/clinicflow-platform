@@ -8,13 +8,27 @@ const allowedHeaders = [
   "content-type",
   "idempotency-key",
   "x-client-info",
+  "x-request-id",
 ].join(", ");
 
-function response(status: number, body: Record<string, unknown> | null) {
+function errorCode(status: number) {
+  if (status === 400 || status === 422) return "invalid_request";
+  if (status === 401 || status === 403) return "access_denied";
+  if (status === 409) return "conflict";
+  if (status === 429 || status === 503) return "service_unavailable";
+  return "unknown";
+}
+
+function createResponse(
+  status: number,
+  body: Record<string, unknown> | null,
+  requestId: string,
+) {
   if (status >= 400) {
     console.warn(JSON.stringify({
       event: "invite_staff_rejected",
       status,
+      request_id: requestId,
       reason: typeof body?.error === "string" ? body.error : "unknown",
     }));
   }
@@ -26,12 +40,24 @@ function response(status: number, body: Record<string, unknown> | null) {
       "Access-Control-Allow-Origin": allowedOrigin,
       "Access-Control-Allow-Headers": allowedHeaders,
       "Access-Control-Allow-Methods": "POST, OPTIONS",
+      "X-Request-ID": requestId,
       Vary: "Origin",
     },
   });
 }
 
 Deno.serve(async (request) => {
+  const requestedId = request.headers.get("x-request-id")?.trim() ?? "";
+  const requestId = /^[0-9a-f-]{36}$/i.test(requestedId)
+    ? requestedId
+    : crypto.randomUUID();
+  const response = (status: number, body: Record<string, unknown> | null) => {
+    const structuredBody = status >= 400 && body
+      ? { ...body, code: errorCode(status), requestId }
+      : body;
+    return createResponse(status, structuredBody, requestId);
+  };
+
   if (request.method === "OPTIONS") {
     return response(204, null);
   }
