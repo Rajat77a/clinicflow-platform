@@ -23,6 +23,7 @@ async function signIn(page: Page, role: DemoRole) {
 
 test("password recovery does not submit the sign-in form", async ({ page }) => {
   await page.goto("/login");
+  await page.waitForLoadState("networkidle");
   await page.getByRole("button", { name: "Forgot password?" }).click();
   const dialog = page.getByRole("dialog", { name: "Reset your password" });
   await page.locator('[role="dialog"] input[type="email"]').fill("recovery@example.test");
