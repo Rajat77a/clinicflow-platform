@@ -16,7 +16,7 @@ async function signIn(page: Page, role: DemoRole) {
   await page
     .getByLabel("Work email")
     .fill(`${role.toLowerCase().replaceAll(" ", ".")}@example.test`);
-  await page.getByLabel("Password").fill("DemoOnly#2026");
+  await page.getByRole("textbox", { name: "Password", exact: true }).fill("DemoOnly#2026");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/app$/);
 }
