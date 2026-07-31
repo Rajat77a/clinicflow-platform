@@ -70,6 +70,9 @@ test("receptionist can book an appointment", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/app\/appointments$/);
   await expect(page.getByText("Emma Bauer", { exact: true }).first()).toBeVisible();
+
+  await page.goto("/app/doctors");
+  await expect(page.getByRole("heading", { name: "Access restricted" })).toBeVisible();
 });
 
 test("doctor can create and sign a prescription", async ({ page }) => {
@@ -88,4 +91,7 @@ test("doctor can create and sign a prescription", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/app\/prescriptions$/);
   await expect(page.getByText("E2E clinical workflow", { exact: true })).toBeVisible();
+
+  await page.goto("/app/billing");
+  await expect(page.getByRole("heading", { name: "Access restricted" })).toBeVisible();
 });

@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth, ROLE_LABELS, type Role } from "@/lib/auth";
+import { canAccessPath } from "@/lib/access-control";
 import { useWorkspaceData } from "@/lib/workspace-data";
 import { SidebarNav } from "./sidebar-nav";
 
@@ -79,12 +80,14 @@ type SearchResult =
 
 function GlobalSearch() {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const { doctors, searchPatients } = useWorkspaceData();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const normalized = query.toLocaleLowerCase().replace(/\s/g, "");
+  const canSearchDoctors = Boolean(user && canAccessPath(user.role, "/app/doctors"));
 
   useEffect(() => {
     if (!normalized) {
@@ -94,7 +97,7 @@ function GlobalSearch() {
     }
 
     let current = true;
-    const doctorResults: SearchResult[] = doctors
+    const doctorResults: SearchResult[] = (canSearchDoctors ? doctors : [])
       .filter((doctor) =>
         [doctor.id, doctor.name, doctor.phone, doctor.email].some((value) =>
           value.toLocaleLowerCase().replace(/\s/g, "").includes(normalized),
@@ -131,7 +134,7 @@ function GlobalSearch() {
       current = false;
       window.clearTimeout(timer);
     };
-  }, [doctors, normalized, query, searchPatients]);
+  }, [canSearchDoctors, doctors, normalized, query, searchPatients]);
 
   const select = (result: SearchResult) => {
     setQuery("");
@@ -300,16 +303,18 @@ export function AppShell({ children }: { children: ReactNode }) {
             >
               {dark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
             </Button>
-            <Button asChild variant="ghost" size="icon" className="relative rounded-xl">
-              <Link
-                to="/app/notifications"
-                aria-label="View notifications"
-                title="View notifications"
-              >
-                <Bell className="h-4 w-4" />
-                <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive" />
-              </Link>
-            </Button>
+            {isDemoMode && (
+              <Button asChild variant="ghost" size="icon" className="relative rounded-xl">
+                <Link
+                  to="/app/notifications"
+                  aria-label="View notifications"
+                  title="View notifications"
+                >
+                  <Bell className="h-4 w-4" />
+                  <span className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-destructive" />
+                </Link>
+              </Button>
+            )}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-10 gap-2 rounded-xl px-2">

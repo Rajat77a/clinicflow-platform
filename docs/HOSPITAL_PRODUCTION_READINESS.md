@@ -13,8 +13,9 @@ and written approval from the hospital and ClinicFlow.
 Implemented foundations:
 
 - Supabase authentication with public registration disabled.
-- Mandatory TOTP MFA for clinic and super administrators, enforced before
-  workspace loading and again by database permissions and privileged functions.
+- TOTP enrollment and verification support is retained, but mandatory MFA is
+  temporarily disabled during development. Hospital use remains blocked until
+  privileged-role MFA and recovery are re-enabled and acceptance-tested.
 - Strong password policy, current-password verification, other-session
   revocation, and a 30-minute inactivity timeout.
 - Dedicated hospital membership and four roles: super admin, clinic admin,
@@ -46,21 +47,21 @@ Implemented foundations:
 
 ## Critical Release Gates
 
-| Gate                                                 | Required evidence                                                                                               | Owner      | Status  |
-| ---------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- | ---------- | ------- |
-| Hospital requirements and clinical workflow sign-off | Signed workflow and role matrix                                                                                 | Unassigned | Blocked |
-| Privacy and regulatory assessment                    | Counsel-approved obligations, consent, retention, and data residency                                            | Unassigned | Blocked |
-| Infrastructure agreements                            | Approved paid plans and required provider contracts                                                             | Unassigned | Blocked |
-| Production identity                                  | Complete administrator MFA enrollment, recovery, offboarding, and emergency access test                         | Unassigned | Blocked |
-| Email delivery                                       | Hospital-approved SMTP, SPF, DKIM, DMARC, and invite/reset test per `docs/EMAIL_DELIVERY_RUNBOOK.md`            | Unassigned | Blocked |
-| Backup and recovery                                  | Synthetic restore automation exists; production backups plus witnessed restore drill remain                     | Unassigned | Blocked |
+| Gate                                                 | Required evidence                                                                                                                    | Owner      | Status  |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ---------- | ------- |
+| Hospital requirements and clinical workflow sign-off | Signed workflow and role matrix                                                                                                      | Unassigned | Blocked |
+| Privacy and regulatory assessment                    | Counsel-approved obligations, consent, retention, and data residency                                                                 | Unassigned | Blocked |
+| Infrastructure agreements                            | Approved paid plans and required provider contracts                                                                                  | Unassigned | Blocked |
+| Production identity                                  | Complete administrator MFA enrollment, recovery, offboarding, and emergency access test                                              | Unassigned | Blocked |
+| Email delivery                                       | Hospital-approved SMTP, SPF, DKIM, DMARC, and invite/reset test per `docs/EMAIL_DELIVERY_RUNBOOK.md`                                 | Unassigned | Blocked |
+| Backup and recovery                                  | Synthetic restore automation exists; production backups plus witnessed restore drill remain                                          | Unassigned | Blocked |
 | Monitoring and alerting                              | Correlated operational logs and availability baseline exist; auth abuse, queue, database, responder routing, and error alerts remain | Unassigned | Partial |
-| File security                                        | Quarantine schema and allowlist exist; scanner worker, object promotion, retention, and patient-scoped download remain | Unassigned | Partial |
-| Security assessment                                  | Independent penetration test with critical/high findings closed                                                 | Unassigned | Blocked |
-| Load and failure testing                             | Bounded weekly probe exists; hospital volume model, soak test, failover test, and capacity report remain        | Unassigned | Partial |
-| Four-portal acceptance                               | Automated demo workflows exist; production-backed tests and denied cross-role/cross-patient cases remain        | Unassigned | Blocked |
-| Incident readiness                                   | Contacts, communications, evidence preservation, and tabletop exercise                                          | Unassigned | Blocked |
-| Go-live approval                                     | Signed hospital and ClinicFlow release record                                                                   | Unassigned | Blocked |
+| File security                                        | Quarantine schema and allowlist exist; scanner worker, object promotion, retention, and patient-scoped download remain               | Unassigned | Partial |
+| Security assessment                                  | Independent penetration test with critical/high findings closed                                                                      | Unassigned | Blocked |
+| Load and failure testing                             | Bounded weekly probe exists; hospital volume model, soak test, failover test, and capacity report remain                             | Unassigned | Partial |
+| Four-portal acceptance                               | Automated demo workflows exist; production-backed tests and denied cross-role/cross-patient cases remain                             | Unassigned | Blocked |
+| Incident readiness                                   | Contacts, communications, evidence preservation, and tabletop exercise                                                               | Unassigned | Blocked |
+| Go-live approval                                     | Signed hospital and ClinicFlow release record                                                                                        | Unassigned | Blocked |
 
 ## Release Rules
 
