@@ -25,7 +25,7 @@ test("password recovery does not submit the sign-in form", async ({ page }) => {
   await page.goto("/login");
   await page.getByRole("button", { name: "Forgot password?" }).click();
   const dialog = page.getByRole("dialog", { name: "Reset your password" });
-  await dialog.getByPlaceholder("you@clinic.com", { exact: true }).fill("recovery@example.test");
+  await page.locator('[role="dialog"] input[type="email"]').fill("recovery@example.test");
   await dialog.getByRole("button", { name: "Send reset link" }).click();
 
   await expect(page.getByText("Demo reset flow opened")).toBeVisible();
