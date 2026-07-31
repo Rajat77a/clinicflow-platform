@@ -307,6 +307,9 @@ verify_enabled = true
 [functions.invite-staff]
 verify_jwt = true
 
+[functions.document-download]
+verify_jwt = true
+
 # Configure MFA via Phone Messaging
 [auth.mfa.phone]
 enroll_enabled = false
