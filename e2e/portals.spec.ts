@@ -21,6 +21,18 @@ async function signIn(page: Page, role: DemoRole) {
   await expect(page).toHaveURL(/\/app$/);
 }
 
+test("password recovery does not submit the sign-in form", async ({ page }) => {
+  await page.goto("/login");
+  await page.waitForLoadState("networkidle");
+  await page.getByRole("button", { name: "Forgot password?" }).click();
+  const dialog = page.getByRole("dialog", { name: "Reset your password" });
+  await page.locator('[role="dialog"] input[type="email"]').fill("recovery@example.test");
+  await dialog.getByRole("button", { name: "Send reset link" }).click();
+
+  await expect(page.getByText("Demo reset flow opened")).toBeVisible();
+  await expect(page.getByText("Email address is required")).toHaveCount(0);
+});
+
 test("super admin can invite a clinic admin but cannot enter clinical records", async ({
   page,
 }) => {
@@ -70,6 +82,9 @@ test("receptionist can book an appointment", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/app\/appointments$/);
   await expect(page.getByText("Emma Bauer", { exact: true }).first()).toBeVisible();
+
+  await page.goto("/app/doctors");
+  await expect(page.getByRole("heading", { name: "Access restricted" })).toBeVisible();
 });
 
 test("doctor can create and sign a prescription", async ({ page }) => {
@@ -88,4 +103,7 @@ test("doctor can create and sign a prescription", async ({ page }) => {
 
   await expect(page).toHaveURL(/\/app\/prescriptions$/);
   await expect(page.getByText("E2E clinical workflow", { exact: true })).toBeVisible();
+
+  await page.goto("/app/billing");
+  await expect(page.getByRole("heading", { name: "Access restricted" })).toBeVisible();
 });
