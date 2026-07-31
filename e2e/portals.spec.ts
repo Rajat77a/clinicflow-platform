@@ -21,6 +21,17 @@ async function signIn(page: Page, role: DemoRole) {
   await expect(page).toHaveURL(/\/app$/);
 }
 
+test("password recovery does not submit the sign-in form", async ({ page }) => {
+  await page.goto("/login");
+  await page.getByRole("button", { name: "Forgot password?" }).click();
+  const dialog = page.getByRole("dialog", { name: "Reset your password" });
+  await dialog.getByRole("textbox").fill("recovery@example.test");
+  await dialog.getByRole("button", { name: "Send reset link" }).click();
+
+  await expect(page.getByText("Demo reset flow opened")).toBeVisible();
+  await expect(page.getByText("Email address is required")).toHaveCount(0);
+});
+
 test("super admin can invite a clinic admin but cannot enter clinical records", async ({
   page,
 }) => {

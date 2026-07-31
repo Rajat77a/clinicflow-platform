@@ -312,6 +312,7 @@ function ForgotPasswordDialog({
 
   const sendCode = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
 
     if (!email.trim()) {
       toast.error("Enter your email");
@@ -338,6 +339,7 @@ function ForgotPasswordDialog({
 
   const savePw = async (e: React.FormEvent) => {
     e.preventDefault();
+    e.stopPropagation();
 
     const policyError = passwordPolicyError(pw);
     if (policyError) {
