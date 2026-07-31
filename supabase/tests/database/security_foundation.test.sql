@@ -142,6 +142,10 @@ begin
     'authenticated',
     'public.record_document_scan_result(uuid, boolean, text, text, text, text)',
     'EXECUTE'
+  ) or has_function_privilege(
+    'authenticated',
+    'public.record_document_scan_failure(uuid, text)',
+    'EXECUTE'
   ) then
     raise exception 'Authenticated clients can bypass the document scanner boundary';
   end if;

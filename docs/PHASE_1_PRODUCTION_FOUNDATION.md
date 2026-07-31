@@ -35,6 +35,18 @@ Workers must use bounded retries, archive only completed messages, emit
 payload-free metrics, and place terminal failures in an approved incident
 workflow. Never log queue payloads because they may contain record identifiers.
 
+The reference scanner worker lives in `workers/document-scanner`. It verifies
+file signatures and recorded size, streams bytes to a private ClamAV daemon,
+hashes every object, releases only clean bytes, removes finalized quarantine
+objects, and records bounded terminal failures. Run it with
+`compose.scanner.yaml` only in protected infrastructure with service credentials.
+
+The `document-download` Edge Function issues 60-second links only after an
+authenticated, caller-scoped metadata query passes database RLS and confirms a
+clean object in the trusted bucket. The function is implemented but the file UI
+must remain disabled until the worker, function, retention process, and denied
+patient-access tests all pass in the target hospital environment.
+
 ## Document Contract
 
 Browser uploads remain disabled. The future upload service must:

@@ -10,10 +10,16 @@ const concurrency = positiveInteger("LOAD_CONCURRENCY", 8);
 const maxP95Ms = positiveInteger("LOAD_P95_MS", 2_000);
 const maxErrorRate = numberInRange("LOAD_MAX_ERROR_RATE", 0.01, 0, 1);
 const timeoutMs = positiveInteger("LOAD_TIMEOUT_MS", 10_000);
-const paths = ["/healthz", "/login"];
+const durationSeconds = nonNegativeInteger("LOAD_DURATION_SECONDS", 0);
+const paths = (process.env.LOAD_PATHS ?? "/healthz,/readyz,/login")
+  .split(",")
+  .map((path) => path.trim())
+  .filter((path) => /^\/[a-z0-9/_-]*$/i.test(path));
+if (paths.length === 0) throw new Error("LOAD_PATHS must contain at least one safe path");
 const latencies = [];
 const failures = [];
 let nextRequest = 0;
+const deadline = durationSeconds > 0 ? Date.now() + durationSeconds * 1_000 : null;
 
 function positiveInteger(name, fallback) {
   const value = Number(process.env[name] ?? fallback);
@@ -31,10 +37,18 @@ function numberInRange(name, fallback, min, max) {
   return value;
 }
 
+function nonNegativeInteger(name, fallback) {
+  const value = Number(process.env[name] ?? fallback);
+  if (!Number.isInteger(value) || value < 0) {
+    throw new Error(`${name} must be a non-negative integer`);
+  }
+  return value;
+}
+
 async function worker() {
   while (true) {
     const requestNumber = nextRequest++;
-    if (requestNumber >= requestCount) return;
+    if (deadline ? Date.now() >= deadline : requestNumber >= requestCount) return;
 
     const pathname = paths[requestNumber % paths.length];
     const startedAt = performance.now();
@@ -63,13 +77,16 @@ async function worker() {
 await Promise.all(Array.from({ length: Math.min(concurrency, requestCount) }, () => worker()));
 
 latencies.sort((a, b) => a - b);
+assert.ok(latencies.length > 0, "The load probe did not complete any requests");
 const percentile = (value) =>
   latencies[Math.min(latencies.length - 1, Math.ceil(latencies.length * value) - 1)];
-const errorRate = failures.length / requestCount;
+const errorRate = failures.length / latencies.length;
 const summary = {
   baseUrl,
-  requests: requestCount,
+  configuredRequests: durationSeconds > 0 ? null : requestCount,
   concurrency,
+  durationSeconds,
+  completedRequests: latencies.length,
   failures: failures.length,
   failureDetails: failures.slice(0, 10),
   errorRate,

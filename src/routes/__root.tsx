@@ -12,6 +12,7 @@ import { type ReactNode } from "react";
 import appCss from "../styles.css?url";
 import { AuthProvider } from "@/lib/auth";
 import { WorkspaceDataProvider } from "@/lib/workspace-data";
+import { PrivilegedMfaGate } from "@/components/auth/privileged-mfa-gate";
 import { Toaster } from "@/components/ui/sonner";
 
 function NotFoundComponent() {
@@ -116,9 +117,11 @@ function RootComponent() {
 
 function AuthenticatedWorkspace() {
   return (
-    <WorkspaceDataProvider>
-      <Outlet />
-      <Toaster richColors position="top-right" />
-    </WorkspaceDataProvider>
+    <PrivilegedMfaGate>
+      <WorkspaceDataProvider>
+        <Outlet />
+        <Toaster richColors position="top-right" />
+      </WorkspaceDataProvider>
+    </PrivilegedMfaGate>
   );
 }
