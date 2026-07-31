@@ -134,16 +134,6 @@ Deno.serve(async (request) => {
       return response(403, { error: "Active hospital membership required" });
     }
 
-    if (actor.role_code === "super_admin" || actor.role_code === "clinic_admin") {
-      const { data: assurance, error: assuranceError } =
-        await userClient.auth.mfa.getAuthenticatorAssuranceLevel(
-          authorization.slice("Bearer ".length),
-        );
-      if (assuranceError || assurance.currentLevel !== "aal2") {
-        return response(403, { error: "Two-step verification is required" });
-      }
-    }
-
     const { data: permission } = await userClient
       .from("role_permissions")
       .select("permission_code")

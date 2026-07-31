@@ -678,7 +678,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         consultationFee: "consultationFee" in input ? input.consultationFee : undefined,
         workingHours: "workingHours" in input ? input.workingHours : undefined,
         notes: "notes" in input ? input.notes : undefined,
-        redirectTo: `${globalThis.location.origin}/login`,
+        redirectTo: `${globalThis.location.origin}/login?setup=invite`,
       },
     });
     await throwIfFunctionError(error);
@@ -730,6 +730,14 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   async inviteClinicAdmin(input: ClinicAdminInput) {
     const id = await this.inviteStaff(input, "clinic_admin");
     return this.reloadAndFind<StaffMember>("staffMembers", id);
+  }
+
+  async deactivateStaff(userId: string, reason: string) {
+    const { error } = await this.client.rpc("deactivate_staff_member", {
+      p_user_id: userId,
+      p_reason: reason,
+    });
+    throwIfError(error);
   }
 
   async createPatient(input: PatientInput) {

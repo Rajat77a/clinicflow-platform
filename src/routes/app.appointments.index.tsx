@@ -83,7 +83,7 @@ function AppointmentsPage() {
   return (
     <>
       <PageHeader title="Appointments" description="Scheduling and check-ins."
-        actions={<Button asChild><Link to="/app/appointments/new"><Plus className="mr-1.5 h-4 w-4" />Book appointment</Link></Button>} />
+        actions={<Button asChild><Link to="/app/appointments/new" search={{ patient: undefined }}><Plus className="mr-1.5 h-4 w-4" />Book appointment</Link></Button>} />
       <Tabs defaultValue="list">
         <TabsList className="rounded-xl bg-muted/60 p-1">
           <TabsTrigger value="list" className="rounded-lg"><List className="mr-1.5 h-3.5 w-3.5" />List</TabsTrigger>

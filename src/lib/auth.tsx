@@ -99,8 +99,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const authenticatedUserId = user?.userId;
   const [passwordSetupRequired, setPasswordSetupRequired] = useState(() => {
     if (typeof window === "undefined") return false;
+    const setupType = new URL(window.location.href).searchParams.get("setup");
     const authFlowType = new URLSearchParams(window.location.hash.slice(1)).get("type");
-    return authFlowType === "invite" || authFlowType === "recovery";
+    const hashRequiresSetup = authFlowType === "invite" || authFlowType === "recovery";
+    return setupType === "invite" || setupType === "recovery" || hashRequiresSetup;
   });
 
   const hydrateSupabaseUser = useCallback(async (authUser: User | null) => {
@@ -215,7 +217,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [hydrateSupabaseUser]);
 
   useEffect(() => {
-    if (supabaseConfig.demoMode || !authenticatedUserId || typeof window === "undefined") return;
+    if (
+      supabaseConfig.demoMode
+      || !authenticatedUserId
+      || passwordSetupRequired
+      || typeof window === "undefined"
+    ) return;
 
     let expired = false;
     let timeoutId: ReturnType<typeof setTimeout>;
@@ -250,7 +257,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       document.removeEventListener("visibilitychange", handleVisibility);
     };
-  }, [authenticatedUserId]);
+  }, [authenticatedUserId, passwordSetupRequired]);
 
   const persist = (u: AuthUser | null) => {
     setUser(u);
@@ -304,7 +311,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (supabaseConfig.demoMode) return;
           const { error } = await getSupabaseBrowserClient().auth.resetPasswordForEmail(
             email.trim(),
-            { redirectTo: `${supabaseConfig.appUrl}/login` },
+            { redirectTo: `${supabaseConfig.appUrl}/login?setup=recovery` },
           );
           if (error) throw error;
         },
