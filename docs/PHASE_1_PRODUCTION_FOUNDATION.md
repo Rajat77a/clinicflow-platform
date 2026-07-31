@@ -35,6 +35,12 @@ Workers must use bounded retries, archive only completed messages, emit
 payload-free metrics, and place terminal failures in an approved incident
 workflow. Never log queue payloads because they may contain record identifiers.
 
+The reference scanner worker lives in `workers/document-scanner`. It verifies
+file signatures and recorded size, streams bytes to a private ClamAV daemon,
+hashes every object, releases only clean bytes, removes finalized quarantine
+objects, and records bounded terminal failures. Run it with
+`compose.scanner.yaml` only in protected infrastructure with service credentials.
+
 ## Document Contract
 
 Browser uploads remain disabled. The future upload service must:
