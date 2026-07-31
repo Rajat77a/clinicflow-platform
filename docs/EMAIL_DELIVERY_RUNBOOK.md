@@ -31,6 +31,9 @@ and Edge Function behave correctly.
 2. Verify the sender domain with the provider.
 3. Publish SPF and DKIM records, then publish a DMARC policy and reporting
    address approved by the hospital.
+   Run `EMAIL_SENDER_DOMAIN=... EMAIL_DKIM_SELECTOR=... npm run email:verify-domain`
+   and retain the successful output with the release evidence. This validates
+   DNS policy only; it does not prove mailbox delivery.
 4. In Supabase Auth > Emails > SMTP Settings, enter the provider host, port,
    username, password, sender address, and sender name.
 5. Keep SMTP credentials only in Supabase. Never place them in Git, Vercel

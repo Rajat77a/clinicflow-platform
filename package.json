@@ -14,6 +14,7 @@
     "smoke": "node scripts/smoke.mjs",
     "load:smoke": "node scripts/load-smoke.mjs",
     "ops:audit": "node scripts/operational-audit.mjs",
+    "email:verify-domain": "node scripts/verify-email-domain.mjs",
     "security:secrets": "node scripts/scan-secrets.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
