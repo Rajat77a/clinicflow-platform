@@ -17,6 +17,17 @@ const registrationDoctorLookupSource = await readFile(
   ),
   "utf8",
 );
+const patientDetailsMigrationSource = await readFile(
+  new URL(
+    "../../supabase/migrations/20260802100000_preserve_patient_registration_details.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
+const repositorySource = await readFile(
+  new URL("./supabase/workspace-repository.ts", import.meta.url),
+  "utf8",
+);
 
 test("patient form submits canonical database sex values", () => {
   assert.match(formSource, /value="male">Male/);
@@ -44,5 +55,30 @@ test("receptionists resolve doctor assignments without reading private staff row
   assert.doesNotMatch(
     registrationDoctorLookupSource,
     /from public\.staff_memberships[\s\S]*where user_id = p_doctor_user_id/,
+  );
+});
+
+test("patient registration persists every visible clinical and contact field", () => {
+  for (const field of [
+    "bloodGroup",
+    "email",
+    "whatsappPhone",
+    "address",
+    "emergencyContactName",
+    "emergencyContactPhone",
+    "allergies",
+    "chronicConditions",
+  ]) {
+    assert.match(formSource, new RegExp(`set${field[0].toUpperCase()}${field.slice(1)}`));
+    assert.match(repositorySource, new RegExp(`p_${field.replace(/[A-Z]/g, value => `_${value.toLowerCase()}`)}`));
+  }
+  assert.match(repositorySource, /register_patient_with_details/);
+  assert.match(patientDetailsMigrationSource, /insert into public\.patients[\s\S]*blood_group[\s\S]*emergency_contact[\s\S]*chronic_conditions/);
+});
+
+test("patient directory recognizes the canonical primary doctor relationship", () => {
+  assert.match(
+    patientDetailsMigrationSource,
+    /team\.relationship in \('primary_doctor', 'primary'\)/,
   );
 });

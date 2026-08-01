@@ -214,7 +214,7 @@ async function main() {
 
   const idempotencyKey = () => `integration-${randomUUID()}`;
   const { data: patientId, error: patientError } = await receptionist.client.rpc(
-    "register_patient",
+    "register_patient_with_details",
     {
       p_first_name: "Synthetic",
       p_last_name: "Patient",
@@ -223,6 +223,14 @@ async function main() {
       p_phone: "+910000000000",
       p_doctor_user_id: doctor.id,
       p_idempotency_key: idempotencyKey(),
+      p_blood_group: "O+",
+      p_email: "synthetic.patient@example.test",
+      p_whatsapp_phone: "+910000000001",
+      p_address: "Integration test address",
+      p_emergency_contact_name: "Synthetic Contact",
+      p_emergency_contact_phone: "+910000000002",
+      p_allergies: ["penicillin"],
+      p_chronic_conditions: ["hypertension"],
     },
   );
   assertNoError(patientError, "receptionist registers patient");
@@ -231,6 +239,19 @@ async function main() {
     [patientId],
     "receptionist must retain RLS visibility of the registered patient",
   );
+  const { data: patientDetails, error: patientDetailsError } = await receptionist.client
+    .from("patients")
+    .select("blood_group,email,whatsapp_phone,address,emergency_contact,allergies,chronic_conditions")
+    .eq("id", patientId)
+    .single();
+  assertNoError(patientDetailsError, "receptionist reads registered patient details");
+  assert.equal(patientDetails.blood_group, "O+");
+  assert.equal(patientDetails.email, "synthetic.patient@example.test");
+  assert.equal(patientDetails.whatsapp_phone, "+910000000001");
+  assert.equal(patientDetails.address.line, "Integration test address");
+  assert.equal(patientDetails.emergency_contact.name, "Synthetic Contact");
+  assert.deepEqual(patientDetails.allergies, ["penicillin"]);
+  assert.deepEqual(patientDetails.chronic_conditions, ["hypertension"]);
   const realtimePatientId = await Promise.race([
     realtimeEvent,
     new Promise((_, reject) =>

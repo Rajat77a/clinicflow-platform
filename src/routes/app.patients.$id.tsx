@@ -20,7 +20,7 @@ import { useAuth } from "@/lib/auth";
 import { hasPermission } from "@/lib/access-control";
 import { supabaseConfig } from "@/lib/supabase/config";
 import {
-  Phone, MessageCircle, Calendar, FileText, Receipt,
+  Phone, Mail, MapPin, MessageCircle, Calendar, FileText, Receipt,
   FolderOpen, FlaskConical, Download, Send, Printer, Edit, Eye,
 } from "lucide-react";
 import { useRecordPage } from "@/lib/use-record-page";
@@ -45,7 +45,7 @@ function PatientProfile() {
   const [recordLoading, setRecordLoading] = useState(!snapshotPatient);
   const [viewingBill, setViewingBill] = useState<Bill | null>(null);
   const [viewingLab, setViewingLab] = useState<LabReport | null>(null);
-  const patient = snapshotPatient ?? loadedPatient;
+  const patient = loadedPatient ?? snapshotPatient;
   const visitsPage = useRecordPage(listAppointments, { patientId: id });
   const prescriptionsPage = useRecordPage(listPrescriptions, { patientId: id });
   const billsPage = useRecordPage(listBills, { patientId: id });
@@ -56,18 +56,14 @@ function PatientProfile() {
   const myLabs = labsPage.rows;
 
   useEffect(() => {
-    if (snapshotPatient) {
-      setRecordLoading(false);
-      return;
-    }
     let current = true;
-    setRecordLoading(true);
+    setRecordLoading(!snapshotPatient);
     void getPatient(id)
       .then((result) => {
         if (current) setLoadedPatient(result);
       })
       .catch(() => {
-        if (current) setLoadedPatient(null);
+        if (current && !snapshotPatient) setLoadedPatient(null);
       })
       .finally(() => {
         if (current) setRecordLoading(false);
@@ -138,6 +134,8 @@ function PatientProfile() {
           </div>
           <dl className="mt-6 space-y-3 text-sm">
             <div className="flex items-center gap-2"><Phone className="h-4 w-4 text-muted-foreground" /> <span>{patient.phone}</span></div>
+            {patient.email && <div className="flex items-center gap-2"><Mail className="h-4 w-4 text-muted-foreground" /> <span className="break-all">{patient.email}</span></div>}
+            {patient.address && <div className="flex items-start gap-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" /> <span>{patient.address}</span></div>}
             {canUseExternalSharing && <div className="flex items-center gap-2">
               <MessageCircle className="h-4 w-4 text-muted-foreground" />
               <button className="hover:underline text-left" onClick={() => sendWhatsApp(patient.phone, `Hello ${patient.name}, this is ${user?.clinic}.`)}>
@@ -146,6 +144,22 @@ function PatientProfile() {
             </div>}
             <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-muted-foreground" /> <span>Last visit {patient.lastVisit}</span></div>
           </dl>
+          <div className="mt-5 space-y-3 border-t pt-4 text-sm">
+            {patient.bloodGroup && <PatientDetail label="Blood group" value={patient.bloodGroup} />}
+            {patient.whatsappPhone && <PatientDetail label="WhatsApp" value={patient.whatsappPhone} />}
+            {(patient.emergencyContactName || patient.emergencyContactPhone) && (
+              <PatientDetail
+                label="Emergency contact"
+                value={[patient.emergencyContactName, patient.emergencyContactPhone].filter(Boolean).join(" · ")}
+              />
+            )}
+            {patient.allergies && patient.allergies.length > 0 && (
+              <PatientDetail label="Allergies" value={patient.allergies.join(", ")} emphasis />
+            )}
+            {patient.chronicConditions && patient.chronicConditions.length > 0 && (
+              <PatientDetail label="Existing conditions" value={patient.chronicConditions.join(", ")} />
+            )}
+          </div>
         </div>
 
         <div className="lg:col-span-2">
@@ -398,6 +412,15 @@ function PatientProfile() {
         </DialogContent>
       </Dialog>
     </>
+  );
+}
+
+function PatientDetail({ label, value, emphasis = false }: { label: string; value: string; emphasis?: boolean }) {
+  return (
+    <div>
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className={emphasis ? "font-semibold text-destructive" : "font-medium"}>{value}</div>
+    </div>
   );
 }
 
