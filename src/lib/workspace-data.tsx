@@ -43,6 +43,14 @@ export type Patient = (typeof seedPatients)[number] & {
   clinicId: string;
   dateOfBirth?: string;
   medicalRecordNumber?: string;
+  bloodGroup?: string;
+  email?: string;
+  whatsappPhone?: string;
+  address?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  allergies?: string[];
+  chronicConditions?: string[];
   version?: number;
 };
 export type Doctor = (typeof seedDoctors)[number] & {
@@ -104,6 +112,14 @@ export interface PatientInput {
   gender: string;
   phone: string;
   doctorId: string;
+  bloodGroup?: string;
+  email?: string;
+  whatsappPhone?: string;
+  address?: string;
+  emergencyContactName?: string;
+  emergencyContactPhone?: string;
+  allergies?: string[];
+  chronicConditions?: string[];
 }
 
 export interface AppointmentInput {
@@ -806,6 +822,14 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           dateOfBirth: input.dateOfBirth,
           gender: input.gender,
           phone: input.phone,
+          bloodGroup: input.bloodGroup,
+          email: input.email,
+          whatsappPhone: input.whatsappPhone,
+          address: input.address,
+          emergencyContactName: input.emergencyContactName,
+          emergencyContactPhone: input.emergencyContactPhone,
+          allergies: input.allergies,
+          chronicConditions: input.chronicConditions,
           doctor: doctor.name,
           id: createId("PT"),
           clinicId: tenantId,

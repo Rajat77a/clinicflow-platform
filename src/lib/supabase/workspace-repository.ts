@@ -93,7 +93,13 @@ function displaySex(value: string | null) {
     .join(" ");
 }
 
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
 function mapPatient(row: Row, doctorName?: string): Patient {
+  const address = firstRelation(row.address);
+  const emergencyContact = firstRelation(row.emergency_contact);
   return {
     id: row.id,
     clinicId: row.hospital_id,
@@ -102,6 +108,14 @@ function mapPatient(row: Row, doctorName?: string): Patient {
     dateOfBirth: row.date_of_birth,
     gender: displaySex(row.sex),
     phone: row.phone || "",
+    bloodGroup: row.blood_group || undefined,
+    email: row.email || undefined,
+    whatsappPhone: row.whatsapp_phone || undefined,
+    address: address?.line || undefined,
+    emergencyContactName: emergencyContact?.name || undefined,
+    emergencyContactPhone: emergencyContact?.phone || undefined,
+    allergies: stringArray(row.allergies),
+    chronicConditions: stringArray(row.chronic_conditions),
     doctor: doctorName ?? row.doctor_name ?? "Unassigned",
     lastVisit: row.updated_at.slice(0, 10),
     status: row.status === "active" ? "Active" : row.status,
@@ -404,16 +418,19 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   async searchPatients(input: PatientSearch = {}): Promise<PatientPage> {
     const limit = Math.min(Math.max(input.limit ?? 25, 1), 100);
     const offset = Math.max(input.offset ?? 0, 0);
-    const { data, error } = await this.client.rpc("search_patients", {
-      p_query: input.query?.trim() ?? "",
-      p_limit: limit,
-      p_offset: offset,
-    });
+    const [{ data, error }, doctorById] = await Promise.all([
+      this.client.rpc("search_patients", {
+        p_query: input.query?.trim() ?? "",
+        p_limit: limit,
+        p_offset: offset,
+      }),
+      this.loadDoctorNames(),
+    ]);
     throwIfError(error);
 
     const rows = (data ?? []) as Row[];
     return {
-      rows: rows.map((row) => mapPatient(row)),
+      rows: rows.map((row) => mapPatient(row, doctorById.get(row.doctor_user_id))),
       total: rows.length ? Number(rows[0].total_count) : 0,
       limit,
       offset,
@@ -421,8 +438,18 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   }
 
   async getPatient(id: string) {
-    const page = await this.searchPatients({ query: id, limit: 20 });
-    return page.rows.find((patient) => patient.id === id) ?? null;
+    const [page, details] = await Promise.all([
+      this.searchPatients({ query: id, limit: 20 }),
+      this.client
+        .from("patients")
+        .select("id,hospital_id,medical_record_number,first_name,last_name,date_of_birth,sex,blood_group,phone,email,whatsapp_phone,address,emergency_contact,allergies,chronic_conditions,status,updated_at,version")
+        .eq("id", id)
+        .maybeSingle(),
+    ]);
+    throwIfError(details.error);
+    if (!details.data) return null;
+    const directoryPatient = page.rows.find((patient) => patient.id === id);
+    return mapPatient(details.data as Row, directoryPatient?.doctor);
   }
 
   private async loadDoctorNames() {
@@ -742,7 +769,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
 
   async createPatient(input: PatientInput) {
     const { firstName, lastName } = splitName(input.name);
-    const { data, error } = await this.client.rpc("register_patient", {
+    const { data, error } = await this.client.rpc("register_patient_with_details", {
       p_first_name: firstName,
       p_last_name: lastName,
       p_date_of_birth: input.dateOfBirth,
@@ -750,6 +777,14 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       p_phone: input.phone,
       p_doctor_user_id: input.doctorId,
       p_idempotency_key: randomKey(),
+      p_blood_group: input.bloodGroup ?? null,
+      p_email: input.email ?? null,
+      p_whatsapp_phone: input.whatsappPhone ?? null,
+      p_address: input.address ?? null,
+      p_emergency_contact_name: input.emergencyContactName ?? null,
+      p_emergency_contact_phone: input.emergencyContactPhone ?? null,
+      p_allergies: input.allergies ?? [],
+      p_chronic_conditions: input.chronicConditions ?? [],
     });
     throwIfError(error);
     return this.reloadAndFind<Patient>("patients", data as string);
