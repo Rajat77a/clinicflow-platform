@@ -13,9 +13,9 @@ and written approval from the hospital and ClinicFlow.
 Implemented foundations:
 
 - Supabase authentication with public registration disabled.
-- TOTP enrollment, verification, UI gating, and database AAL2 enforcement are
-  implemented for super administrators and clinic administrators. Deployment,
-  recovery-operator assignment, and acceptance evidence remain required.
+- TOTP enrollment and verification support is retained, but mandatory MFA is
+  temporarily disabled during development at the user's request. Hospital use
+  remains blocked until privileged-role MFA and recovery are re-enabled and tested.
 - Strong password policy, current-password verification, other-session
   revocation, and a 30-minute inactivity timeout.
 - Dedicated hospital membership and four roles: super admin, clinic admin,
@@ -56,7 +56,7 @@ Implemented foundations:
 | Hospital requirements and clinical workflow sign-off | Signed workflow and role matrix                                                                                                      | Unassigned | Blocked |
 | Privacy and regulatory assessment                    | Counsel-approved obligations, consent, retention, and data residency                                                                 | Unassigned | Blocked |
 | Infrastructure agreements                            | Approved paid plans and required provider contracts                                                                                  | Unassigned | Blocked |
-| Production identity                                  | AAL2 enforcement exists; administrator enrollment, recovery, offboarding, and emergency access acceptance remain                     | Unassigned | Partial |
+| Production identity                                  | TOTP support exists but enforcement is deferred; enrollment, recovery, offboarding, and emergency access acceptance remain           | Unassigned | Blocked |
 | Email delivery                                       | DNS validation exists; hospital SMTP configuration and invite/reset delivery evidence remain per `docs/EMAIL_DELIVERY_RUNBOOK.md`    | Unassigned | Partial |
 | Backup and recovery                                  | Synthetic restore automation exists; production backups plus witnessed restore drill remain                                          | Unassigned | Blocked |
 | Monitoring and alerting                              | Correlated operational logs and availability baseline exist; auth abuse, queue, database, responder routing, and error alerts remain | Unassigned | Partial |
