@@ -350,17 +350,39 @@ async function main() {
   );
   assert.ok(receptionistPrescriptionError, "receptionist prescription signing must be denied");
 
-  const { data: invoiceId, error: invoiceError } = await receptionist.client.rpc("create_invoice", {
-    p_patient_id: patientId,
-    p_description: "Synthetic integration service",
-    p_amount: 100,
-    p_idempotency_key: idempotencyKey(),
-  });
+  const { data: invoiceId, error: invoiceError } = await receptionist.client.rpc(
+    "create_itemized_invoice",
+    {
+      p_patient_id: patientId,
+      p_items: [
+        { category: "Consultation", name: "Synthetic consultation", qty: 1, unit: 100 },
+        { category: "Lab", name: "Synthetic lab", qty: 2, unit: 25 },
+      ],
+      p_discount: 10,
+      p_tax_rate: 10,
+      p_idempotency_key: idempotencyKey(),
+    },
+  );
   assertNoError(invoiceError, "receptionist creates invoice");
   assert.deepEqual(
     await visibleIds(receptionist.client, "invoices", invoiceId),
     [invoiceId],
     "receptionist must see the invoice",
+  );
+  const { data: invoice, error: invoiceDetailsError } = await receptionist.client
+    .from("invoices")
+    .select("subtotal,discount,tax,total,invoice_items(category,description,quantity,unit_price)")
+    .eq("id", invoiceId)
+    .single();
+  assertNoError(invoiceDetailsError, "receptionist reads itemized invoice");
+  assert.equal(Number(invoice.subtotal), 150);
+  assert.equal(Number(invoice.discount), 10);
+  assert.equal(Number(invoice.tax), 14);
+  assert.equal(Number(invoice.total), 154);
+  assert.equal(invoice.invoice_items.length, 2);
+  assert.deepEqual(
+    new Set(invoice.invoice_items.map((item) => item.category)),
+    new Set(["Consultation", "Lab"]),
   );
   assert.deepEqual(
     await visibleIds(doctor.client, "invoices", invoiceId),

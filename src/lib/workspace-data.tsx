@@ -81,6 +81,10 @@ export type Bill = (typeof seedBills)[number] & {
   clinicId: string;
   patientId: string;
   databaseId?: string;
+  subtotal?: number;
+  tax?: number;
+  discount?: number;
+  items?: BillLineInput[];
 };
 export type AuditEntry = (typeof seedAuditLogs)[number] & { id: string; clinicId: string | null };
 export type StaffMember = {
@@ -144,8 +148,18 @@ export interface PrescriptionInput {
 
 export interface BillInput {
   patientId: string;
-  amount: number;
   method?: string;
+  subtotal: number;
+  discount: number;
+  taxRate: number;
+  items: BillLineInput[];
+}
+
+export interface BillLineInput {
+  category: "Consultation" | "Procedure" | "Medicine" | "Lab" | "Other";
+  name: string;
+  qty: number;
+  unit: number;
 }
 
 export interface DoctorInput {
@@ -932,13 +946,18 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         const tenantId = requireClinic(actor);
         const patient = state.patients.find(item => item.id === input.patientId && item.clinicId === tenantId);
         if (!patient) throw new Error("Patient must belong to the active clinic");
+        const taxAmount = Math.round(Math.max(0, input.subtotal - input.discount) * input.taxRate) / 100;
         const bill: Bill = {
           id: createId("INV"),
           clinicId: tenantId,
           patientId: patient.id,
           patient: patient.name,
           date: new Date().toISOString().slice(0, 10),
-          amount: input.amount,
+          amount: input.subtotal + taxAmount - input.discount,
+          subtotal: input.subtotal,
+          discount: input.discount,
+          tax: taxAmount,
+          items: input.items,
           status: "Pending",
           method: input.method ?? "—",
         };

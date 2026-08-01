@@ -324,10 +324,8 @@ function PatientProfile() {
       <Dialog open={!!viewingBill} onOpenChange={(o) => !o && setViewingBill(null)}>
         <DialogContent className="max-w-lg">
           <DialogHeader><DialogTitle>Invoice {viewingBill?.id}</DialogTitle></DialogHeader>
-          {viewingBill && (() => {
-            const linkedRx = null as Prescription | null;
-            return (
-              <div className="space-y-4 text-sm">
+          {viewingBill && (
+            <div className="space-y-4 text-sm">
                 <div className="grid grid-cols-2 gap-3">
                   <div><div className="text-xs text-muted-foreground">Patient</div><div className="font-semibold">{viewingBill.patient}</div></div>
                   <div><div className="text-xs text-muted-foreground">Date</div><div>{viewingBill.date}</div></div>
@@ -336,29 +334,35 @@ function PatientProfile() {
                     <Badge variant={viewingBill.status === "Paid" ? "secondary" : viewingBill.status === "Overdue" ? "destructive" : "outline"}>{viewingBill.status}</Badge>
                   </div>
                 </div>
-                {linkedRx && (
+                {viewingBill.items && viewingBill.items.length > 0 && (
                   <div>
-                    <div className="text-xs font-semibold uppercase text-muted-foreground mb-1.5">Medicines ({linkedRx.id} — {linkedRx.diagnosis})</div>
+                    <div className="mb-1.5 text-xs font-semibold uppercase text-muted-foreground">Line items</div>
                     <div className="rounded-xl border divide-y">
-                      {linkedRx.medicines.map((m, i) => (
-                        <div key={i} className="flex items-center justify-between px-3 py-2">
+                      {viewingBill.items.map((item, index) => (
+                        <div key={`${item.category}-${item.name}-${index}`} className="flex items-center justify-between gap-3 px-3 py-2">
                           <div>
-                            <div className="font-medium">{m.name}</div>
-                            <div className="text-xs text-muted-foreground">{m.dosage} · {m.frequency} · {m.duration}</div>
+                            <div className="font-medium">{item.name}</div>
+                            <div className="text-xs text-muted-foreground">{item.category} · {item.qty} × ₹{item.unit.toFixed(2)}</div>
                           </div>
-                          <div className="tabular-nums text-sm">₹{(m.unitPrice ?? 0).toFixed(2)}</div>
+                          <div className="shrink-0 tabular-nums text-sm">₹{(item.qty * item.unit).toFixed(2)}</div>
                         </div>
                       ))}
                     </div>
                   </div>
                 )}
+                {(viewingBill.subtotal != null || viewingBill.discount != null || viewingBill.tax != null) && (
+                  <dl className="space-y-1 border-t pt-3 text-sm">
+                    <div className="flex justify-between"><dt>Subtotal</dt><dd className="tabular-nums">₹{(viewingBill.subtotal ?? viewingBill.amount).toFixed(2)}</dd></div>
+                    <div className="flex justify-between text-muted-foreground"><dt>Discount</dt><dd className="tabular-nums">- ₹{(viewingBill.discount ?? 0).toFixed(2)}</dd></div>
+                    <div className="flex justify-between text-muted-foreground"><dt>Tax</dt><dd className="tabular-nums">₹{(viewingBill.tax ?? 0).toFixed(2)}</dd></div>
+                  </dl>
+                )}
                 <div className="flex justify-between rounded-xl bg-muted/40 px-3 py-2 font-semibold">
                   <span>Total</span>
                   <span className="tabular-nums">₹{viewingBill.amount.toFixed(2)}</span>
                 </div>
-              </div>
-            );
-          })()}
+            </div>
+          )}
           <DialogFooter>
             {canUseExternalSharing && (
               <Button variant="outline" onClick={() => viewingBill && sendWhatsApp(patient.phone, `Invoice ${viewingBill.id} — ₹${viewingBill.amount.toFixed(2)} (${viewingBill.status})`)}>

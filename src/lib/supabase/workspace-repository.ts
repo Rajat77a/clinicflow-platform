@@ -149,6 +149,39 @@ function relatedPatientName(row: Row) {
   return `${patient.first_name ?? ""} ${patient.last_name ?? ""}`.trim() || "Restricted patient";
 }
 
+function mapBill(row: Row, patientName?: string): Bill {
+  const payment = ((row.payments ?? []) as Row[]).find((item) => item.status === "confirmed");
+  return {
+    id: row.invoice_number,
+    databaseId: row.id,
+    clinicId: row.hospital_id,
+    patientId: row.patient_id,
+    patient: patientName ?? relatedPatientName(row),
+    date: (row.issued_at || row.created_at).slice(0, 10),
+    amount: Number(row.total),
+    subtotal: Number(row.subtotal),
+    tax: Number(row.tax),
+    discount: Number(row.discount),
+    items: ((row.invoice_items ?? []) as Row[])
+      .sort((left, right) => Number(left.position) - Number(right.position))
+      .map((item) => ({
+        category: item.category,
+        name: item.description,
+        qty: Number(item.quantity),
+        unit: Number(item.unit_price),
+      })),
+    status:
+      row.status === "paid"
+        ? "Paid"
+        : row.status === "void"
+          ? "Void"
+          : row.status === "issued"
+            ? "Pending"
+            : row.status,
+    method: payment?.method ?? "-",
+  };
+}
+
 export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   constructor(private readonly client: SupabaseClient = getSupabaseBrowserClient()) {}
 
@@ -196,7 +229,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       this.client
         .from("invoices")
         .select(
-          "id,hospital_id,patient_id,invoice_number,status,total,issued_at,created_at,patients(first_name,last_name),payments(method,status,received_at)",
+          "id,hospital_id,patient_id,invoice_number,status,subtotal,tax,discount,total,issued_at,created_at,patients(first_name,last_name),invoice_items(category,description,quantity,unit_price,amount,position),payments(method,status,received_at)",
         )
         .order("created_at", { ascending: false })
         .limit(50),
@@ -356,27 +389,9 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       }
     }
 
-    const bills: Bill[] = ((invoicesResult.data ?? []) as Row[]).map((row) => {
-      const payment = ((row.payments ?? []) as Row[]).find((item) => item.status === "confirmed");
-      return {
-        id: row.invoice_number,
-        databaseId: row.id,
-        clinicId: row.hospital_id,
-        patientId: row.patient_id,
-        patient: patientById.get(row.patient_id)?.name ?? relatedPatientName(row),
-        date: (row.issued_at || row.created_at).slice(0, 10),
-        amount: Number(row.total),
-        status:
-          row.status === "paid"
-            ? "Paid"
-            : row.status === "void"
-              ? "Void"
-              : row.status === "issued"
-                ? "Pending"
-                : row.status,
-        method: payment?.method ?? "-",
-      };
-    });
+    const bills: Bill[] = ((invoicesResult.data ?? []) as Row[]).map((row) =>
+      mapBill(row, patientById.get(row.patient_id)?.name),
+    );
 
     const clinic = {
       id: hospital.id,
@@ -589,7 +604,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     let query = this.client
       .from("invoices")
       .select(
-        "id,hospital_id,patient_id,invoice_number,status,total,issued_at,created_at,patients(first_name,last_name),payments(method,status,received_at)",
+        "id,hospital_id,patient_id,invoice_number,status,subtotal,tax,discount,total,issued_at,created_at,patients(first_name,last_name),invoice_items(category,description,quantity,unit_price,amount,position),payments(method,status,received_at)",
         { count: "exact" },
       )
       .order("created_at", { ascending: false })
@@ -600,27 +615,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     const result = await query;
     throwIfError(result.error);
     return {
-      rows: ((result.data ?? []) as Row[]).map((row) => {
-        const payment = ((row.payments ?? []) as Row[]).find((item) => item.status === "confirmed");
-        return {
-          id: row.invoice_number,
-          databaseId: row.id,
-          clinicId: row.hospital_id,
-          patientId: row.patient_id,
-          patient: relatedPatientName(row),
-          date: (row.issued_at || row.created_at).slice(0, 10),
-          amount: Number(row.total),
-          status:
-            row.status === "paid"
-              ? "Paid"
-              : row.status === "void"
-                ? "Void"
-                : row.status === "issued"
-                  ? "Pending"
-                  : row.status,
-          method: payment?.method ?? "-",
-        };
-      }),
+      rows: ((result.data ?? []) as Row[]).map((row) => mapBill(row)),
       total: result.count ?? 0,
       limit,
       offset,
@@ -851,10 +846,11 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   }
 
   async createBill(input: BillInput) {
-    const { data, error } = await this.client.rpc("create_invoice", {
+    const { data, error } = await this.client.rpc("create_itemized_invoice", {
       p_patient_id: input.patientId,
-      p_description: "Clinical services",
-      p_amount: input.amount,
+      p_items: input.items,
+      p_discount: input.discount,
+      p_tax_rate: input.taxRate,
       p_idempotency_key: randomKey(),
     });
     throwIfError(error);
