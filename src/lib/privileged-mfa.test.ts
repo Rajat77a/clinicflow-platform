@@ -39,10 +39,16 @@ const currentMfaSource = await readFile(
   ),
   "utf8",
 );
+const developmentMfaSource = await readFile(
+  new URL(
+    "../../supabase/migrations/20260801130000_disable_development_mfa.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
-test("privileged MFA gates the workspace before hospital data loads", () => {
-  assert.match(rootSource, /PrivilegedMfaGate/);
-  assert.match(rootSource, /<PrivilegedMfaGate>[\s\S]*<WorkspaceDataProvider>/);
+test("mandatory MFA is disabled during development without deleting its implementation", () => {
+  assert.doesNotMatch(rootSource, /PrivilegedMfaGate/);
   assert.match(rootSource, /<WorkspaceDataProvider>/);
   assert.match(componentSource, /user\?\.role === "super_admin"/);
   assert.match(componentSource, /user\?\.role === "clinic_admin"/);
@@ -66,7 +72,7 @@ test("historical migrations document the previous AAL2 policy", () => {
   assert.match(restoredMfaSource, /= 'aal2'/);
 });
 
-test("current permissions and staff invitations require privileged AAL2 sessions", () => {
+test("current development permissions accept password-authenticated sessions", () => {
   const adminInvite = functionSource.indexOf("admin.inviteUserByEmail");
   const permissionCheck = functionSource.indexOf('eq("permission_code", "people.manage")');
   assert.ok(permissionCheck > 0);
@@ -80,6 +86,10 @@ test("current permissions and staff invitations require privileged AAL2 sessions
   assert.match(currentMfaSource, /membership\.role_code not in \('super_admin', 'clinic_admin'\)/);
   assert.match(currentMfaSource, /auth\.jwt\(\) ->> 'aal'/);
   assert.match(currentMfaSource, /= 'aal2'/);
+  assert.match(developmentMfaSource, /membership\.active/);
+  assert.match(developmentMfaSource, /permission\.permission_code = permission_name/);
+  assert.doesNotMatch(developmentMfaSource, /auth\.jwt\(\) ->> 'aal'/);
+  assert.doesNotMatch(developmentMfaSource, /= 'aal2'/);
 });
 
 test("security events are validated and append-only audit records are used", () => {
