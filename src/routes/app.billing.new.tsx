@@ -65,7 +65,9 @@ function NewBill() {
   };
 
   const subtotal = lines.reduce((s, l) => s + l.qty * l.unit, 0);
-  const total = Math.max(0, subtotal - discount) * (1 + tax / 100);
+  const taxableAmount = Math.max(0, subtotal - discount);
+  const taxAmount = Math.round(taxableAmount * tax) / 100;
+  const total = taxableAmount + taxAmount;
   const bySection = useMemo(() => {
     const m: Record<string, Line[]> = {};
     lines.forEach(l => { (m[l.category] = m[l.category] || []).push(l); });
@@ -94,10 +96,33 @@ function NewBill() {
   const onSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!patient) { toast.error("Please select a patient"); return; }
+    if (lines.length === 0 || lines.some(line => !line.name.trim() || !Number.isFinite(line.qty) || line.qty <= 0 || !Number.isFinite(line.unit) || line.unit < 0)) {
+      toast.error("Every invoice line needs a description, positive quantity and valid unit price");
+      return;
+    }
+    if (!Number.isFinite(discount) || discount < 0 || discount > subtotal) {
+      toast.error("Discount must be between zero and the subtotal");
+      return;
+    }
+    if (!Number.isFinite(tax) || tax < 0 || tax > 100) {
+      toast.error("Tax rate must be between 0% and 100%");
+      return;
+    }
     if (total <= 0) { toast.error("Invoice total must be greater than zero"); return; }
     setIsSaving(true);
     try {
-      const bill = await createBill({ patientId: patient.id, amount: total });
+      const bill = await createBill({
+        patientId: patient.id,
+        subtotal,
+        discount,
+        taxRate: tax,
+        items: lines.map(({ category, name, qty, unit }) => ({
+          category,
+          name: name.trim(),
+          qty,
+          unit,
+        })),
+      });
       toast.success(`Bill ${bill.id} created`);
       navigate({ to: "/app/billing" });
     } catch (error) {
@@ -194,10 +219,10 @@ function NewBill() {
 
             <div className="grid grid-cols-2 gap-3 pt-3">
               <div className="space-y-1.5"><Label>Discount (₹)</Label>
-                <Input type="number" min={0} className="h-11 rounded-xl" value={discount} onChange={e => setDiscount(+e.target.value)} />
+                <Input type="number" min={0} max={subtotal} step="0.01" className="h-11 rounded-xl" value={discount} onChange={e => setDiscount(+e.target.value)} />
               </div>
               <div className="space-y-1.5"><Label>Tax (%)</Label>
-                <Input type="number" min={0} className="h-11 rounded-xl" value={tax} onChange={e => setTax(+e.target.value)} />
+                <Input type="number" min={0} max={100} step="0.01" className="h-11 rounded-xl" value={tax} onChange={e => setTax(+e.target.value)} />
               </div>
             </div>
           </section>
