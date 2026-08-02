@@ -207,7 +207,9 @@ function ClinicAdminDashboard() {
   const { appointments, patients, doctors, bills, prescriptions } = useWorkspaceData();
   const todayDate = localDateKey();
   const currentMonth = todayDate.slice(0, 7);
-  const today = appointments.filter(appointment => appointment.date === todayDate);
+  const today = appointments
+    .filter(appointment => appointment.date === todayDate)
+    .sort((left, right) => left.time.localeCompare(right.time));
   const newPatients = patients.filter(patient => patient.lastVisit === todayDate).length;
   const activeDoctors = doctors.filter(doctor => doctor.status === "Active").length;
   const followUps = prescriptions.filter(prescription => prescription.followUp && prescription.followUp >= todayDate).length;
@@ -287,7 +289,9 @@ function DoctorDashboard() {
   const { appointments, prescriptions } = useWorkspaceData();
   const todayDate = localDateKey();
   const weekStart = localDateKey(localStartOfWeek());
-  const today = appointments.filter(appointment => appointment.date === todayDate);
+  const today = appointments
+    .filter(appointment => appointment.date === todayDate)
+    .sort((left, right) => left.time.localeCompare(right.time));
   const seenThisWeek = appointments.filter(
     appointment => appointment.date >= weekStart
       && appointment.date <= todayDate
@@ -374,7 +378,9 @@ function DoctorDashboard() {
 function ReceptionistDashboard() {
   const { appointments, patients, bills } = useWorkspaceData();
   const todayDate = localDateKey();
-  const today = appointments.filter(appointment => appointment.date === todayDate);
+  const today = appointments
+    .filter(appointment => appointment.date === todayDate)
+    .sort((left, right) => left.time.localeCompare(right.time));
   const checkedIn = today.filter(appointment => appointment.status === "Checked-in").length;
   const pendingBills = bills.filter(bill => bill.status !== "Paid").length;
   const newPatients = patients.filter(patient => patient.lastVisit === todayDate).length;

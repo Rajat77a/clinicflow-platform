@@ -14,32 +14,49 @@ import { CalendarDays, List, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { PaginationFooter } from "@/components/data/pagination-footer";
 import { useRecordPage } from "@/lib/use-record-page";
+import { localDateKey, localStartOfWeek } from "@/lib/calendar";
 
 export const Route = createFileRoute("/app/appointments/")({ component: AppointmentsPage });
 
 type Appt = Appointment;
 
 function CalendarView({ appts }: { appts: Appt[] }) {
-  const hours = ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30"];
+  const weekStart = localStartOfWeek();
+  const days = Array.from({ length: 5 }, (_, index) => {
+    const date = new Date(weekStart);
+    date.setDate(weekStart.getDate() + index);
+    return {
+      dateKey: localDateKey(date),
+      label: date.toLocaleDateString(undefined, { weekday: "short", day: "numeric" }),
+    };
+  });
+  const defaultHours = ["09:00", "09:30", "10:00", "10:30", "11:00", "11:30", "13:00", "13:30", "14:00", "14:30", "15:00", "15:30"];
+  const weekDates = new Set(days.map((day) => day.dateKey));
+  const hours = [...new Set([
+    ...defaultHours,
+    ...appts.filter((appointment) => weekDates.has(appointment.date)).map((appointment) => appointment.time),
+  ])].sort((left, right) => left.localeCompare(right));
+  const today = localDateKey();
+
   return (
     <div className="overflow-x-auto rounded-2xl border bg-card shadow-soft">
       <div className="min-w-[720px] grid grid-cols-[80px_repeat(5,1fr)]">
         <div className="border-b border-r bg-muted/30 p-3 text-xs font-semibold uppercase tracking-wider text-muted-foreground">Time</div>
-        {["Mon 16", "Tue 17", "Wed 18", "Thu 19", "Fri 20"].map((d, i) => (
-          <div key={d} className={`border-b p-3 text-xs font-semibold ${i === 4 ? "text-primary" : ""}`}>{d}</div>
+        {days.map((day) => (
+          <div key={day.dateKey} className={`border-b p-3 text-xs font-semibold ${day.dateKey === today ? "text-primary" : ""}`}>{day.label}</div>
         ))}
         {hours.flatMap((h) => [
           <div key={`t-${h}`} className="border-b border-r p-3 text-xs text-muted-foreground">{h}</div>,
-          ...Array.from({ length: 5 }).map((_, c) => {
-            const slot = appts.find(a => a.time === h && c === 4);
+          ...days.map((day) => {
+            const slots = appts.filter((appointment) => appointment.date === day.dateKey && appointment.time === h);
             return (
-              <div key={`${h}-${c}`} className="border-b p-1.5 min-h-14">
-                {slot && (
-                  <div className="rounded-lg bg-primary-soft px-2 py-1.5 text-xs">
-                    <div className="font-semibold truncate text-primary">{slot.patient}</div>
-                    <div className="text-[10px] text-muted-foreground truncate">{slot.type}</div>
+              <div key={`${h}-${day.dateKey}`} className="min-h-14 space-y-1 border-b p-1.5">
+                {slots.map((slot) => (
+                  <div key={slot.id} className="rounded-md bg-primary-soft px-2 py-1.5 text-xs">
+                    <div className="truncate font-semibold text-primary">{slot.patient}</div>
+                    <div className="truncate text-[10px] text-muted-foreground">{slot.doctor} · {slot.type}</div>
                   </div>
-                )}
+                ))}
               </div>
             );
           }),
@@ -50,7 +67,7 @@ function CalendarView({ appts }: { appts: Appt[] }) {
 }
 
 function AppointmentsPage() {
-  const { listAppointments, updateAppointment } = useWorkspaceData();
+  const { appointments, listAppointments, updateAppointment } = useWorkspaceData();
   const {
     rows,
     total,
@@ -63,6 +80,11 @@ function AppointmentsPage() {
   const [editing, setEditing] = useState<Appt | null>(null);
   const [draft, setDraft] = useState<Appt | null>(null);
   const [saving, setSaving] = useState(false);
+  const upcoming = appointments
+    .filter((appointment) => appointment.date >= localDateKey())
+    .filter((appointment) => !["Cancelled", "Completed", "No-show"].includes(appointment.status))
+    .sort((left, right) => `${left.date}T${left.time}`.localeCompare(`${right.date}T${right.time}`))
+    .slice(0, 6);
 
   const openEdit = (a: Appt) => { setEditing(a); setDraft({ ...a }); };
   const save = async () => {
@@ -124,9 +146,9 @@ function AppointmentsPage() {
             disabled={isLoading}
           />
         </TabsContent>
-        <TabsContent value="calendar" className="mt-4"><CalendarView appts={rows} /></TabsContent>
+        <TabsContent value="calendar" className="mt-4"><CalendarView appts={appointments} /></TabsContent>
         <TabsContent value="upcoming" className="mt-4 grid gap-3 sm:grid-cols-2">
-          {rows.filter(a => a.status !== "Checked-in").slice(0, 6).map(a => (
+          {upcoming.map(a => (
             <div key={a.id} className="rounded-2xl border bg-card p-4 shadow-soft">
               <div className="flex items-center justify-between">
                 <div className="font-semibold">{a.patient}</div>
@@ -136,6 +158,11 @@ function AppointmentsPage() {
               <div className="mt-3 text-sm">{a.date} at <span className="font-semibold">{a.time}</span></div>
             </div>
           ))}
+          {upcoming.length === 0 && (
+            <div className="rounded-lg border border-dashed bg-card px-4 py-8 text-center text-sm text-muted-foreground sm:col-span-2">
+              No upcoming appointments.
+            </div>
+          )}
         </TabsContent>
       </Tabs>
 

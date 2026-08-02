@@ -36,7 +36,10 @@ interface WorkspaceRealtimeOptions {
   role: Role;
   userId: string;
   onChange: () => void;
+  onStatus?: (status: WorkspaceRealtimeStatus) => void;
 }
+
+export type WorkspaceRealtimeStatus = "connecting" | "live" | "error";
 
 export function subscribeToWorkspaceChanges({
   client,
@@ -44,6 +47,7 @@ export function subscribeToWorkspaceChanges({
   role,
   userId,
   onChange,
+  onStatus,
 }: WorkspaceRealtimeOptions) {
   const channel = client.channel(`workspace:${hospitalId}:${userId}`);
 
@@ -60,7 +64,11 @@ export function subscribeToWorkspaceChanges({
     );
   }
 
-  channel.subscribe();
+  onStatus?.("connecting");
+  channel.subscribe((status) => {
+    if (status === "SUBSCRIBED") onStatus?.("live");
+    if (status === "CHANNEL_ERROR" || status === "TIMED_OUT") onStatus?.("error");
+  });
 
   return async () => {
     await client.removeChannel(channel);

@@ -83,7 +83,10 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:title", content: "ClinicFlow - Hospital Operations" },
       { name: "twitter:description", content: "Secure hospital operations for authorized clinical and administrative staff." },
     ],
-    links: [{ rel: "stylesheet", href: appCss }],
+    links: [
+      { rel: "stylesheet", href: appCss },
+      { rel: "icon", type: "image/svg+xml", href: "/clinicflow-icon.svg" },
+    ],
   }),
   shellComponent: RootShell,
   component: RootComponent,
