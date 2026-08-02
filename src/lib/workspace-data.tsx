@@ -345,6 +345,11 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         {
           ...state,
           appointments: state.appointments.map(item => item.id === command.value.id ? command.value : item),
+          patients: command.value.status === "Completed"
+            ? state.patients.map((patient) => patient.id === command.value.patientId
+              ? { ...patient, lastVisit: command.value.date, status: "Active" }
+              : patient)
+            : state.patients,
         },
         command.actor,
         `Updated appointment ${command.value.id}`,

@@ -11,6 +11,7 @@ import { useWorkspaceData } from "@/lib/workspace-data";
 import { useAuth } from "@/lib/auth";
 import { Clock } from "lucide-react";
 import { toast } from "sonner";
+import { TimeWheelPicker } from "@/components/forms/time-wheel-picker";
 
 export const Route = createFileRoute("/app/appointments/new")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -93,7 +94,7 @@ function NewAppointment() {
         type,
         notes: notes.trim() || undefined,
       });
-      toast.success(`Appointment ${appointment.id} booked`);
+      toast.success(`Appointment ${appointment.id} booked and linked to ${patient.primary}`);
       navigate({ to: "/app/appointments" });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to book appointment");
@@ -122,7 +123,7 @@ function NewAppointment() {
               <Input type="date" className="h-11 rounded-xl" value={date} onChange={e => setDate(e.target.value)} />
             </div>
             <div className="space-y-1.5"><Label>Time</Label>
-              <Input type="time" className="h-11 rounded-xl" value={time} onChange={e => setTime(e.target.value)} />
+              <TimeWheelPicker value={time} onChange={setTime} aria-label="Choose appointment time" />
             </div>
             <Button type="button" variant="outline" className="h-11 rounded-xl" onClick={resetToNow}>
               <Clock className="mr-1.5 h-4 w-4" />Now

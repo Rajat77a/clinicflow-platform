@@ -15,6 +15,7 @@ import { toast } from "sonner";
 import { PaginationFooter } from "@/components/data/pagination-footer";
 import { useRecordPage } from "@/lib/use-record-page";
 import { localDateKey, localStartOfWeek } from "@/lib/calendar";
+import { TimeWheelPicker } from "@/components/forms/time-wheel-picker";
 
 export const Route = createFileRoute("/app/appointments/")({ component: AppointmentsPage });
 
@@ -180,7 +181,7 @@ function AppointmentsPage() {
                   <Input type="date" value={draft.date} onChange={(e) => setDraft({ ...draft, date: e.target.value })} className="h-11 rounded-xl" />
                 </div>
                 <div className="space-y-1.5"><Label>Time</Label>
-                  <Input type="time" value={draft.time} onChange={(e) => setDraft({ ...draft, time: e.target.value })} className="h-11 rounded-xl" />
+                  <TimeWheelPicker value={draft.time} onChange={(time) => setDraft({ ...draft, time })} aria-label="Choose appointment time" />
                 </div>
               </div>
               <div className="space-y-1.5"><Label>Type</Label>
@@ -200,7 +201,10 @@ function AppointmentsPage() {
                     <SelectItem value="Pending">Pending</SelectItem>
                     <SelectItem value="Confirmed">Confirmed</SelectItem>
                     <SelectItem value="Checked-in">Checked-in</SelectItem>
+                    <SelectItem value="In progress">In progress</SelectItem>
+                    <SelectItem value="Completed">Completed</SelectItem>
                     <SelectItem value="Cancelled">Cancelled</SelectItem>
+                    <SelectItem value="No-show">No-show</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
