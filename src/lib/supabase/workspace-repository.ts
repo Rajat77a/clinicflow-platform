@@ -464,7 +464,8 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     throwIfError(details.error);
     if (!details.data) return null;
     const directoryPatient = page.rows.find((patient) => patient.id === id);
-    return mapPatient(details.data as Row, directoryPatient?.doctor);
+    const patient = mapPatient(details.data as Row, directoryPatient?.doctor);
+    return directoryPatient ? { ...patient, lastVisit: directoryPatient.lastVisit } : patient;
   }
 
   private async loadDoctorNames() {

@@ -14,6 +14,14 @@ const appointmentSource = await readFile(
   new URL("../routes/app.appointments.new.tsx", import.meta.url),
   "utf8",
 );
+const appointmentListSource = await readFile(
+  new URL("../routes/app.appointments.index.tsx", import.meta.url),
+  "utf8",
+);
+const timeWheelSource = await readFile(
+  new URL("../components/forms/time-wheel-picker.tsx", import.meta.url),
+  "utf8",
+);
 const billingSource = await readFile(
   new URL("../routes/app.billing.new.tsx", import.meta.url),
   "utf8",
@@ -30,6 +38,13 @@ const offboardingMigration = await readFile(
   new URL("../../supabase/migrations/20260730100000_safe_staff_offboarding.sql", import.meta.url),
   "utf8",
 );
+const completedVisitMigration = await readFile(
+  new URL(
+    "../../supabase/migrations/20260803100000_reflect_completed_appointments_in_patient_directory.sql",
+    import.meta.url,
+  ),
+  "utf8",
+);
 
 test("every authenticated portal renders the shared live clock", () => {
   assert.match(shellSource, /function PortalClock\(\)/);
@@ -41,6 +56,24 @@ test("patient follow-up links preselect the patient in appointment booking", () 
   assert.match(patientSource, /search=\{\{ patient: patient\.id \}\}/);
   assert.match(appointmentSource, /requestedPatientId/);
   assert.match(appointmentSource, /getPatient\(requestedPatientId\)/);
+});
+
+test("appointment times use the shared accessible 3D wheel", () => {
+  assert.match(appointmentSource, /<TimeWheelPicker/);
+  assert.match(timeWheelSource, /role="listbox"/);
+  assert.match(timeWheelSource, /aria-selected=\{active\}/);
+  assert.match(timeWheelSource, /translateZ\(34px\)/);
+  assert.match(timeWheelSource, /motion-reduce:transform-none/);
+});
+
+test("completed appointments drive the patient directory last visit", () => {
+  assert.match(appointmentListSource, /<SelectItem value="Completed">Completed<\/SelectItem>/);
+  assert.match(completedVisitMigration, /appointment\.status = 'completed'/);
+  assert.match(completedVisitMigration, /max\(appointment\.ends_at\)/);
+  assert.match(completedVisitMigration, /coalesce\(visits\.last_visit_at, p\.updated_at\)/);
+  assert.match(completedVisitMigration, /Cancelled by hospital staff/);
+  assert.match(repositorySource, /lastVisit: directoryPatient\.lastVisit/);
+  assert.match(workspaceSource, /command\.value\.status === "Completed"/);
 });
 
 test("billing loads the assigned doctor's configured consultation fee", () => {

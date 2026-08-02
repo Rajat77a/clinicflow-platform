@@ -77,6 +77,12 @@ test("receptionist can book an appointment", async ({ page }) => {
   const patient = page.getByPlaceholder(/Search by name, patient ID or phone/);
   await patient.fill("Emma Bauer");
   await patient.press("Enter");
+  const timePicker = page.getByRole("button", { name: /Choose appointment time/ });
+  await timePicker.click();
+  await page.getByRole("listbox", { name: "Hour" }).getByRole("option", { name: "10", exact: true }).click();
+  await page.getByRole("listbox", { name: "Minute" }).getByRole("option", { name: "30", exact: true }).click();
+  await page.getByRole("listbox", { name: "Period" }).getByRole("option", { name: "AM", exact: true }).click();
+  await expect(timePicker).toContainText("10:30 AM");
   await page.getByPlaceholder(/Reason for visit/).fill("E2E reception workflow");
   await page.getByRole("button", { name: "Book appointment" }).click();
 
