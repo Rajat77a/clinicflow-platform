@@ -12,6 +12,14 @@ import {
   ChevronDown,
   Clock3,
   UserRound,
+  Wifi,
+  WifiOff,
+  RefreshCw,
+  TriangleAlert,
+  CalendarPlus,
+  ClipboardPlus,
+  Receipt,
+  CalendarDays,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -74,20 +82,43 @@ function PortalClock() {
   );
 }
 
+function ConnectionStatus({ status }: { status: "connecting" | "live" | "offline" | "error" }) {
+  const config = {
+    live: { label: "Live", icon: Wifi, className: "text-success" },
+    connecting: { label: "Connecting", icon: RefreshCw, className: "text-muted-foreground" },
+    offline: { label: "Offline", icon: WifiOff, className: "text-warning-foreground" },
+    error: { label: "Sync issue", icon: TriangleAlert, className: "text-destructive" },
+  }[status];
+  const Icon = config.icon;
+
+  return (
+    <span className={`inline-flex items-center gap-1.5 font-medium ${config.className}`} role="status">
+      <Icon className={`h-3.5 w-3.5 ${status === "connecting" ? "animate-spin" : ""}`} aria-hidden="true" />
+      {config.label}
+    </span>
+  );
+}
+
 type SearchResult =
   | { id: string; kind: "patient"; name: string; detail: string }
-  | { id: string; kind: "doctor"; name: string; detail: string };
+  | { id: string; kind: "doctor"; name: string; detail: string }
+  | { id: string; kind: "appointment"; patientId: string; name: string; detail: string }
+  | { id: string; kind: "invoice"; patientId: string; name: string; detail: string };
 
 function GlobalSearch() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { doctors, searchPatients } = useWorkspaceData();
+  const { appointments, bills, doctors, searchPatients } = useWorkspaceData();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const normalized = query.toLocaleLowerCase().replace(/\s/g, "");
   const canSearchDoctors = Boolean(user && canAccessPath(user.role, "/app/doctors"));
+  const canSearchAppointments = Boolean(user && canAccessPath(user.role, "/app/appointments"));
+  const canSearchBills = Boolean(user && canAccessPath(user.role, "/app/billing"));
+  const canBookAppointment = Boolean(user && canAccessPath(user.role, "/app/appointments/new"));
+  const canCreatePrescription = Boolean(user && canAccessPath(user.role, "/app/prescriptions/new"));
 
   useEffect(() => {
     if (!normalized) {
@@ -109,6 +140,33 @@ function GlobalSearch() {
         name: doctor.name,
         detail: `${doctor.specialty} · ${doctor.id}`,
       }));
+    const appointmentResults: SearchResult[] = (canSearchAppointments ? appointments : [])
+      .filter((appointment) =>
+        [appointment.id, appointment.patient, appointment.doctor, appointment.date].some((value) =>
+          value.toLocaleLowerCase().replace(/\s/g, "").includes(normalized),
+        ),
+      )
+      .map((appointment) => ({
+        id: appointment.id,
+        patientId: appointment.patientId,
+        kind: "appointment",
+        name: appointment.patient,
+        detail: `${appointment.date} ${appointment.time} - ${appointment.doctor}`,
+      }));
+    const invoiceResults: SearchResult[] = (canSearchBills ? bills : [])
+      .filter((bill) =>
+        [bill.id, bill.patient, bill.status].some((value) =>
+          value.toLocaleLowerCase().replace(/\s/g, "").includes(normalized),
+        ),
+      )
+      .map((bill) => ({
+        id: bill.id,
+        patientId: bill.patientId,
+        kind: "invoice",
+        name: bill.patient,
+        detail: `${bill.id} - ${bill.status}`,
+      }));
+    const workspaceResults = [...doctorResults, ...appointmentResults, ...invoiceResults];
     setSearching(true);
     const timer = window.setTimeout(() => {
       void searchPatients({ query, limit: 6 })
@@ -120,10 +178,10 @@ function GlobalSearch() {
             name: patient.name,
             detail: `${patient.medicalRecordNumber ?? patient.id} · ${patient.phone}`,
           }));
-          setResults([...patientResults, ...doctorResults].slice(0, 8));
+          setResults([...patientResults, ...workspaceResults].slice(0, 10));
         })
         .catch(() => {
-          if (current) setResults(doctorResults.slice(0, 8));
+          if (current) setResults(workspaceResults.slice(0, 10));
         })
         .finally(() => {
           if (current) setSearching(false);
@@ -134,13 +192,14 @@ function GlobalSearch() {
       current = false;
       window.clearTimeout(timer);
     };
-  }, [canSearchDoctors, doctors, normalized, query, searchPatients]);
+  }, [appointments, bills, canSearchAppointments, canSearchBills, canSearchDoctors, doctors, normalized, query, searchPatients]);
 
   const select = (result: SearchResult) => {
     setQuery("");
     setOpen(false);
-    if (result.kind === "patient") {
-      navigate({ to: "/app/patients/$id", params: { id: result.id } });
+    if (result.kind === "patient" || result.kind === "appointment" || result.kind === "invoice") {
+      const patientId = result.kind === "patient" ? result.id : result.patientId;
+      navigate({ to: "/app/patients/$id", params: { id: patientId } });
     } else {
       navigate({ to: "/app/doctors" });
     }
@@ -159,10 +218,8 @@ function GlobalSearch() {
     >
       <Search className="pointer-events-none absolute left-3 top-5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
       <Input
-        role="combobox"
+        role="searchbox"
         aria-label="Search workspace"
-        aria-expanded={open && Boolean(query)}
-        aria-controls="workspace-search-results"
         autoComplete="off"
         placeholder="Search patients, doctors, phone or ID…"
         className="h-10 w-full rounded-xl border-border/70 bg-muted/40 pl-9 focus-visible:bg-background"
@@ -182,37 +239,61 @@ function GlobalSearch() {
       {open && query && (
         <div
           id="workspace-search-results"
-          role="listbox"
+          role="region"
+          aria-label="Workspace search results"
           className="absolute left-0 right-0 top-11 z-50 max-h-80 overflow-y-auto rounded-xl border bg-popover p-1 shadow-card"
         >
           {searching ? (
             <div className="px-3 py-3 text-sm text-muted-foreground">Searching…</div>
           ) : results.length ? (
             results.map((result) => (
-              <button
+              <div
                 key={`${result.kind}-${result.id}`}
-                type="button"
-                role="option"
-                aria-selected="false"
-                className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left hover:bg-muted focus-visible:bg-muted focus-visible:outline-none"
-                onClick={() => select(result)}
+                className="flex items-center rounded-lg hover:bg-muted"
               >
-                {result.kind === "patient" ? (
-                  <UserRound className="h-4 w-4 text-primary" />
-                ) : (
-                  <Stethoscope className="h-4 w-4 text-info" />
-                )}
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-semibold">{result.name}</span>
-                  <span className="block truncate text-xs text-muted-foreground">
-                    {result.detail}
+                <button
+                  type="button"
+                  className="flex min-w-0 flex-1 items-center gap-3 px-3 py-2 text-left focus-visible:outline-none"
+                  onClick={() => select(result)}
+                >
+                  {result.kind === "patient" ? <UserRound className="h-4 w-4 shrink-0 text-primary" /> : null}
+                  {result.kind === "doctor" ? <Stethoscope className="h-4 w-4 shrink-0 text-info" /> : null}
+                  {result.kind === "appointment" ? <CalendarDays className="h-4 w-4 shrink-0 text-primary" /> : null}
+                  {result.kind === "invoice" ? <Receipt className="h-4 w-4 shrink-0 text-success" /> : null}
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-semibold">{result.name}</span>
+                    <span className="block truncate text-xs text-muted-foreground">{result.detail}</span>
                   </span>
-                </span>
-              </button>
+                </button>
+                {result.kind === "patient" && canBookAppointment && (
+                  <Link
+                    to="/app/appointments/new"
+                    search={{ patient: result.id }}
+                    className="grid h-9 w-9 shrink-0 place-items-center rounded-md text-muted-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    title="Book appointment"
+                    onClick={() => { setQuery(""); setOpen(false); }}
+                  >
+                    <CalendarPlus className="h-4 w-4" aria-hidden="true" />
+                    <span className="sr-only">Book appointment for {result.name}</span>
+                  </Link>
+                )}
+                {result.kind === "patient" && canCreatePrescription && (
+                  <Link
+                    to="/app/prescriptions/new"
+                    search={{ patient: result.id }}
+                    className="mr-1 grid h-9 w-9 shrink-0 place-items-center rounded-md text-muted-foreground hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    title="Create prescription"
+                    onClick={() => { setQuery(""); setOpen(false); }}
+                  >
+                    <ClipboardPlus className="h-4 w-4" aria-hidden="true" />
+                    <span className="sr-only">Create prescription for {result.name}</span>
+                  </Link>
+                )}
+              </div>
             ))
           ) : (
             <div className="px-3 py-3 text-sm text-muted-foreground">
-              No matching patients or doctors.
+              No matching records.
             </div>
           )}
         </div>
@@ -223,6 +304,7 @@ function GlobalSearch() {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, logout, setRole, isDemoMode } = useAuth();
+  const { syncStatus } = useWorkspaceData();
   const navigate = useNavigate();
   const [dark, setDark] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -374,6 +456,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div className="font-display text-lg font-bold tracking-tight">{user.name}</div>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-xs text-muted-foreground">
+              <ConnectionStatus status={syncStatus} />
               <PortalClock />
               <span>
                 Currently logged into{" "}

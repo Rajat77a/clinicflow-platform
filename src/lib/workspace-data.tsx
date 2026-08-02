@@ -411,6 +411,7 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
 interface WorkspaceData {
   isLoading: boolean;
   error: string | null;
+  syncStatus: "connecting" | "live" | "offline" | "error";
   clinics: Clinic[];
   patients: Patient[];
   doctors: Doctor[];
@@ -465,6 +466,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   );
   const [isLoading, setIsLoading] = useState(!supabaseConfig.demoMode);
   const [error, setError] = useState<string | null>(null);
+  const [syncStatus, setSyncStatus] = useState<WorkspaceData["syncStatus"]>(() => {
+    if (supabaseConfig.demoMode) return "live";
+    if (typeof navigator !== "undefined" && !navigator.onLine) return "offline";
+    return "connecting";
+  });
   const loadSequence = useRef(0);
   const visibleLoads = useRef(0);
   const repository = useMemo(
@@ -514,6 +520,21 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   }, [refresh, repository, user]);
 
   useEffect(() => {
+    if (supabaseConfig.demoMode || typeof window === "undefined") return;
+    const handleOffline = () => setSyncStatus("offline");
+    const handleOnline = () => {
+      setSyncStatus("connecting");
+      void refresh().catch(() => setSyncStatus("error"));
+    };
+    window.addEventListener("offline", handleOffline);
+    window.addEventListener("online", handleOnline);
+    return () => {
+      window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("online", handleOnline);
+    };
+  }, [refresh]);
+
+  useEffect(() => {
     if (!repository || !user?.clinicId) return;
 
     let disposed = false;
@@ -548,6 +569,13 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       role: user.role,
       userId: user.userId,
       onChange: scheduleRefresh,
+      onStatus: (status) => {
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          setSyncStatus("offline");
+        } else {
+          setSyncStatus(status);
+        }
+      },
     });
 
     return () => {
@@ -584,6 +612,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     return {
       isLoading,
       error,
+      syncStatus,
       refresh,
       clinics: state.clinics,
       patients,
@@ -976,7 +1005,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         return bill;
       },
     };
-  }, [error, isLoading, refresh, repository, state, user]);
+  }, [error, isLoading, refresh, repository, state, syncStatus, user]);
 
   return <WorkspaceCtx.Provider value={value}>{children}</WorkspaceCtx.Provider>;
 }

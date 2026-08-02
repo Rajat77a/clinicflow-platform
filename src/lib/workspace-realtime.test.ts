@@ -49,6 +49,7 @@ test("platform administrators do not subscribe to clinical record tables", () =>
 
 test("subscriptions are hospital-filtered and removed during cleanup", async () => {
   const filters: Array<Record<string, string>> = [];
+  const statuses: string[] = [];
   let subscribed = false;
   let removed = false;
   const channel = {
@@ -60,8 +61,9 @@ test("subscriptions are hospital-filtered and removed during cleanup", async () 
       filters.push(filter);
       return channel;
     },
-    subscribe: () => {
+    subscribe: (callback: (status: string) => void) => {
       subscribed = true;
+      callback("SUBSCRIBED");
       return channel;
     },
   };
@@ -83,9 +85,11 @@ test("subscriptions are hospital-filtered and removed during cleanup", async () 
     role: "receptionist",
     userId: "user-1",
     onChange: () => undefined,
+    onStatus: (status) => statuses.push(status),
   });
 
   assert.equal(subscribed, true);
+  assert.deepEqual(statuses, ["connecting", "live"]);
   assert.deepEqual(filters, [
     {
       event: "*",
