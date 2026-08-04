@@ -95,6 +95,7 @@ export type StaffMember = {
   phone: string;
   role: AuthUser["role"];
   status: "Active" | "Invited" | "Inactive";
+  tempPassword?: string;
 };
 
 export interface WorkspaceSnapshot {
@@ -188,6 +189,14 @@ export interface ClinicAdminInput {
   name: string;
   email: string;
   phone: string;
+  tempPassword?: string;
+}
+
+export interface SuperAdminInput {
+  name: string;
+  email: string;
+  phone: string;
+  tempPassword: string;
 }
 
 export interface ClinicInput {
@@ -200,6 +209,7 @@ export interface ClinicInput {
   adminName?: string;
   adminEmail?: string;
   adminPhone?: string;
+  tempPassword?: string;
 }
 
 type Command =
@@ -438,6 +448,7 @@ interface WorkspaceData {
   createClinic: (input: ClinicInput) => Promise<Clinic>;
   createDoctor: (input: DoctorInput) => Promise<Doctor>;
   createReceptionist: (input: ReceptionistInput) => Promise<Receptionist>;
+  inviteSuperAdmin: (input: SuperAdminInput) => Promise<StaffMember>;
   inviteClinicAdmin: (input: ClinicAdminInput) => Promise<StaffMember>;
   deactivateStaff: (userId: string, reason: string) => Promise<void>;
   createPatient: (input: PatientInput) => Promise<Patient>;
@@ -757,6 +768,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             phone: input.adminPhone ?? "",
             role: "clinic_admin",
             status: "Invited",
+            tempPassword: input.tempPassword,
           };
           dispatch({ type: "staff.invited", value: membership, actor });
         }
@@ -797,6 +809,27 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "receptionist.created", value: receptionist, actor });
         return receptionist;
       },
+      inviteSuperAdmin: async (input) => {
+        const actor = requireUser(user, "platform.clinics.manage");
+        if (actor.role !== "super_admin") {
+          throw new Error("Only a super admin can add a super admin");
+        }
+        if (repository) {
+          throw new Error("Repository mode does not support super admin invites");
+        }
+        const membership: StaffMember = {
+          id: createId("SA"),
+          clinicId: null,
+          name: input.name,
+          email: input.email,
+          phone: input.phone,
+          role: "super_admin",
+          status: "Invited",
+          tempPassword: input.tempPassword,
+        };
+        dispatch({ type: "staff.invited", value: membership, actor });
+        return membership;
+      },
       inviteClinicAdmin: async (input) => {
         const actor = requireUser(user, "people.manage");
         if (actor.role !== "super_admin") {
@@ -817,6 +850,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           phone: input.phone,
           role: "clinic_admin",
           status: "Invited",
+          tempPassword: input.tempPassword,
         };
         dispatch({ type: "staff.invited", value: membership, actor });
         return membership;

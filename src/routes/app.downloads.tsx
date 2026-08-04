@@ -20,7 +20,7 @@ function DownloadCenter() {
   const { user } = useAuth();
   const {
     clinics, patients, doctors, receptionists, appointments, prescriptions,
-    bills, labReports, auditLogs,
+    bills, labReports, auditLogs, staffMembers,
   } = useWorkspaceData();
   const role = user?.role ?? "clinic_admin";
   const datasets = useMemo(() => {
@@ -29,6 +29,7 @@ function DownloadCenter() {
         { key: "clinics", label: "Clinics", rows: clinics },
         { key: "payments", label: "Payments", rows: payments },
         { key: "auditLogs", label: "Audit Logs", rows: auditLogs },
+        { key: "allUsers", label: "All Users", rows: getAllUsers(patients, doctors, receptionists, staffMembers) },
       ],
       clinic_admin: [
         { key: "patients", label: "Patients", rows: patients },
@@ -39,6 +40,7 @@ function DownloadCenter() {
         { key: "bills", label: "Bills", rows: bills },
         { key: "labReports", label: "Lab Reports", rows: labReports },
         { key: "auditLogs", label: "Audit Logs", rows: auditLogs },
+        { key: "allUsers", label: "All Users", rows: getAllUsers(patients, doctors, receptionists, staffMembers) },
       ],
       doctor: [
         { key: "patients", label: "My patients", rows: patients },
@@ -127,4 +129,24 @@ function DownloadCenter() {
       </div>
     </>
   );
+}
+
+function getAllUsers(
+  patients: { id: string; name: string; phone: string; email?: string }[],
+  doctors: { id: string; name: string; phone: string; email: string }[],
+  receptionists: { id: string; name: string; phone: string; email: string }[],
+  staffMembers: { id: string; name: string; email: string; role: string; status: string }[],
+) {
+  const seen = new Set<string>();
+  const rows: Record<string, unknown>[] = [];
+  const add = (row: Record<string, unknown>) => {
+    if (seen.has(row.id as string)) return;
+    seen.add(row.id as string);
+    rows.push(row);
+  };
+  patients.forEach(p => add({ id: p.id, name: p.name, phone: p.phone, email: p.email ?? "", role: "Patient", status: "Active", source: "Patients" }));
+  doctors.forEach(d => add({ id: d.id, name: d.name, phone: d.phone, email: d.email, role: "Doctor", status: d.status, source: "Doctors" }));
+  receptionists.forEach(r => add({ id: r.id, name: r.name, phone: r.phone, email: r.email, role: "Receptionist", status: r.status, source: "Receptionists" }));
+  staffMembers.forEach(s => add({ id: s.id, name: s.name, email: s.email, phone: "", role: s.role, status: s.status, source: "Staff" }));
+  return rows;
 }

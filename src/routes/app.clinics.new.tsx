@@ -22,6 +22,15 @@ function Field({ label, children, span = 6 }: { label: string; children: React.R
   );
 }
 
+function generateTempPassword() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  let password = "";
+  for (let i = 0; i < 12; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return password;
+}
+
 function AddClinic() {
   const navigate = useNavigate();
   const { createClinic } = useWorkspaceData();
@@ -55,12 +64,13 @@ function AddClinic() {
     event.preventDefault();
     if (!form.name.trim() || !form.address.trim()) return toast.error("Clinic name and address are required");
     if (!form.adminName.trim() || !form.adminEmail.trim()) {
-      return toast.error("Primary admin name and email are required");
+      return toast.error("Clinical admin name and email are required");
     }
 
     setIsSaving(true);
     try {
       const city = form.address.split(",").map(part => part.trim()).filter(Boolean).at(-1) ?? form.address.trim();
+      const tempPassword = generateTempPassword();
       const clinic = await createClinic({
         name: form.name.trim(),
         city,
@@ -71,8 +81,9 @@ function AddClinic() {
         adminName: form.adminName.trim(),
         adminEmail: form.adminEmail.trim(),
         adminPhone: form.adminPhone.trim(),
+        tempPassword,
       });
-      toast.success(`Demo clinic ${clinic.id} and invited admin created`);
+      toast.success(`Demo clinic ${clinic.id} created · temporary password sent to ${form.adminEmail.trim()}`);
       navigate({ to: "/app/clinics" });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to create the clinic");
@@ -83,7 +94,7 @@ function AddClinic() {
 
   return (
     <>
-      <PageHeader title="Add Clinic" description="Create the clinic workspace and its first Clinic Admin account." />
+      <PageHeader title="Add Clinic" description="Create the clinic workspace and its first Clinical Admin account." />
       <form onSubmit={submit} className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <section className="rounded-2xl border bg-card p-6 shadow-soft">
@@ -108,7 +119,7 @@ function AddClinic() {
           </section>
 
           <section className="rounded-2xl border bg-card p-6 shadow-soft">
-            <h2 className="mb-4 font-display text-base font-semibold">Primary Clinic Admin</h2>
+            <h2 className="mb-4 font-display text-base font-semibold">Clinical Admin</h2>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
               <Field label="Full name" span={3}>
                 <Input className="h-11 rounded-xl" value={form.adminName} onChange={event => setForm({ ...form, adminName: event.target.value })} />
@@ -121,7 +132,7 @@ function AddClinic() {
               </Field>
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
-              Production onboarding uses a one-time Supabase invitation. ClinicFlow never creates, stores, or emails temporary passwords.
+              A temporary password is generated and sent to the clinical admin's email on creation.
             </p>
           </section>
         </div>

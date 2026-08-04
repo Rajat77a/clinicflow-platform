@@ -22,9 +22,18 @@ const roleLabels: Record<Role, string> = {
   receptionist: "Receptionist",
 };
 
+function generateTempPassword() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
+  let password = "";
+  for (let i = 0; i < 12; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return password;
+}
+
 function UsersPage() {
   const { user } = useAuth();
-  const { staffMembers, inviteClinicAdmin, deactivateStaff } = useWorkspaceData();
+  const { staffMembers, inviteSuperAdmin, deactivateStaff } = useWorkspaceData();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [form, setForm] = useState({ name: "", email: "", phone: "" });
@@ -49,16 +58,18 @@ function UsersPage() {
     }
     setIsSending(true);
     try {
-      await inviteClinicAdmin({
+      const tempPassword = generateTempPassword();
+      await inviteSuperAdmin({
         name: form.name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
+        tempPassword,
       });
-      toast.success(`Secure invitation sent to ${form.email.trim()}`);
+      toast.success(`Super Admin added · temporary password sent to ${form.email.trim()}`);
       setDialogOpen(false);
       setForm({ name: "", email: "", phone: "" });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to send the invitation");
+      toast.error(error instanceof Error ? error.message : "Unable to add the super admin");
     } finally {
       setIsSending(false);
     }
@@ -87,13 +98,13 @@ function UsersPage() {
         actions={user?.role === "super_admin" ? (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
-                <Button><UserPlus className="mr-1.5 h-4 w-4" />Invite Clinic Admin</Button>
+                <Button><UserPlus className="mr-1.5 h-4 w-4" />Add Super Admin</Button>
               </DialogTrigger>
               <DialogContent className="max-w-md">
               <DialogHeader>
-                <DialogTitle>Invite Clinic Admin</DialogTitle>
+                <DialogTitle>Add Super Admin</DialogTitle>
                 <DialogDescription>
-                  Supabase will email a one-time invitation. ClinicFlow never creates or displays a temporary password.
+                  A temporary password will be generated and sent to the email address provided.
                 </DialogDescription>
               </DialogHeader>
               <div className="space-y-3">
@@ -129,7 +140,7 @@ function UsersPage() {
               </div>
               <DialogFooter>
                 <Button onClick={submit} disabled={isSending} className="w-full">
-                  {isSending ? "Sending invitation..." : "Send invitation"}
+                  {isSending ? "Adding..." : "Add Super Admin"}
                 </Button>
               </DialogFooter>
               </DialogContent>
