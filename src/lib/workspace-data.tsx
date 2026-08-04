@@ -200,6 +200,7 @@ export interface SuperAdminInput {
 }
 
 export interface ClinicInput {
+  id?: string;
   name: string;
   city: string;
   email?: string;
@@ -446,6 +447,8 @@ interface WorkspaceData {
   listBills: (input?: RecordPageInput) => Promise<RecordPage<Bill>>;
   listAuditLogs: (input?: RecordPageInput) => Promise<RecordPage<AuditEntry>>;
   createClinic: (input: ClinicInput) => Promise<Clinic>;
+  updateClinic: (input: ClinicInput) => Promise<void>;
+  deleteClinic: (id: string) => Promise<void>;
   createDoctor: (input: DoctorInput) => Promise<Doctor>;
   createReceptionist: (input: ReceptionistInput) => Promise<Receptionist>;
   inviteSuperAdmin: (input: SuperAdminInput) => Promise<StaffMember>;
@@ -743,7 +746,9 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       createClinic: async (input) => {
         const actor = requireUser(user, "platform.clinics.manage");
         if (repository) {
-          throw new Error("This installation is dedicated to one hospital");
+          const { id } = await repository.createClinic(input);
+          await refresh();
+          return { id, ...input } as Clinic;
         }
         const expires = new Date();
         expires.setDate(expires.getDate() + 14);
@@ -773,6 +778,25 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           dispatch({ type: "staff.invited", value: membership, actor });
         }
         return clinic;
+      },
+      updateClinic: async (input) => {
+        const actor = requireUser(user, "platform.clinics.manage");
+        if (!input.id) throw new Error("Clinic ID is required");
+        if (repository) {
+          await repository.updateClinic(input);
+          await refresh();
+          return;
+        }
+        throw new Error("Clinic updates are only supported in production mode");
+      },
+      deleteClinic: async (id) => {
+        const actor = requireUser(user, "platform.clinics.manage");
+        if (repository) {
+          await repository.deleteClinic(id);
+          await refresh();
+          return;
+        }
+        throw new Error("Clinic deletion is only supported in production mode");
       },
       createDoctor: async (input) => {
         const actor = requireUser(user, "people.manage");

@@ -12,6 +12,7 @@ import type {
   Bill,
   BillInput,
   ClinicAdminInput,
+  ClinicInput,
   Doctor,
   DoctorInput,
   LabReport,
@@ -753,6 +754,57 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   async inviteClinicAdmin(input: ClinicAdminInput) {
     const id = await this.inviteStaff(input, "clinic_admin");
     return this.reloadAndFind<StaffMember>("staffMembers", id);
+  }
+
+  async createClinic(input: ClinicInput) {
+    const { data, error } = await this.client
+      .from("hospitals")
+      .insert({
+        name: input.name,
+        configuration: {
+          city: input.city,
+          email: input.email ?? null,
+          phone: input.phone ?? null,
+          address: input.address ?? null,
+          logo_name: input.logoName ?? null,
+        },
+      })
+      .select("id")
+      .single();
+    throwIfError(error);
+    if (input.adminName && input.adminEmail) {
+      await this.inviteStaff(
+        { name: input.adminName, email: input.adminEmail, phone: input.adminPhone ?? "" },
+        "clinic_admin",
+      );
+    }
+    return { id: data.id };
+  }
+
+  async updateClinic(input: ClinicInput) {
+    if (!input.id) throw new Error("Clinic ID is required for update");
+    const { error } = await this.client
+      .from("hospitals")
+      .update({
+        name: input.name,
+        configuration: {
+          city: input.city,
+          email: input.email ?? null,
+          phone: input.phone ?? null,
+          address: input.address ?? null,
+          logo_name: input.logoName ?? null,
+        },
+      })
+      .eq("id", input.id);
+    throwIfError(error);
+  }
+
+  async deleteClinic(id: string) {
+    const { error } = await this.client
+      .from("hospitals")
+      .delete()
+      .eq("id", id);
+    throwIfError(error);
   }
 
   async deactivateStaff(userId: string, reason: string) {

@@ -4,6 +4,7 @@ import type {
   Bill,
   BillInput,
   ClinicAdminInput,
+  ClinicInput,
   Doctor,
   DoctorInput,
   LabReport,
@@ -45,6 +46,9 @@ export interface WorkspaceRepository {
   listLabReports(input?: RecordPageInput): Promise<RecordPage<LabReport>>;
   listBills(input?: RecordPageInput): Promise<RecordPage<Bill>>;
   listAuditLogs(input?: RecordPageInput): Promise<RecordPage<AuditEntry>>;
+  createClinic(input: ClinicInput): Promise<{ id: string }>;
+  updateClinic(input: ClinicInput): Promise<void>;
+  deleteClinic(id: string): Promise<void>;
   createDoctor(input: DoctorInput): Promise<Doctor>;
   createReceptionist(input: ReceptionistInput): Promise<Receptionist>;
   inviteClinicAdmin(input: ClinicAdminInput): Promise<StaffMember>;

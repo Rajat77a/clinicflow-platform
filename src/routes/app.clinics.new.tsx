@@ -7,7 +7,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FileUploader } from "@/components/forms/file-uploader";
 import { useWorkspaceData } from "@/lib/workspace-data";
-import { supabaseConfig } from "@/lib/supabase/config";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/clinics/new")({ component: AddClinic });
@@ -46,20 +45,6 @@ function AddClinic() {
   });
   const [isSaving, setIsSaving] = useState(false);
 
-  if (!supabaseConfig.demoMode) {
-    return (
-      <>
-        <PageHeader
-          title="Dedicated hospital installation"
-          description="This deployment is permanently scoped to one hospital."
-        />
-        <Button variant="outline" onClick={() => navigate({ to: "/app/clinics" })}>
-          Back to hospital
-        </Button>
-      </>
-    );
-  }
-
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!form.name.trim() || !form.address.trim()) return toast.error("Clinic name and address are required");
@@ -83,7 +68,7 @@ function AddClinic() {
         adminPhone: form.adminPhone.trim(),
         tempPassword,
       });
-      toast.success(`Demo clinic ${clinic.id} created · temporary password sent to ${form.adminEmail.trim()}`);
+      toast.success(`Clinic ${clinic.id} created · temporary password sent to ${form.adminEmail.trim()}`);
       navigate({ to: "/app/clinics" });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to create the clinic");

@@ -5,17 +5,22 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useWorkspaceData, type Clinic } from "@/lib/workspace-data";
-import { supabaseConfig } from "@/lib/supabase/config";
-import { Search, Plus, Download, Power, MapPin } from "lucide-react";
+import { Search, Plus, Download, MapPin, Pencil, Trash2 } from "lucide-react";
 import { downloadCSV } from "@/lib/exporters";
 import { toast } from "sonner";
+import { useNavigate } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/app/clinics/")({ component: ClinicsPage });
 
 function ClinicsPage() {
-  const { clinics } = useWorkspaceData();
+  const { clinics, deleteClinic } = useWorkspaceData();
+  const navigate = useNavigate();
   const [access, setAccess] = useState<Record<string, "Allowed" | "Suspended">>({});
+  const [editingClinic, setEditingClinic] = useState<Clinic | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<Clinic | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const exportClinic = (c: Clinic) => {
     const summary = [{
       clinicId: c.id, clinicName: c.name, location: c.city,
@@ -36,12 +41,26 @@ function ClinicsPage() {
     toast.success("Exported all clinics");
   };
 
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await deleteClinic(deleteTarget.id);
+      toast.success(`Deleted ${deleteTarget.name}`);
+      setDeleteTarget(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to delete the clinic");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <>
       <PageHeader
-        title={supabaseConfig.demoMode ? "Clinics" : "Hospital"}
-        description={supabaseConfig.demoMode ? "Manage clinic subscriptions, access, staff counts and exports." : "This dedicated ClinicFlow installation."}
-        actions={supabaseConfig.demoMode ? (
+        title="Clinics"
+        description="Manage hospital clinics, access, staff counts and exports."
+        actions={
           <div className="flex gap-2">
             <Button variant="outline" onClick={exportAll}>
               <Download className="mr-1.5 h-4 w-4" />Download
@@ -50,17 +69,15 @@ function ClinicsPage() {
               <Link to="/app/clinics/new"><Plus className="mr-1.5 h-4 w-4" /> Add Clinic</Link>
             </Button>
           </div>
-        ) : undefined} />
+        } />
       <div className="rounded-2xl border bg-card shadow-soft">
-        {supabaseConfig.demoMode && (
-          <div className="flex flex-wrap items-center gap-3 border-b p-4">
-            <div className="relative min-w-[240px] flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input placeholder="Search clinics, cities…" className="h-10 rounded-xl bg-muted/30 pl-9" />
-            </div>
-            <Button variant="outline">Filter</Button>
+        <div className="flex flex-wrap items-center gap-3 border-b p-4">
+          <div className="relative min-w-[240px] flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input placeholder="Search clinics, cities…" className="h-10 rounded-xl bg-muted/30 pl-9" />
           </div>
-        )}
+          <Button variant="outline">Filter</Button>
+        </div>
         <div className="overflow-x-auto">
           <Table>
             <TableHeader>
@@ -72,8 +89,7 @@ function ClinicsPage() {
                 <TableHead className="text-right">Patients</TableHead>
                 <TableHead>Renews</TableHead>
                 <TableHead>Subscription</TableHead>
-                {supabaseConfig.demoMode && <TableHead>Access</TableHead>}
-                {supabaseConfig.demoMode && <TableHead className="text-right">Export</TableHead>}
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -105,35 +121,57 @@ function ClinicsPage() {
                       {c.status}
                     </Badge>
                   </TableCell>
-                  {supabaseConfig.demoMode && (
-                    <TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
                       <Button
                         size="sm"
-                        variant={(access[c.id] ?? "Allowed") === "Allowed" ? "outline" : "destructive"}
-                        onClick={() => {
-                          const next = (access[c.id] ?? "Allowed") === "Allowed" ? "Suspended" : "Allowed";
-                          setAccess({ ...access, [c.id]: next });
-                          toast.success(`Demo access set to ${next.toLowerCase()} for ${c.name}`);
-                        }}
+                        variant="ghost"
+                        onClick={() => exportClinic(c)}
+                        title={`Export ${c.name}`}
                       >
-                        <Power className="mr-1 h-3.5 w-3.5" />
-                        {access[c.id] ?? "Allowed"}
-                      </Button>
-                    </TableCell>
-                  )}
-                  {supabaseConfig.demoMode && (
-                    <TableCell className="text-right">
-                      <Button size="sm" variant="ghost" onClick={() => exportClinic(c)}>
                         <Download className="mr-1 h-3.5 w-3.5" />CSV
                       </Button>
-                    </TableCell>
-                  )}
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => navigate({ to: `/app/clinics/${c.id}/edit` })}
+                        title={`Edit ${c.name}`}
+                      >
+                        <Pencil className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setDeleteTarget(c)}
+                        title={`Delete ${c.name}`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </TableCell>
                 </TableRow>
               ))}
             </TableBody>
           </Table>
         </div>
       </div>
+
+      <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete clinic</DialogTitle>
+            <DialogDescription>
+              {deleteTarget?.name} and all its data will be permanently removed. This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={isDeleting}>Cancel</Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
+              {isDeleting ? "Deleting..." : "Delete clinic"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
