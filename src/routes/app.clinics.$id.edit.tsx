@@ -23,9 +23,8 @@ function Field({ label, children, span = 6 }: { label: string; children: React.R
 
 function EditClinic() {
   const navigate = useNavigate();
-  const { updateClinic } = useWorkspaceData();
-  const { id } = useParams();
-  const { clinics } = useWorkspaceData();
+  const { updateClinic, clinics } = useWorkspaceData();
+  const { id } = useParams({ from: "/app/clinics/$id/edit" });
   const clinic = clinics.find(c => c.id === id);
   const [form, setForm] = useState({
     id: "",

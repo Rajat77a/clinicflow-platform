@@ -2,12 +2,13 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth";
 import { useWorkspaceData, type Clinic } from "@/lib/workspace-data";
-import { Search, Plus, Download, MapPin, Pencil, Trash2 } from "lucide-react";
+import { Search, Plus, Download, MapPin, Pencil, Power } from "lucide-react";
 import { downloadCSV } from "@/lib/exporters";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
@@ -16,10 +17,11 @@ export const Route = createFileRoute("/app/clinics/")({ component: ClinicsPage }
 
 function ClinicsPage() {
   const { user } = useAuth();
-  const { clinics, deleteClinic } = useWorkspaceData();
+  const { clinics, updateClinic } = useWorkspaceData();
   const navigate = useNavigate();
-  const [deleteTarget, setDeleteTarget] = useState<Clinic | null>(null);
-  const [isDeleting, setIsDeleting] = useState(false);
+  const [access, setAccess] = useState<Record<string, "Allowed" | "Suspended">>({});
+  const [suspendTarget, setSuspendTarget] = useState<Clinic | null>(null);
+  const [isSuspending, setIsSuspending] = useState(false);
   const isSuperAdmin = user?.role === "super_admin";
 
   const exportClinic = (c: Clinic) => {
@@ -42,17 +44,18 @@ function ClinicsPage() {
     toast.success("Exported all clinics");
   };
 
-  const handleDelete = async () => {
-    if (!deleteTarget) return;
-    setIsDeleting(true);
+  const handleSuspend = async () => {
+    if (!suspendTarget) return;
+    setIsSuspending(true);
     try {
-      await deleteClinic(deleteTarget.id);
-      toast.success(`Deleted ${deleteTarget.name}`);
-      setDeleteTarget(null);
+      const next = (access[suspendTarget.id] ?? "Allowed") === "Allowed" ? "Suspended" : "Allowed";
+      setAccess({ ...access, [suspendTarget.id]: next });
+      toast.success(`${suspendTarget.name} set to ${next.toLowerCase()}`);
+      setSuspendTarget(null);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to delete the clinic");
+      toast.error(error instanceof Error ? error.message : "Unable to update the clinic");
     } finally {
-      setIsDeleting(false);
+      setIsSuspending(false);
     }
   };
 
@@ -90,6 +93,7 @@ function ClinicsPage() {
                 <TableHead className="text-right">Patients</TableHead>
                 <TableHead>Renews</TableHead>
                 <TableHead>Subscription</TableHead>
+                {isSuperAdmin && <TableHead>Access</TableHead>}
                 {isSuperAdmin && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
@@ -123,6 +127,18 @@ function ClinicsPage() {
                     </Badge>
                   </TableCell>
                   {isSuperAdmin && (
+                    <TableCell>
+                      <Button
+                        size="sm"
+                        variant={(access[c.id] ?? "Allowed") === "Allowed" ? "outline" : "destructive"}
+                        onClick={() => setSuspendTarget(c)}
+                      >
+                        <Power className="mr-1 h-3.5 w-3.5" />
+                        {access[c.id] ?? "Allowed"}
+                      </Button>
+                    </TableCell>
+                  )}
+                  {isSuperAdmin && (
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
                         <Button
@@ -141,14 +157,6 @@ function ClinicsPage() {
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setDeleteTarget(c)}
-                          title={`Delete ${c.name}`}
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </Button>
                       </div>
                     </TableCell>
                   )}
@@ -159,18 +167,24 @@ function ClinicsPage() {
         </div>
       </div>
 
-      <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+      <Dialog open={Boolean(suspendTarget)} onOpenChange={(open) => { if (!open) setSuspendTarget(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Delete clinic</DialogTitle>
+            <DialogTitle>Toggle clinic access</DialogTitle>
             <DialogDescription>
-              {deleteTarget?.name} and all its data will be permanently removed. This action cannot be undone.
+              {suspendTarget?.name} will be set to{" "}
+              {(access[suspendTarget?.id ?? ""] ?? "Allowed") === "Allowed" ? "Suspended" : "Allowed"}.
+              This affects staff access to the clinic.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={isDeleting}>Cancel</Button>
-            <Button variant="destructive" onClick={handleDelete} disabled={isDeleting}>
-              {isDeleting ? "Deleting..." : "Delete clinic"}
+            <Button variant="outline" onClick={() => setSuspendTarget(null)} disabled={isSuspending}>Cancel</Button>
+            <Button
+              variant={(access[suspendTarget?.id ?? ""] ?? "Allowed") === "Allowed" ? "destructive" : "default"}
+              onClick={handleSuspend}
+              disabled={isSuspending}
+            >
+              {isSuspending ? "Updating..." : "Confirm"}
             </Button>
           </DialogFooter>
         </DialogContent>

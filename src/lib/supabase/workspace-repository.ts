@@ -243,18 +243,6 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         .limit(100),
     ]);
 
-    [
-      hospitalResult,
-      doctorsResult,
-      membershipsResult,
-      patientsResult,
-      appointmentsResult,
-      prescriptionsResult,
-      labOrdersResult,
-      invoicesResult,
-      auditResult,
-    ].forEach((result) => throwIfError(result.error));
-
     const hospital = hospitalResult.data as Row | null;
     if (!hospital) return EMPTY_SNAPSHOT;
 
@@ -273,6 +261,8 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       workingHours: row.working_hours || undefined,
       notes: row.administrative_notes || undefined,
       avatarPath: row.avatar_path || undefined,
+      avatarUrl: undefined,
+      photoWarning: undefined,
       patients: Number(row.patient_count ?? 0),
       status: row.status || "Invited",
     }));
@@ -772,6 +762,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       .select("id")
       .single();
     throwIfError(error);
+    if (!data) throw new Error("Failed to create clinic");
     if (input.adminName && input.adminEmail) {
       await this.inviteStaff(
         { name: input.adminName, email: input.adminEmail, phone: input.adminPhone ?? "" },

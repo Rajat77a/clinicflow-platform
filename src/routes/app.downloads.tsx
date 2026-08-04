@@ -133,8 +133,8 @@ function DownloadCenter() {
 
 function getAllUsers(
   patients: { id: string; name: string; phone: string; email?: string }[],
-  doctors: { id: string; name: string; phone: string; email: string }[],
-  receptionists: { id: string; name: string; phone: string; email: string }[],
+  doctors: { id: string; name: string; phone: string; email: string; status: string }[],
+  receptionists: { id: string; name: string; phone: string; email: string; status: string }[],
   staffMembers: { id: string; name: string; email: string; role: string; status: string }[],
 ) {
   const seen = new Set<string>();

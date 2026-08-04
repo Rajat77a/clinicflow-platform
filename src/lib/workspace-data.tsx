@@ -22,27 +22,29 @@ import type {
   RecordPageInput,
 } from "./backend/workspace-repository";
 import { localRecordPage } from "./record-page";
-import {
-  appointments as seedAppointments,
-  auditLogs as seedAuditLogs,
-  bills as seedBills,
-  clinics as seedClinics,
-  doctors as seedDoctors,
-  labReports as seedLabReports,
-  patients as seedPatients,
-  prescriptions as seedPrescriptions,
-  receptionists as seedReceptionists,
-  type LabReport as SeedLabReport,
-  type Prescription as SeedPrescription,
-} from "./sample-data";
+
 
 const DEFAULT_CLINIC_ID = "CL-001";
 
-export type Clinic = (typeof seedClinics)[number];
-export type Patient = (typeof seedPatients)[number] & {
+export type Clinic = {
+  id: string;
+  name: string;
+  city: string;
+  doctors: number;
+  receptionists: number;
+  patients: number;
+  plan: string;
+  status: string;
+  expires: string;
+};
+export type Patient = {
+  id: string;
   clinicId: string;
-  dateOfBirth?: string;
-  medicalRecordNumber?: string;
+  name: string;
+  age: number;
+  dateOfBirth: string;
+  gender: string;
+  phone: string;
   bloodGroup?: string;
   email?: string;
   whatsappPhone?: string;
@@ -51,45 +53,109 @@ export type Patient = (typeof seedPatients)[number] & {
   emergencyContactPhone?: string;
   allergies?: string[];
   chronicConditions?: string[];
+  doctor: string;
+  lastVisit: string;
+  status: string;
   version?: number;
+  medicalRecordNumber?: string;
 };
-export type Doctor = (typeof seedDoctors)[number] & {
-  clinicId: string;
-  phone?: string;
-  gender?: string;
-  qualification?: string;
-  medicalRegistrationNumber?: string;
-  experienceYears?: number;
-  consultationFee?: number;
-  workingHours?: string;
-  notes?: string;
-  avatarPath?: string;
-  avatarUrl?: string;
-  photoWarning?: string;
-};
-export type Receptionist = (typeof seedReceptionists)[number] & { clinicId: string };
-export type Appointment = (typeof seedAppointments)[number] & {
-  clinicId: string;
-  doctorId?: string;
-  durationMinutes?: number;
-  notes?: string;
-  version?: number;
-};
-export type Prescription = SeedPrescription & { clinicId: string };
-export type LabReport = SeedLabReport & { clinicId: string };
-export type Bill = (typeof seedBills)[number] & {
-  clinicId: string;
-  patientId: string;
-  databaseId?: string;
-  subtotal?: number;
-  tax?: number;
-  discount?: number;
-  items?: BillLineInput[];
-};
-export type AuditEntry = (typeof seedAuditLogs)[number] & { id: string; clinicId: string | null };
-export type StaffMember = {
+export type Doctor = {
   id: string;
   clinicId: string;
+  name: string;
+  specialty: string;
+  email: string;
+  phone: string;
+  gender: string | undefined;
+  qualification: string | undefined;
+  medicalRegistrationNumber: string | undefined;
+  experienceYears: number | undefined;
+  consultationFee: number | undefined;
+  workingHours: string | undefined;
+  notes: string | undefined;
+  avatarPath: string | undefined;
+  avatarUrl: string | undefined;
+  photoWarning: string | undefined;
+  patients: number;
+  status: string;
+};
+export type Receptionist = {
+  id: string;
+  clinicId: string;
+  name: string;
+  email: string;
+  phone: string;
+  shift: string;
+  status: string;
+};
+export type Appointment = {
+  id: string;
+  clinicId: string;
+  patientId: string;
+  patient: string;
+  doctor: string;
+  doctorId: string;
+  date: string;
+  time: string;
+  durationMinutes: number;
+  type: string;
+  status: string;
+  notes: string | undefined;
+  version?: number;
+};
+export type Prescription = {
+  id: string;
+  clinicId: string;
+  patientId: string;
+  patient: string;
+  doctor: string;
+  date: string;
+  diagnosis: string;
+  notes: string | undefined;
+  followUp: string | undefined;
+  medicines: { name: string; dosage: string; frequency: string; duration: string; unitPrice?: number }[];
+};
+export type LabReport = {
+  id: string;
+  clinicId: string;
+  patientId: string;
+  patient: string;
+  test: string;
+  date: string;
+  result: string;
+  reference: string;
+  notes?: string;
+  prescriptionId?: string;
+  fileName?: string;
+  uploadedBy: string;
+};
+export type Bill = {
+  id: string;
+  clinicId: string;
+  patientId: string;
+  patient: string;
+  date: string;
+  amount: number;
+  subtotal: number;
+  discount: number;
+  tax: number;
+  items: BillLineInput[];
+  status: string;
+  method: string;
+  databaseId?: string;
+  version?: number;
+};
+export type AuditEntry = {
+  id: string;
+  clinicId: string | null;
+  user: string;
+  action: string;
+  date: string;
+  time: string;
+};
+export type StaffMember = {
+  id: string;
+  clinicId: string | null;
   name: string;
   email: string;
   phone: string;
@@ -144,7 +210,7 @@ export interface PrescriptionInput {
   diagnosis: string;
   notes?: string;
   followUp?: string;
-  medicines: SeedPrescription["medicines"];
+  medicines: { name: string; dosage: string; frequency: string; duration: string; unitPrice?: number }[];
 }
 
 export interface BillInput {
@@ -234,48 +300,7 @@ function createId(prefix: string) {
   return `${prefix}-${suffix}`;
 }
 
-function initialSnapshot(): WorkspaceSnapshot {
-  const patientIdByName = new Map(seedPatients.map(patient => [patient.name, patient.id]));
-  return {
-    clinics: seedClinics.map(clinic => ({ ...clinic })),
-    patients: seedPatients.map(patient => ({ ...patient, clinicId: DEFAULT_CLINIC_ID })),
-    doctors: seedDoctors.map(doctor => ({ ...doctor, clinicId: DEFAULT_CLINIC_ID })),
-    receptionists: seedReceptionists.map(receptionist => ({ ...receptionist, clinicId: DEFAULT_CLINIC_ID })),
-    appointments: seedAppointments.map(appointment => ({ ...appointment, clinicId: DEFAULT_CLINIC_ID })),
-    prescriptions: seedPrescriptions.map(prescription => ({ ...prescription, clinicId: DEFAULT_CLINIC_ID })),
-    labReports: seedLabReports.map(report => ({ ...report, clinicId: DEFAULT_CLINIC_ID })),
-    bills: seedBills.map(bill => ({
-      ...bill,
-      clinicId: DEFAULT_CLINIC_ID,
-      patientId: patientIdByName.get(bill.patient) ?? "",
-    })),
-    auditLogs: seedAuditLogs.map((entry, index) => ({
-      ...entry,
-      id: `AUD-${index + 1}`,
-      clinicId: entry.user === "Helena Vance" ? null : DEFAULT_CLINIC_ID,
-    })),
-    staffMembers: [
-      ...seedDoctors.map(doctor => ({
-        id: doctor.id,
-        clinicId: DEFAULT_CLINIC_ID,
-        name: doctor.name,
-        email: doctor.email,
-        phone: doctor.phone,
-        role: "doctor" as const,
-        status: doctor.status as StaffMember["status"],
-      })),
-      ...seedReceptionists.map(receptionist => ({
-        id: receptionist.id,
-        clinicId: DEFAULT_CLINIC_ID,
-        name: receptionist.name,
-        email: receptionist.email,
-        phone: receptionist.phone,
-        role: "receptionist" as const,
-        status: receptionist.status as StaffMember["status"],
-      })),
-    ],
-  };
-}
+
 
 function emptySnapshot(): WorkspaceSnapshot {
   return {
@@ -480,10 +505,10 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [state, dispatch] = useReducer(
     reducer,
-    supabaseConfig.demoMode,
-    (demoMode) => (demoMode ? initialSnapshot() : emptySnapshot()),
+    false,
+    () => emptySnapshot(),
   );
-  const [isLoading, setIsLoading] = useState(!supabaseConfig.demoMode);
+  const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<WorkspaceData["syncStatus"]>(() => {
     if (supabaseConfig.demoMode) return "live";
@@ -606,7 +631,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<WorkspaceData>(() => {
     const clinicId = user?.clinicId;
-    const clinicScope = <T extends { clinicId: string }>(items: T[]) =>
+    const clinicScope = <T extends { clinicId: string | null }>(items: T[]) =>
       clinicId ? items.filter(item => item.clinicId === clinicId) : items;
     const clinicPatients = user && hasPermission(user.role, "patients.read")
       ? clinicScope(state.patients)
@@ -839,6 +864,9 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           clinicId: tenantId,
           patients: 0,
           status: "Active",
+          avatarPath: undefined,
+          avatarUrl: undefined,
+          photoWarning: undefined,
         };
         dispatch({ type: "doctor.created", value: doctor, actor });
         return doctor;
