@@ -748,7 +748,34 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         if (repository) {
           const { id } = await repository.createClinic(input);
           await refresh();
-          return { id, ...input } as Clinic;
+          const expires = new Date();
+          expires.setDate(expires.getDate() + 14);
+          const clinic: Clinic = {
+            id,
+            name: input.name,
+            city: input.city,
+            doctors: 0,
+            receptionists: 0,
+            patients: 0,
+            plan: "ClinicFlow",
+            status: "Active",
+            expires: expires.toISOString().slice(0, 10),
+          };
+          dispatch({ type: "clinic.created", value: clinic, actor });
+          if (input.adminName && input.adminEmail) {
+            const membership: StaffMember = {
+              id: createId("AD"),
+              clinicId: id,
+              name: input.adminName,
+              email: input.adminEmail,
+              phone: input.adminPhone ?? "",
+              role: "clinic_admin",
+              status: "Invited",
+              tempPassword: input.tempPassword,
+            };
+            dispatch({ type: "staff.invited", value: membership, actor });
+          }
+          return clinic;
         }
         const expires = new Date();
         expires.setDate(expires.getDate() + 14);

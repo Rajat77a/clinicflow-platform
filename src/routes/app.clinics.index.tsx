@@ -2,10 +2,10 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useAuth } from "@/lib/auth";
 import { useWorkspaceData, type Clinic } from "@/lib/workspace-data";
 import { Search, Plus, Download, MapPin, Pencil, Trash2 } from "lucide-react";
 import { downloadCSV } from "@/lib/exporters";
@@ -15,17 +15,18 @@ import { useNavigate } from "@tanstack/react-router";
 export const Route = createFileRoute("/app/clinics/")({ component: ClinicsPage });
 
 function ClinicsPage() {
+  const { user } = useAuth();
   const { clinics, deleteClinic } = useWorkspaceData();
   const navigate = useNavigate();
-  const [access, setAccess] = useState<Record<string, "Allowed" | "Suspended">>({});
-  const [editingClinic, setEditingClinic] = useState<Clinic | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Clinic | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const isSuperAdmin = user?.role === "super_admin";
+
   const exportClinic = (c: Clinic) => {
     const summary = [{
       clinicId: c.id, clinicName: c.name, location: c.city,
       doctors: c.doctors, receptionists: c.receptionists, patients: c.patients,
-      plan: c.plan, subscriptionStatus: c.status, renews: c.expires, access: access[c.id] ?? "Allowed",
+      plan: c.plan, subscriptionStatus: c.status, renews: c.expires,
     }];
     downloadCSV(`${c.id}-summary.csv`, summary);
     toast.success(`Exported ${c.name}`);
@@ -35,7 +36,7 @@ function ClinicsPage() {
     const combined = clinics.map(c => ({
       clinicId: c.id, clinicName: c.name, location: c.city,
       doctors: c.doctors, receptionists: c.receptionists, patients: c.patients,
-      plan: c.plan, subscriptionStatus: c.status, renews: c.expires, access: access[c.id] ?? "Allowed",
+      plan: c.plan, subscriptionStatus: c.status, renews: c.expires,
     }));
     downloadCSV("clinicflow-all-clinics.csv", combined);
     toast.success("Exported all clinics");
@@ -60,7 +61,7 @@ function ClinicsPage() {
       <PageHeader
         title="Clinics"
         description="Manage hospital clinics, access, staff counts and exports."
-        actions={
+        actions={isSuperAdmin ? (
           <div className="flex gap-2">
             <Button variant="outline" onClick={exportAll}>
               <Download className="mr-1.5 h-4 w-4" />Download
@@ -69,7 +70,7 @@ function ClinicsPage() {
               <Link to="/app/clinics/new"><Plus className="mr-1.5 h-4 w-4" /> Add Clinic</Link>
             </Button>
           </div>
-        } />
+        ) : undefined} />
       <div className="rounded-2xl border bg-card shadow-soft">
         <div className="flex flex-wrap items-center gap-3 border-b p-4">
           <div className="relative min-w-[240px] flex-1">
@@ -89,7 +90,7 @@ function ClinicsPage() {
                 <TableHead className="text-right">Patients</TableHead>
                 <TableHead>Renews</TableHead>
                 <TableHead>Subscription</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
+                {isSuperAdmin && <TableHead className="text-right">Actions</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -121,34 +122,36 @@ function ClinicsPage() {
                       {c.status}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => exportClinic(c)}
-                        title={`Export ${c.name}`}
-                      >
-                        <Download className="mr-1 h-3.5 w-3.5" />CSV
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => navigate({ to: `/app/clinics/${c.id}/edit` })}
-                        title={`Edit ${c.name}`}
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setDeleteTarget(c)}
-                        title={`Delete ${c.name}`}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </TableCell>
+                  {isSuperAdmin && (
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => exportClinic(c)}
+                          title={`Export ${c.name}`}
+                        >
+                          <Download className="mr-1 h-3.5 w-3.5" />CSV
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => navigate({ to: `/app/clinics/${c.id}/edit` })}
+                          title={`Edit ${c.name}`}
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => setDeleteTarget(c)}
+                          title={`Delete ${c.name}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
