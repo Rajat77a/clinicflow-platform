@@ -42,7 +42,6 @@ const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     "notifications.read",
   ]),
    clinic_admin: new Set([
-     "platform.clinics.manage",
      "patients.read",
      "patients.create",
      "appointments.read",

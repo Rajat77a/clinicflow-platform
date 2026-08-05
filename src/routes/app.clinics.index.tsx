@@ -23,7 +23,6 @@ function ClinicsPage() {
   const [suspendTarget, setSuspendTarget] = useState<Clinic | null>(null);
   const [isSuspending, setIsSuspending] = useState(false);
    const isSuperAdmin = user?.role === "super_admin";
-   const isClinicAdmin = user?.role === "clinic_admin";
 
   const exportClinic = (c: Clinic) => {
     const summary = [{
@@ -65,13 +64,11 @@ function ClinicsPage() {
       <PageHeader
         title="Clinics"
         description="Manage hospital clinics, access, staff counts and exports."
-         actions={isSuperAdmin || isClinicAdmin ? (
+         actions={isSuperAdmin ? (
            <div className="flex gap-2">
-             {isSuperAdmin && (
-               <Button variant="outline" onClick={exportAll}>
-                 <Download className="mr-1.5 h-4 w-4" />Download
-               </Button>
-             )}
+             <Button variant="outline" onClick={exportAll}>
+               <Download className="mr-1.5 h-4 w-4" />Download
+             </Button>
              <Button asChild>
                <Link to="/app/clinics/new"><Plus className="mr-1.5 h-4 w-4" /> Add Clinic</Link>
              </Button>

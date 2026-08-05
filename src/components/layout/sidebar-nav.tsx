@@ -38,17 +38,13 @@ const NAV: Record<Role, NavSection[]> = {
      { label: "Overview", items: [
        { to: "/app", label: "Dashboard", icon: LayoutDashboard },
      ]},
-     { label: "Clinic", items: [
-       { to: "/app/clinics", label: "Clinics", icon: Building2 },
-       { to: "/app/clinics/new", label: "Add Clinic", icon: Plus },
-     ]},
      { label: "People", items: [
        { to: "/app/doctors", label: "Doctors", icon: Stethoscope },
        { to: "/app/receptionists", label: "Receptionists", icon: UserCog },
        { to: "/app/patients", label: "Patients", icon: UsersRound },
        { to: "/app/users", label: "Users", icon: Users },
      ]},
-     { label: "Operations", items: [
+     { label: "Clinic", items: [
        { to: "/app/appointments", label: "Appointments", icon: CalendarDays },
        { to: "/app/prescriptions", label: "Prescriptions", icon: FileText },
        { to: "/app/billing", label: "Billing", icon: Receipt },
