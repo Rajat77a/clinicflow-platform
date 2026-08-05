@@ -27,7 +27,7 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     env: {
-      VITE_DEMO_MODE: "true",
+      VITE_CLINICFLOW_DEMO_MODE: "true",
     },
   },
 });
