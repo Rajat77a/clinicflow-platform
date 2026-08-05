@@ -17,8 +17,6 @@ export const Route = createFileRoute("/app/settings")({ component: SettingsPage 
 
 function SettingsPage() {
   const { user } = useAuth();
-  if (!supabaseConfig.demoMode) return <ProductionAccountSettings />;
-
   if (user?.role === "super_admin") return <PlatformSettings />;
   return <ClinicSettings />;
 }

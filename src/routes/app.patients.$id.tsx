@@ -81,7 +81,7 @@ function PatientProfile() {
   const canEditRx = Boolean(user && hasPermission(user.role, "prescriptions.write"));
   const canAddLab = Boolean(user && hasPermission(user.role, "labs.write"));
   const canBook = Boolean(user && hasPermission(user.role, "appointments.create"));
-  const canUseExternalSharing = supabaseConfig.demoMode;
+  const canUseExternalSharing = false;
 
   const printRx = (rx: Prescription) => {
     printDocument(`
@@ -169,9 +169,7 @@ function PatientProfile() {
               <TabsTrigger value="labs" className="rounded-lg"><FlaskConical className="mr-1.5 h-3.5 w-3.5" />Lab reports</TabsTrigger>
               <TabsTrigger value="bills" className="rounded-lg"><Receipt className="mr-1.5 h-3.5 w-3.5" />Bills</TabsTrigger>
               <TabsTrigger value="history" className="rounded-lg"><Calendar className="mr-1.5 h-3.5 w-3.5" />Visits</TabsTrigger>
-              {supabaseConfig.demoMode && (
-                <TabsTrigger value="docs" className="rounded-lg"><FolderOpen className="mr-1.5 h-3.5 w-3.5" />Documents</TabsTrigger>
-              )}
+               <TabsTrigger value="docs" className="rounded-lg"><FolderOpen className="mr-1.5 h-3.5 w-3.5" />Documents</TabsTrigger>
             </TabsList>
 
             <TabsContent value="rx" className="mt-4 space-y-3">
@@ -189,11 +187,11 @@ function PatientProfile() {
                     <div className="flex gap-1">
                       <Button size="sm" variant="ghost" onClick={() => printRx(r)} aria-label={`Print ${r.id}`} title={`Print ${r.id}`}><Printer className="h-3.5 w-3.5" /></Button>
                       {canUseExternalSharing && (
-                        <Button size="sm" variant="ghost" onClick={() => shareRx(r)} aria-label={`Share ${r.id}`} title={`Share ${r.id}`}><Send className="h-3.5 w-3.5" /></Button>
-                      )}
-                      {canEditRx && supabaseConfig.demoMode && <Button asChild size="sm" variant="ghost">
-                        <Link to="/app/prescriptions/new" search={{ edit: r.id }} aria-label={`Edit ${r.id}`} title={`Edit ${r.id}`}><Edit className="h-3.5 w-3.5" /></Link>
-                      </Button>}
+                         <Button size="sm" variant="ghost" onClick={() => shareRx(r)} aria-label={`Share ${r.id}`} title={`Share ${r.id}`}><Send className="h-3.5 w-3.5" /></Button>
+                       )}
+                       {canEditRx && <Button asChild size="sm" variant="ghost">
+                         <Link to="/app/prescriptions/new" search={{ edit: r.id }} aria-label={`Edit ${r.id}`} title={`Edit ${r.id}`}><Edit className="h-3.5 w-3.5" /></Link>
+                       </Button>}
                     </div>
                   </div>
                   <ul className="mt-3 space-y-1">
@@ -312,11 +310,11 @@ function PatientProfile() {
               />
             </TabsContent>
 
-            {supabaseConfig.demoMode && <TabsContent value="docs" className="mt-4 rounded-2xl border bg-card p-8 text-center shadow-soft">
+            <TabsContent value="docs" className="mt-4 rounded-2xl border bg-card p-8 text-center shadow-soft">
               <FolderOpen className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
               <p className="text-sm text-muted-foreground">Uploaded documents appear here.</p>
               <Button asChild variant="outline" className="mt-3"><Link to="/app/files">Open file manager</Link></Button>
-            </TabsContent>}
+            </TabsContent>
           </Tabs>
         </div>
       </div>

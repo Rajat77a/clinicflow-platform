@@ -2,7 +2,6 @@ import { createFileRoute, Link, Outlet, useNavigate, useRouterState } from "@tan
 import { useEffect } from "react";
 import { useAuth } from "@/lib/auth";
 import { canAccessLocation } from "@/lib/access-control";
-import { isProductionReadyPath } from "@/lib/production-readiness";
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@/components/ui/button";
 import { Construction, ShieldX } from "lucide-react";
@@ -12,7 +11,7 @@ export const Route = createFileRoute("/app")({
 });
 
 function AppLayout() {
-  const { user, isReady, isDemoMode } = useAuth();
+  const { user, isReady } = useAuth();
   const navigate = useNavigate();
   const location = useRouterState({
     select: state => ({
@@ -44,25 +43,6 @@ function AppLayout() {
             <h1 className="mt-4 font-display text-xl font-bold">Access restricted</h1>
             <p className="mt-2 text-sm text-muted-foreground">
               This area is not available to the {user.role.replace("_", " ")} portal.
-            </p>
-            <Button asChild className="mt-5"><Link to="/app">Return to dashboard</Link></Button>
-          </div>
-        </div>
-      </AppShell>
-    );
-  }
-
-  if (!isDemoMode && !isProductionReadyPath(location.pathname)) {
-    return (
-      <AppShell>
-        <div className="grid min-h-[60vh] place-items-center">
-          <div className="max-w-md text-center">
-            <div className="mx-auto grid h-12 w-12 place-items-center rounded-full bg-warning/15 text-warning-foreground">
-              <Construction className="h-5 w-5" />
-            </div>
-            <h1 className="mt-4 font-display text-xl font-bold">Not enabled for hospital use</h1>
-            <p className="mt-2 text-sm text-muted-foreground">
-              This module remains disabled until its database, audit, authorization, and recovery controls are complete.
             </p>
             <Button asChild className="mt-5"><Link to="/app">Return to dashboard</Link></Button>
           </div>

@@ -175,7 +175,7 @@ function NewPrescription() {
     sendWhatsApp(patient.tertiary ?? "", msg);
   };
 
-  if (edit && !supabaseConfig.demoMode) {
+  if (edit) {
     return (
       <>
         <PageHeader
@@ -383,11 +383,9 @@ function NewPrescription() {
               <Button type="button" variant="outline" size="sm" className="flex-1" onClick={printRx}>
                 <Printer className="mr-1 h-3.5 w-3.5" />Print
               </Button>
-              {supabaseConfig.demoMode && (
-                <Button type="button" size="sm" className="flex-1" onClick={shareRx}>
+              <Button type="button" size="sm" className="flex-1" onClick={shareRx}>
                   <Send className="mr-1 h-3.5 w-3.5" />WhatsApp
                 </Button>
-              )}
             </div>
           </div>
         </aside>
