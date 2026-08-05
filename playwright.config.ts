@@ -26,5 +26,8 @@ export default defineConfig({
     url: `http://127.0.0.1:${port}/login`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    env: {
+      VITE_DEMO_MODE: "true",
+    },
   },
 });
