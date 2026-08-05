@@ -36,6 +36,8 @@ export type Clinic = {
   plan: string;
   status: string;
   expires: string;
+  price: number;
+  access: "Allowed" | "Suspended";
 };
 export type Patient = {
   id: string;
@@ -273,6 +275,7 @@ export interface ClinicInput {
   phone?: string;
   address?: string;
   logoName?: string;
+  logo?: File | null;
   adminName?: string;
   adminEmail?: string;
   adminPhone?: string;
@@ -474,6 +477,8 @@ interface WorkspaceData {
   createClinic: (input: ClinicInput) => Promise<Clinic>;
   updateClinic: (input: ClinicInput) => Promise<void>;
   deleteClinic: (id: string) => Promise<void>;
+  setClinicAccess: (id: string, active: boolean) => Promise<void>;
+  extendSubscription: (id: string, days: number, proofRef?: string) => Promise<void>;
   createDoctor: (input: DoctorInput) => Promise<Doctor>;
   createReceptionist: (input: ReceptionistInput) => Promise<Receptionist>;
   inviteSuperAdmin: (input: SuperAdminInput) => Promise<StaffMember>;
@@ -772,34 +777,9 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         if (repository) {
           const { id } = await repository.createClinic(input);
           await refresh();
-          const expires = new Date();
-          expires.setDate(expires.getDate() + 14);
-          const clinic: Clinic = {
-            id,
-            name: input.name,
-            city: input.city,
-            doctors: 0,
-            receptionists: 0,
-            patients: 0,
-            plan: "ClinicFlow",
-            status: "Active",
-            expires: expires.toISOString().slice(0, 10),
-          };
-          dispatch({ type: "clinic.created", value: clinic, actor });
-          if (input.adminName && input.adminEmail) {
-            const membership: StaffMember = {
-              id: createId("AD"),
-              clinicId: id,
-              name: input.adminName,
-              email: input.adminEmail,
-              phone: input.adminPhone ?? "",
-              role: "clinic_admin",
-              status: "Invited",
-              tempPassword: input.tempPassword,
-            };
-            dispatch({ type: "staff.invited", value: membership, actor });
-          }
-          return clinic;
+          const saved = (await repository.load()).clinics.find((clinic) => clinic.id === id);
+          if (!saved) throw new Error("The clinic was saved but could not be reloaded");
+          return saved;
         }
         const expires = new Date();
         expires.setDate(expires.getDate() + 14);
@@ -813,6 +793,8 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           plan: "ClinicFlow",
           status: "Active",
           expires: expires.toISOString().slice(0, 10),
+          price: 499,
+          access: "Allowed",
         };
         dispatch({ type: "clinic.created", value: clinic, actor });
         if (input.adminName && input.adminEmail) {
@@ -848,6 +830,18 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           return;
         }
         throw new Error("Clinic deletion is only supported in production mode");
+      },
+      setClinicAccess: async (id, active) => {
+        requireUser(user, "platform.clinics.manage");
+        if (!repository) throw new Error("Clinic access changes require Supabase");
+        await repository.setClinicAccess(id, active);
+        await refresh();
+      },
+      extendSubscription: async (id, days, proofRef) => {
+        requireUser(user, "platform.subscriptions.manage");
+        if (!repository) throw new Error("Subscription changes require Supabase");
+        await repository.extendSubscription(id, days, proofRef);
+        await refresh();
       },
       createDoctor: async (input) => {
         const actor = requireUser(user, "people.manage");

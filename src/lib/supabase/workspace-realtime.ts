@@ -4,8 +4,9 @@ import { hasPermission, type Permission } from "../access-control.ts";
 
 type RealtimeTable = {
   table: string;
-  filterColumn: "hospital_id" | "id";
+  filterColumn?: "hospital_id" | "id";
   anyPermission?: readonly Permission[];
+  platformOnly?: boolean;
 };
 
 const REALTIME_TABLES: readonly RealtimeTable[] = [
@@ -21,12 +22,15 @@ const REALTIME_TABLES: readonly RealtimeTable[] = [
   },
   { table: "invoices", filterColumn: "hospital_id", anyPermission: ["billing.read"] },
   { table: "audit_events", filterColumn: "hospital_id", anyPermission: ["audit.read"] },
+  { table: "hospital_subscriptions", platformOnly: true },
+  { table: "hospital_subscription_events", platformOnly: true },
 ];
 
 export function realtimeTablesForRole(role: Role) {
   return REALTIME_TABLES.filter(
-    ({ anyPermission }) =>
-      !anyPermission || anyPermission.some((permission) => hasPermission(role, permission)),
+    ({ anyPermission, platformOnly }) =>
+      (!platformOnly || role === "super_admin")
+      && (!anyPermission || anyPermission.some((permission) => hasPermission(role, permission))),
   );
 }
 
@@ -52,14 +56,17 @@ export function subscribeToWorkspaceChanges({
   const channel = client.channel(`workspace:${hospitalId}:${userId}`);
 
   for (const { table, filterColumn } of realtimeTablesForRole(role)) {
+    const changeConfig = {
+      event: "*" as const,
+      schema: "public",
+      table,
+      ...(role === "super_admin" && (table === "hospitals" || table.startsWith("hospital_subscription"))
+        ? {}
+        : { filter: `${filterColumn}=eq.${hospitalId}` }),
+    };
     channel.on(
       "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table,
-        filter: `${filterColumn}=eq.${hospitalId}`,
-      },
+      changeConfig,
       onChange,
     );
   }

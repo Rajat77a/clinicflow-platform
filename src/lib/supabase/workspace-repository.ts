@@ -198,7 +198,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       invoicesResult,
       auditResult,
     ] = await Promise.all([
-      this.client.from("hospitals").select("id,name,configuration").maybeSingle(),
+      this.client.rpc("list_visible_clinics"),
       this.client.rpc("list_active_doctors_with_counts"),
       this.client.rpc("list_current_staff"),
       this.client.rpc("search_patients", {
@@ -243,7 +243,12 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         .limit(100),
     ]);
 
-    const hospital = hospitalResult.data as Row | null;
+    for (const result of [hospitalResult, doctorsResult, membershipsResult, patientsResult,
+      appointmentsResult, prescriptionsResult, labOrdersResult, invoicesResult, auditResult]) {
+      throwIfError(result.error);
+    }
+    const clinicRows = (hospitalResult.data ?? []) as Row[];
+    const hospital = clinicRows.find((row) => row.is_current) ?? clinicRows[0];
     if (!hospital) return EMPTY_SNAPSHOT;
 
     const doctors: Doctor[] = ((doctorsResult.data ?? []) as Row[]).map((row) => ({
@@ -384,20 +389,22 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       mapBill(row, patientById.get(row.patient_id)?.name),
     );
 
-    const clinic = {
-      id: hospital.id,
-      name: hospital.name,
-      city: String(hospital.configuration?.city ?? ""),
-      doctors: doctors.length,
-      receptionists: receptionists.length,
-      patients: Number(((patientsResult.data ?? []) as Row[])[0]?.total_count ?? 0),
-      plan: "Dedicated installation",
-      status: "Active",
-      expires: "Not applicable",
-    };
+    const clinics = clinicRows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      city: row.city ?? "Not set",
+      doctors: Number(row.doctors ?? 0),
+      receptionists: Number(row.receptionists ?? 0),
+      patients: Number(row.patients ?? 0),
+      plan: row.plan ?? "ClinicFlow",
+      status: row.status ?? "Expired",
+      expires: row.expires ?? "Not set",
+      price: Number(row.price ?? 499),
+      access: row.access === "Suspended" ? "Suspended" as const : "Allowed" as const,
+    }));
 
     return {
-      clinics: [clinic],
+      clinics,
       patients,
       doctors,
       receptionists,
@@ -671,6 +678,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   private async inviteStaff(
     input: DoctorInput | ReceptionistInput | ClinicAdminInput,
     roleCode: "clinic_admin" | "doctor" | "receptionist",
+    targetHospitalId?: string,
   ) {
     const requestId = randomKey();
     const { data, error } = await this.client.functions.invoke("invite-staff", {
@@ -683,6 +691,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         fullName: input.name,
         phone: input.phone,
         roleCode,
+        targetHospitalId,
         specialty: "specialty" in input ? input.specialty : undefined,
         shift: "shift" in input ? input.shift : undefined,
         gender: "gender" in input ? input.gender : undefined,
@@ -769,54 +778,85 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   }
 
   async createClinic(input: ClinicInput) {
-    const { data, error } = await this.client
-      .from("hospitals")
-      .insert({
-        name: input.name,
-        configuration: {
-          city: input.city,
-          email: input.email ?? null,
-          phone: input.phone ?? null,
-          address: input.address ?? null,
-          logo_name: input.logoName ?? null,
-        },
-      })
-      .select("id")
-      .single();
+    const configuration = {
+      city: input.city,
+      email: input.email ?? null,
+      phone: input.phone ?? null,
+      address: input.address ?? null,
+      logo_name: input.logoName ?? null,
+    };
+    const { data, error } = await this.client.rpc("create_platform_clinic", {
+      p_name: input.name,
+      p_configuration: configuration,
+      p_trial_days: 14,
+    });
     throwIfError(error);
     if (!data) throw new Error("Failed to create clinic");
+    if (input.logo) {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(input.logo.type) || input.logo.size > 2 * 1024 * 1024) {
+        throw new Error("Clinic logo must be a PNG, JPG or WebP up to 2 MB");
+      }
+      const extension = input.logo.type === "image/png" ? "png" : input.logo.type === "image/webp" ? "webp" : "jpg";
+      const logoPath = `${data}/logo.${extension}`;
+      const { error: uploadError } = await this.client.storage
+        .from("clinic-branding")
+        .upload(logoPath, input.logo, { contentType: input.logo.type, upsert: true });
+      throwIfError(uploadError);
+      const { error: logoConfigError } = await this.client.rpc("update_platform_clinic", {
+        p_hospital_id: data,
+        p_name: input.name,
+        p_configuration: { logo_path: logoPath, logo_name: input.logo.name },
+      });
+      throwIfError(logoConfigError);
+    }
     if (input.adminName && input.adminEmail) {
       await this.inviteStaff(
         { name: input.adminName, email: input.adminEmail, phone: input.adminPhone ?? "" },
         "clinic_admin",
+        data,
       );
     }
-    return { id: data.id };
+    return { id: data as string };
   }
 
   async updateClinic(input: ClinicInput) {
     if (!input.id) throw new Error("Clinic ID is required for update");
-    const { error } = await this.client
-      .from("hospitals")
-      .update({
-        name: input.name,
-        configuration: {
+    const { error } = await this.client.rpc("update_platform_clinic", {
+      p_hospital_id: input.id,
+      p_name: input.name,
+      p_configuration: {
           city: input.city,
           email: input.email ?? null,
           phone: input.phone ?? null,
           address: input.address ?? null,
           logo_name: input.logoName ?? null,
-        },
-      })
-      .eq("id", input.id);
+      },
+    });
     throwIfError(error);
   }
 
   async deleteClinic(id: string) {
-    const { error } = await this.client
-      .from("hospitals")
-      .delete()
-      .eq("id", id);
+    const { error } = await this.client.rpc("set_platform_clinic_access", {
+      p_hospital_id: id,
+      p_active: false,
+    });
+    throwIfError(error);
+  }
+
+  async setClinicAccess(id: string, active: boolean) {
+    const { error } = await this.client.rpc("set_platform_clinic_access", {
+      p_hospital_id: id,
+      p_active: active,
+    });
+    throwIfError(error);
+  }
+
+  async extendSubscription(id: string, days: number, proofRef?: string) {
+    const { error } = await this.client.rpc("extend_platform_subscription", {
+      p_hospital_id: id,
+      p_days: days,
+      p_proof_ref: proofRef?.trim() || null,
+    });
     throwIfError(error);
   }
 

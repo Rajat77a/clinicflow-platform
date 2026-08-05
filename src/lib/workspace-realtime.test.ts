@@ -44,6 +44,8 @@ test("platform administrators do not subscribe to clinical record tables", () =>
     "hospitals",
     "staff_memberships",
     "audit_events",
+    "hospital_subscriptions",
+    "hospital_subscription_events",
   ]);
 });
 

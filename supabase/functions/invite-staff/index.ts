@@ -87,6 +87,7 @@ Deno.serve(async (request) => {
     const fullName = typeof payload.fullName === "string" ? payload.fullName.trim() : "";
     const phone = typeof payload.phone === "string" ? payload.phone.trim() : "";
     const roleCode = typeof payload.roleCode === "string" ? payload.roleCode : "";
+    const targetHospitalId = typeof payload.targetHospitalId === "string" ? payload.targetHospitalId : null;
     const specialty = typeof payload.specialty === "string" ? payload.specialty.trim() : null;
     const shift = typeof payload.shift === "string" ? payload.shift.trim() : null;
     const gender = typeof payload.gender === "string" ? payload.gender : null;
@@ -134,6 +135,15 @@ Deno.serve(async (request) => {
       return response(403, { error: "Active hospital membership required" });
     }
 
+    const isCrossHospital = Boolean(targetHospitalId && targetHospitalId !== actor.hospital_id);
+    if (isCrossHospital) {
+      const { data: isPlatformAdmin, error: platformAdminError } = await userClient.rpc("is_platform_admin");
+      if (platformAdminError || !isPlatformAdmin || actor.role_code !== "super_admin" || roleCode !== "clinic_admin") {
+        return response(403, { error: "Platform administrator permission is required" });
+      }
+    }
+    const effectiveHospitalId = targetHospitalId ?? actor.hospital_id;
+
     const { data: permission } = await userClient
       .from("role_permissions")
       .select("permission_code")
@@ -154,7 +164,7 @@ Deno.serve(async (request) => {
     const { data: replay } = await adminClient
       .from("idempotency_keys")
       .select("response_code, response_body")
-      .eq("hospital_id", actor.hospital_id)
+      .eq("hospital_id", effectiveHospitalId)
       .eq("actor_user_id", userData.user.id)
       .eq("key", idempotencyKey)
       .maybeSingle();
@@ -163,19 +173,21 @@ Deno.serve(async (request) => {
     }
 
     if (facilityId) {
-      const { data: facility, error: facilityError } = await userClient
+      const facilityClient = isCrossHospital ? adminClient : userClient;
+      const { data: facility, error: facilityError } = await facilityClient
         .from("facilities")
         .select("id")
         .eq("id", facilityId)
-        .eq("hospital_id", actor.hospital_id)
+        .eq("hospital_id", effectiveHospitalId)
         .eq("active", true)
         .maybeSingle();
       if (facilityError || !facility) return response(422, { error: "Invalid facility" });
     } else {
-      const { data: facility, error: facilityError } = await userClient
+      const facilityClient = isCrossHospital ? adminClient : userClient;
+      const { data: facility, error: facilityError } = await facilityClient
         .from("facilities")
         .select("id")
-        .eq("hospital_id", actor.hospital_id)
+        .eq("hospital_id", effectiveHospitalId)
         .eq("active", true)
         .order("created_at")
         .limit(1)
@@ -186,11 +198,12 @@ Deno.serve(async (request) => {
       }
     }
     if (departmentId) {
-      const { data: department, error: departmentError } = await userClient
+      const departmentClient = isCrossHospital ? adminClient : userClient;
+      const { data: department, error: departmentError } = await departmentClient
         .from("departments")
         .select("id, facility_id")
         .eq("id", departmentId)
-        .eq("hospital_id", actor.hospital_id)
+        .eq("hospital_id", effectiveHospitalId)
         .eq("active", true)
         .maybeSingle();
       if (departmentError || !department || department.facility_id !== facilityId) {
@@ -226,24 +239,34 @@ Deno.serve(async (request) => {
       });
     }
 
-    const { error: provisionError } = await userClient.rpc("provision_invited_staff", {
-      p_user_id: invited.user.id,
-      p_email: email,
-      p_full_name: fullName,
-      p_phone: phone,
-      p_role_code: roleCode,
-      p_facility_id: facilityId,
-      p_department_id: departmentId,
-      p_specialty: specialty,
-      p_shift: shift,
-      p_gender: gender,
-      p_qualification: qualification,
-      p_medical_registration_number: medicalRegistrationNumber,
-      p_experience_years: experienceYears,
-      p_consultation_fee: consultationFee,
-      p_working_hours: workingHours,
-      p_administrative_notes: administrativeNotes,
-    });
+    const provisionResult = isCrossHospital
+      ? await userClient.rpc("provision_platform_invited_admin", {
+          p_user_id: invited.user.id,
+          p_hospital_id: effectiveHospitalId,
+          p_email: email,
+          p_full_name: fullName,
+          p_phone: phone,
+          p_facility_id: facilityId,
+        })
+      : await userClient.rpc("provision_invited_staff", {
+          p_user_id: invited.user.id,
+          p_email: email,
+          p_full_name: fullName,
+          p_phone: phone,
+          p_role_code: roleCode,
+          p_facility_id: facilityId,
+          p_department_id: departmentId,
+          p_specialty: specialty,
+          p_shift: shift,
+          p_gender: gender,
+          p_qualification: qualification,
+          p_medical_registration_number: medicalRegistrationNumber,
+          p_experience_years: experienceYears,
+          p_consultation_fee: consultationFee,
+          p_working_hours: workingHours,
+          p_administrative_notes: administrativeNotes,
+        });
+    const provisionError = provisionResult.error;
     if (provisionError) {
       await adminClient.auth.admin.deleteUser(invited.user.id);
       return response(409, { error: "The staff account could not be provisioned" });
@@ -251,7 +274,7 @@ Deno.serve(async (request) => {
 
     const result = { userId: invited.user.id, status: "invited" };
     await adminClient.from("idempotency_keys").insert({
-      hospital_id: actor.hospital_id,
+      hospital_id: effectiveHospitalId,
       actor_user_id: userData.user.id,
       key: idempotencyKey,
       command: "invite-staff",

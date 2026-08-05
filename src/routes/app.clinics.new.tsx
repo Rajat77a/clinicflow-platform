@@ -21,15 +21,6 @@ function Field({ label, children, span = 6 }: { label: string; children: React.R
   );
 }
 
-function generateTempPassword() {
-  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789";
-  let password = "";
-  for (let i = 0; i < 12; i++) {
-    password += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return password;
-}
-
 function AddClinic() {
   const navigate = useNavigate();
   const { createClinic } = useWorkspaceData();
@@ -43,6 +34,7 @@ function AddClinic() {
     adminEmail: "",
     adminPhone: "",
   });
+  const [logo, setLogo] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   const submit = async (event: React.FormEvent) => {
@@ -55,7 +47,6 @@ function AddClinic() {
     setIsSaving(true);
     try {
       const city = form.address.split(",").map(part => part.trim()).filter(Boolean).at(-1) ?? form.address.trim();
-      const tempPassword = generateTempPassword();
       const clinic = await createClinic({
         name: form.name.trim(),
         city,
@@ -63,12 +54,12 @@ function AddClinic() {
         phone: form.phone.trim(),
         address: form.address.trim(),
         logoName: form.logoName.trim(),
+        logo,
         adminName: form.adminName.trim(),
         adminEmail: form.adminEmail.trim(),
         adminPhone: form.adminPhone.trim(),
-        tempPassword,
       });
-      toast.success(`Clinic ${clinic.id} created · temporary password sent to ${form.adminEmail.trim()}`);
+      toast.success(`Clinic ${clinic.id} created. A secure setup invitation was sent to ${form.adminEmail.trim()}`);
       navigate({ to: "/app/clinics" });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to create the clinic");
@@ -117,7 +108,7 @@ function AddClinic() {
               </Field>
             </div>
             <p className="mt-3 text-xs text-muted-foreground">
-              A temporary password is generated and sent to the clinical admin's email on creation.
+              A one-time account setup invitation is sent to the clinical admin's email.
             </p>
           </section>
         </div>
@@ -125,7 +116,7 @@ function AddClinic() {
         <aside className="space-y-6">
           <section className="rounded-2xl border bg-card p-6 shadow-soft">
             <h2 className="mb-3 font-display text-base font-semibold">Branding</h2>
-            <FileUploader label="Drop logo or click to upload" accept="image/png,image/svg+xml,image/jpeg" hint="PNG or SVG, up to 2 MB" />
+            <FileUploader label="Drop logo or click to upload" accept="image/png,image/jpeg,image/webp" hint="PNG, JPG or WebP, up to 2 MB" maxSizeBytes={2 * 1024 * 1024} onFile={setLogo} />
             <Input className="mt-3 h-10 rounded-xl" placeholder="Logo filename or note" value={form.logoName} onChange={event => setForm({ ...form, logoName: event.target.value })} />
           </section>
           <section className="rounded-2xl border bg-card p-6 shadow-soft">

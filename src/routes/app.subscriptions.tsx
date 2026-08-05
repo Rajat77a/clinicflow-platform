@@ -20,15 +20,12 @@ function badgeFor(days: number) {
   return <Badge variant="secondary">{days} days left</Badge>;
 }
 
-function addDaysISO(iso: string, days: number) {
-  const d = new Date(iso);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
+type SubscriptionRow = { id: string; clinic: string; price: number; renews: string; daysLeft: number; status: string };
 
-function SubTable({ rows }: { rows: { clinic: string; price: number; renews: string; daysLeft: number; status: string }[] }) {
+function SubTable({ rows, onExtend }: { rows: SubscriptionRow[]; onExtend: (id: string, days: number, proof?: string) => Promise<void> }) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [proofs, setProofs] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState<string | null>(null);
   return (
     <div className="overflow-x-auto rounded-2xl border bg-card shadow-soft">
       <Table>
@@ -44,7 +41,7 @@ function SubTable({ rows }: { rows: { clinic: string; price: number; renews: str
         </TableHeader>
         <TableBody>
           {rows.map((s) => (
-            <TableRow key={s.clinic}>
+            <TableRow key={s.id}>
               <TableCell className="font-semibold">{s.clinic}</TableCell>
               <TableCell className="text-right tabular-nums">₹{s.price}</TableCell>
               <TableCell className="text-muted-foreground">{s.renews}</TableCell>
@@ -55,16 +52,25 @@ function SubTable({ rows }: { rows: { clinic: string; price: number; renews: str
                     type="number"
                     placeholder="30"
                     className="h-8 w-20 rounded-lg"
-                    value={drafts[s.clinic] ?? ""}
-                    onChange={(e) => setDrafts({ ...drafts, [s.clinic]: e.target.value })}
+                    value={drafts[s.id] ?? ""}
+                    onChange={(e) => setDrafts({ ...drafts, [s.id]: e.target.value })}
                   />
                   <Button
                     size="sm"
-                    onClick={() => {
-                      const days = Number(drafts[s.clinic]);
+                    disabled={saving === s.id}
+                    onClick={async () => {
+                      const days = Number(drafts[s.id]);
                       if (!Number.isFinite(days) || days <= 0) return toast.error("Enter number of days");
-                      toast.success(`${s.clinic} extended by ${days} days`);
-                      setDrafts({ ...drafts, [s.clinic]: "" });
+                      setSaving(s.id);
+                      try {
+                        await onExtend(s.id, days, proofs[s.id]);
+                        toast.success(`${s.clinic} extended by ${days} days`);
+                        setDrafts((current) => ({ ...current, [s.id]: "" }));
+                      } catch (error) {
+                        toast.error(error instanceof Error ? error.message : "Unable to extend subscription");
+                      } finally {
+                        setSaving(null);
+                      }
                     }}
                   >
                     Apply
@@ -76,8 +82,8 @@ function SubTable({ rows }: { rows: { clinic: string; price: number; renews: str
                   <Input
                     placeholder="Proof ref"
                     className="h-8 w-28 rounded-lg"
-                    value={proofs[s.clinic] ?? ""}
-                    onChange={(event) => setProofs({ ...proofs, [s.clinic]: event.target.value })}
+                    value={proofs[s.id] ?? ""}
+                    onChange={(event) => setProofs({ ...proofs, [s.id]: event.target.value })}
                   />
                   <Button size="sm" variant="outline" onClick={() => toast.success(`Reminder sent to ${s.clinic}`)}>Send reminder</Button>
                 </div>
@@ -91,12 +97,14 @@ function SubTable({ rows }: { rows: { clinic: string; price: number; renews: str
 }
 
 function SubscriptionsPage() {
-  const { clinics } = useWorkspaceData();
+  const { clinics, extendSubscription } = useWorkspaceData();
+  const [loadedAt] = useState(() => new Date().getTime());
   const subs = clinics.map(c => ({
+    id: c.id,
     clinic: c.name,
-    price: 499,
+    price: c.price,
     renews: c.expires,
-    daysLeft: Math.max(0, Math.ceil((new Date(c.expires).getTime() - Date.now()) / (1000 * 60 * 60 * 24))),
+    daysLeft: Math.ceil((new Date(`${c.expires}T23:59:59`).getTime() - loadedAt) / (1000 * 60 * 60 * 24)),
     status: c.status,
   }));
 
@@ -118,11 +126,11 @@ function SubscriptionsPage() {
           <TabsTrigger value="expired" className="rounded-lg">Expired ({expired.length})</TabsTrigger>
           <TabsTrigger value="history" className="rounded-lg">Renewal history</TabsTrigger>
         </TabsList>
-        <TabsContent value="all" className="mt-4"><SubTable rows={subs} /></TabsContent>
-        <TabsContent value="active" className="mt-4"><SubTable rows={active} /></TabsContent>
-        <TabsContent value="expiring" className="mt-4"><SubTable rows={expiring} /></TabsContent>
-        <TabsContent value="expired" className="mt-4"><SubTable rows={expired} /></TabsContent>
-        <TabsContent value="history" className="mt-4"><SubTable rows={subs} /></TabsContent>
+        <TabsContent value="all" className="mt-4"><SubTable rows={subs} onExtend={extendSubscription} /></TabsContent>
+        <TabsContent value="active" className="mt-4"><SubTable rows={active} onExtend={extendSubscription} /></TabsContent>
+        <TabsContent value="expiring" className="mt-4"><SubTable rows={expiring} onExtend={extendSubscription} /></TabsContent>
+        <TabsContent value="expired" className="mt-4"><SubTable rows={expired} onExtend={extendSubscription} /></TabsContent>
+        <TabsContent value="history" className="mt-4"><SubTable rows={subs} onExtend={extendSubscription} /></TabsContent>
       </Tabs>
     </>
   );
