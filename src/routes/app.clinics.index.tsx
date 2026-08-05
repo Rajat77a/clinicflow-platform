@@ -22,7 +22,8 @@ function ClinicsPage() {
   const [access, setAccess] = useState<Record<string, "Allowed" | "Suspended">>({});
   const [suspendTarget, setSuspendTarget] = useState<Clinic | null>(null);
   const [isSuspending, setIsSuspending] = useState(false);
-  const isSuperAdmin = user?.role === "super_admin";
+   const isSuperAdmin = user?.role === "super_admin";
+   const isClinicAdmin = user?.role === "clinic_admin";
 
   const exportClinic = (c: Clinic) => {
     const summary = [{
@@ -64,16 +65,18 @@ function ClinicsPage() {
       <PageHeader
         title="Clinics"
         description="Manage hospital clinics, access, staff counts and exports."
-        actions={isSuperAdmin ? (
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={exportAll}>
-              <Download className="mr-1.5 h-4 w-4" />Download
-            </Button>
-            <Button asChild>
-              <Link to="/app/clinics/new"><Plus className="mr-1.5 h-4 w-4" /> Add Clinic</Link>
-            </Button>
-          </div>
-        ) : undefined} />
+         actions={isSuperAdmin || isClinicAdmin ? (
+           <div className="flex gap-2">
+             {isSuperAdmin && (
+               <Button variant="outline" onClick={exportAll}>
+                 <Download className="mr-1.5 h-4 w-4" />Download
+               </Button>
+             )}
+             <Button asChild>
+               <Link to="/app/clinics/new"><Plus className="mr-1.5 h-4 w-4" /> Add Clinic</Link>
+             </Button>
+           </div>
+         ) : undefined} />
       <div className="rounded-2xl border bg-card shadow-soft">
         <div className="flex flex-wrap items-center gap-3 border-b p-4">
           <div className="relative min-w-[240px] flex-1">

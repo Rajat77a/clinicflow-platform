@@ -34,32 +34,36 @@ const NAV: Record<Role, NavSection[]> = {
       { to: "/app/support", label: "Support", icon: LifeBuoy },
     ]},
   ],
-  clinic_admin: [
-    { label: "Overview", items: [
-      { to: "/app", label: "Dashboard", icon: LayoutDashboard },
-    ]},
-    { label: "People", items: [
-      { to: "/app/doctors", label: "Doctors", icon: Stethoscope },
-      { to: "/app/receptionists", label: "Receptionists", icon: UserCog },
-      { to: "/app/patients", label: "Patients", icon: UsersRound },
-      { to: "/app/users", label: "Users", icon: Users },
-    ]},
-    { label: "Clinic", items: [
-      { to: "/app/appointments", label: "Appointments", icon: CalendarDays },
-      { to: "/app/prescriptions", label: "Prescriptions", icon: FileText },
-      { to: "/app/billing", label: "Billing", icon: Receipt },
-      { to: "/app/files", label: "Files", icon: FolderOpen },
-    ]},
-    { label: "Data", items: [
-      { to: "/app/downloads", label: "Download Center", icon: Download },
-      { to: "/app/reports", label: "Reports", icon: FileBarChart },
-      { to: "/app/audit-logs", label: "Audit Logs", icon: ShieldCheck },
-    ]},
-    { label: "Account", items: [
-      { to: "/app/settings", label: "Settings", icon: Settings },
-      { to: "/app/support", label: "Support", icon: LifeBuoy },
-    ]},
-  ],
+   clinic_admin: [
+     { label: "Overview", items: [
+       { to: "/app", label: "Dashboard", icon: LayoutDashboard },
+     ]},
+     { label: "Clinic", items: [
+       { to: "/app/clinics", label: "Clinics", icon: Building2 },
+       { to: "/app/clinics/new", label: "Add Clinic", icon: Plus },
+     ]},
+     { label: "People", items: [
+       { to: "/app/doctors", label: "Doctors", icon: Stethoscope },
+       { to: "/app/receptionists", label: "Receptionists", icon: UserCog },
+       { to: "/app/patients", label: "Patients", icon: UsersRound },
+       { to: "/app/users", label: "Users", icon: Users },
+     ]},
+     { label: "Operations", items: [
+       { to: "/app/appointments", label: "Appointments", icon: CalendarDays },
+       { to: "/app/prescriptions", label: "Prescriptions", icon: FileText },
+       { to: "/app/billing", label: "Billing", icon: Receipt },
+       { to: "/app/files", label: "Files", icon: FolderOpen },
+     ]},
+     { label: "Data", items: [
+       { to: "/app/downloads", label: "Download Center", icon: Download },
+       { to: "/app/reports", label: "Reports", icon: FileBarChart },
+       { to: "/app/audit-logs", label: "Audit Logs", icon: ShieldCheck },
+     ]},
+     { label: "Account", items: [
+       { to: "/app/settings", label: "Settings", icon: Settings },
+       { to: "/app/support", label: "Support", icon: LifeBuoy },
+     ]},
+   ],
   doctor: [
     { label: "Overview", items: [
       { to: "/app", label: "Dashboard", icon: LayoutDashboard },
