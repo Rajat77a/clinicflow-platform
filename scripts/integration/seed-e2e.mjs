@@ -1,19 +1,24 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { createClient } from "@supabase/supabase-js";
+import postgres from "postgres";
 
 const url = process.env.SUPABASE_URL;
 const anonKey = process.env.SUPABASE_ANON_KEY;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const databaseUrl = process.env.SUPABASE_DB_URL;
 
-if (!url || !anonKey || !serviceRoleKey) {
-  throw new Error("SUPABASE_URL, SUPABASE_ANON_KEY, and SUPABASE_SERVICE_ROLE_KEY are required");
+if (!url || !anonKey || !serviceRoleKey || !databaseUrl) {
+  throw new Error(
+    "SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, and SUPABASE_DB_URL are required",
+  );
 }
 
 const clientOptions = {
   auth: { autoRefreshToken: false, detectSessionInUrl: false, persistSession: false },
 };
 const admin = createClient(url, serviceRoleKey, clientOptions);
+const sql = postgres(databaseUrl, { max: 1 });
 const password = "E2EOnly#2026ClinicFlow";
 
 function assertNoError(error, context) {
@@ -32,50 +37,44 @@ async function createIdentity(roleCode, hospitalId, facilityId) {
   assertNoError(error, `create ${roleCode} identity`);
   assert.ok(data.user, `${roleCode} identity was not returned`);
 
-  const { error: profileError } = await admin
-    .from("profiles")
-    .update({ display_name: displayName })
-    .eq("id", data.user.id);
-  assertNoError(profileError, `update ${roleCode} profile`);
-
-  const { error: membershipError } = await admin.from("staff_memberships").insert({
-    user_id: data.user.id,
-    hospital_id: hospitalId,
-    facility_id: facilityId,
-    role_code: roleCode,
-    specialty: roleCode === "doctor" ? "General medicine" : null,
-    active: true,
-  });
-  assertNoError(membershipError, `create ${roleCode} membership`);
+  await sql`
+    update public.profiles
+    set display_name = ${displayName}
+    where id = ${data.user.id}
+  `;
+  await sql`
+    insert into public.staff_memberships (
+      user_id, hospital_id, facility_id, role_code, specialty, active
+    )
+    values (
+      ${data.user.id}, ${hospitalId}, ${facilityId}, ${roleCode},
+      ${roleCode === "doctor" ? "General medicine" : null}, true
+    )
+  `;
   return { id: data.user.id, email };
 }
 
 async function main() {
-  const { data: hospital, error: hospitalError } = await admin
-    .from("hospitals")
-    .select("id")
-    .eq("slug", "clinicflow-development")
-    .single();
-  assertNoError(hospitalError, "load seeded hospital");
-
-  const { data: facility, error: facilityError } = await admin
-    .from("facilities")
-    .select("id")
-    .eq("hospital_id", hospital.id)
-    .eq("code", "MAIN")
-    .single();
-  assertNoError(facilityError, "load seeded facility");
+  const [hospital] = await sql`
+    select id from public.hospitals where slug = 'clinicflow-development'
+  `;
+  assert.ok(hospital, "seeded hospital must exist");
+  const [facility] = await sql`
+    select id
+    from public.facilities
+    where hospital_id = ${hospital.id} and code = 'MAIN'
+  `;
+  assert.ok(facility, "seeded facility must exist");
 
   const superAdmin = await createIdentity("super_admin", hospital.id, facility.id);
   await createIdentity("clinic_admin", hospital.id, facility.id);
   const doctor = await createIdentity("doctor", hospital.id, facility.id);
   const receptionist = await createIdentity("receptionist", hospital.id, facility.id);
 
-  const { error: platformError } = await admin.from("platform_admins").insert({
-    user_id: superAdmin.id,
-    active: true,
-  });
-  assertNoError(platformError, "authorize synthetic platform administrator");
+  await sql`
+    insert into public.platform_admins (user_id, active)
+    values (${superAdmin.id}, true)
+  `;
 
   const receptionistClient = createClient(url, anonKey, clientOptions);
   const { error: signInError } = await receptionistClient.auth.signInWithPassword({
@@ -104,4 +103,8 @@ async function main() {
   assertNoError(patientError, "create synthetic portal patient");
 }
 
-await main();
+try {
+  await main();
+} finally {
+  await sql.end();
+}
