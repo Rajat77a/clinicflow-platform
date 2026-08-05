@@ -54,6 +54,36 @@ async function createIdentity(roleCode, hospitalId, facilityId) {
   return { id: data.user.id, email };
 }
 
+async function verifyIdentity(identity, hospitalId) {
+  const client = createClient(url, anonKey, clientOptions);
+  const { data: session, error: signInError } = await client.auth.signInWithPassword({
+    email: identity.email,
+    password,
+  });
+  assertNoError(signInError, `sign in ${identity.email}`);
+  assert.ok(session.user, `${identity.email} user was not returned`);
+
+  const { error: profileError } = await client
+    .from("profiles")
+    .select("display_name, email")
+    .eq("id", identity.id)
+    .single();
+  assertNoError(profileError, `read ${identity.email} profile`);
+  const { error: membershipError } = await client
+    .from("staff_memberships")
+    .select("hospital_id, facility_id, department_id, role_code")
+    .eq("user_id", identity.id)
+    .eq("active", true)
+    .single();
+  assertNoError(membershipError, `read ${identity.email} membership`);
+  const { error: hospitalError } = await client
+    .from("hospitals")
+    .select("name")
+    .eq("id", hospitalId)
+    .single();
+  assertNoError(hospitalError, `read ${identity.email} hospital`);
+}
+
 async function main() {
   const [hospital] = await sql`
     select id from public.hospitals where slug = 'clinicflow-development'
@@ -67,7 +97,7 @@ async function main() {
   assert.ok(facility, "seeded facility must exist");
 
   const superAdmin = await createIdentity("super_admin", hospital.id, facility.id);
-  await createIdentity("clinic_admin", hospital.id, facility.id);
+  const clinicAdmin = await createIdentity("clinic_admin", hospital.id, facility.id);
   const doctor = await createIdentity("doctor", hospital.id, facility.id);
   const receptionist = await createIdentity("receptionist", hospital.id, facility.id);
 
@@ -75,6 +105,10 @@ async function main() {
     insert into public.platform_admins (user_id, active)
     values (${superAdmin.id}, true)
   `;
+
+  for (const identity of [superAdmin, clinicAdmin, doctor, receptionist]) {
+    await verifyIdentity(identity, hospital.id);
+  }
 
   const receptionistClient = createClient(url, anonKey, clientOptions);
   const { error: signInError } = await receptionistClient.auth.signInWithPassword({

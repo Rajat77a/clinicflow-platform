@@ -12,7 +12,14 @@ async function signIn(page: Page, role: DemoRole) {
     .getByRole("textbox", { name: "Password", exact: true })
     .fill("E2EOnly#2026ClinicFlow");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
-  await expect(page).toHaveURL(/\/app$/);
+  try {
+    await expect(page).toHaveURL(/\/app$/, { timeout: 10_000 });
+  } catch (error) {
+    const messages = await page.locator("[data-sonner-toast]").allTextContents();
+    throw new Error(`Sign in failed for ${role}: ${messages.join(" | ") || "no error message"}`, {
+      cause: error,
+    });
+  }
 }
 
 test("password recovery does not submit the sign-in form", async ({ page }) => {
