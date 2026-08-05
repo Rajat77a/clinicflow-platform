@@ -59,4 +59,6 @@ export interface WorkspaceRepository {
   saveLabReports(reports: Omit<LabReport, "clinicId">[]): Promise<LabReport[]>;
   createBill(input: BillInput): Promise<Bill>;
   updateBill(bill: Bill): Promise<Bill>;
+  inviteSuperAdmin(input: { name: string; email: string; phone: string; tempPassword: string }): Promise<StaffMember>;
+  deactivateStaff(userId: string, reason: string): Promise<void>;
 }

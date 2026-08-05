@@ -893,7 +893,9 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           throw new Error("Only a super admin can add a super admin");
         }
         if (repository) {
-          throw new Error("Repository mode does not support super admin invites");
+          const membership = await repository.inviteSuperAdmin(input);
+          await refresh();
+          return membership;
         }
         const membership: StaffMember = {
           id: createId("SA"),

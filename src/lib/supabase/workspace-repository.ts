@@ -746,6 +746,28 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     return this.reloadAndFind<StaffMember>("staffMembers", id);
   }
 
+  async inviteSuperAdmin(input: { name: string; email: string; phone: string; tempPassword: string }) {
+    const requestId = randomKey();
+    const { data, error } = await this.client.functions.invoke("invite-staff", {
+      headers: {
+        "Idempotency-Key": randomKey(),
+        "X-Request-ID": requestId,
+      },
+      body: {
+        email: input.email,
+        fullName: input.name,
+        phone: input.phone,
+        roleCode: "super_admin",
+        redirectTo: `${globalThis.location.origin}/login?setup=invite`,
+      },
+    });
+    await throwIfFunctionError(error);
+    if (!data || typeof data.userId !== "string") {
+      throw new Error("The invitation service returned an invalid response");
+    }
+    return this.reloadAndFind<StaffMember>("staffMembers", data.userId as string);
+  }
+
   async createClinic(input: ClinicInput) {
     const { data, error } = await this.client
       .from("hospitals")
