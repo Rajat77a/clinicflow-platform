@@ -5,18 +5,12 @@ type DemoRole = "Super Admin" | "Clinic Admin" | "Doctor" | "Receptionist";
 async function signIn(page: Page, role: DemoRole) {
   await page.goto("/login");
   await page.waitForLoadState("networkidle");
-  const probeRole = role === "Clinic Admin" ? "Super Admin" : "Clinic Admin";
-  const probeButton = page.getByRole("button", { name: probeRole, exact: true });
-  await probeButton.click();
-  await expect(probeButton).toHaveClass(/border-primary/);
-
-  const roleButton = page.getByRole("button", { name: role, exact: true });
-  await roleButton.click();
-  await expect(roleButton).toHaveClass(/border-primary/);
   await page
     .getByLabel("Work email")
     .fill(`${role.toLowerCase().replaceAll(" ", ".")}@example.test`);
-  await page.getByRole("textbox", { name: "Password", exact: true }).fill("DemoOnly#2026");
+  await page
+    .getByRole("textbox", { name: "Password", exact: true })
+    .fill("E2EOnly#2026ClinicFlow");
   await page.getByRole("button", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/app$/);
 }
@@ -29,25 +23,17 @@ test("password recovery does not submit the sign-in form", async ({ page }) => {
   await page.locator('[role="dialog"] input[type="email"]').fill("recovery@example.test");
   await dialog.getByRole("button", { name: "Send reset link" }).click();
 
-  await expect(page.getByText("Demo reset flow opened")).toBeVisible();
+  await expect(page.getByText("If the account exists, a secure reset link has been sent")).toBeVisible();
   await expect(page.getByText("Email address is required")).toHaveCount(0);
 });
 
-test("super admin can invite a clinic admin but cannot enter clinical records", async ({
+test("super admin can manage clinics but cannot enter clinical records", async ({
   page,
 }) => {
   await signIn(page, "Super Admin");
-  await page.goto("/app/users");
-
-  await page.getByRole("button", { name: "Invite Clinic Admin" }).click();
-  const dialog = page.getByRole("dialog", { name: "Invite Clinic Admin" });
-  const inputs = dialog.locator("input");
-  await inputs.nth(0).fill("E2E Clinic Administrator");
-  await inputs.nth(1).fill("e2e.clinic.admin@example.test");
-  await inputs.nth(2).fill("+91 90000 00001");
-  await dialog.getByRole("button", { name: "Send invitation" }).click();
-
-  await expect(page.getByText("E2E Clinic Administrator", { exact: true })).toBeVisible();
+  await page.goto("/app/clinics");
+  await expect(page.getByRole("heading", { name: "Clinics", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: /Add Clinic/ })).toBeVisible();
   await page.goto("/app/patients");
   await expect(page.getByRole("heading", { name: "Access restricted" })).toBeVisible();
 });
