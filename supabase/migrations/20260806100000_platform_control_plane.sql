@@ -89,11 +89,14 @@ create policy hospitals_select on public.hospitals
 for select to authenticated
 using (id = private.current_hospital_id() or private.is_platform_admin());
 
+drop policy if exists platform_admins_select_own on public.platform_admins;
 create policy platform_admins_select_own on public.platform_admins
 for select to authenticated using (user_id = auth.uid());
+drop policy if exists hospital_subscriptions_select on public.hospital_subscriptions;
 create policy hospital_subscriptions_select on public.hospital_subscriptions
 for select to authenticated
 using (hospital_id = private.current_hospital_id() or private.is_platform_admin());
+drop policy if exists hospital_subscription_events_select on public.hospital_subscription_events;
 create policy hospital_subscription_events_select on public.hospital_subscription_events
 for select to authenticated
 using (hospital_id = private.current_hospital_id() or private.is_platform_admin());
