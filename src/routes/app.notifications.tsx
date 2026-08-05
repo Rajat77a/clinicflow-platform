@@ -1,7 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
-import { notifications } from "@/lib/sample-data";
 import { BellRing, CheckCheck, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,10 +15,17 @@ export const Route = createFileRoute("/app/notifications")({ component: Notifica
 
 function NotificationsPage() {
   const { user } = useAuth();
-  const { clinics } = useWorkspaceData();
+  const { clinics, auditLogs } = useWorkspaceData();
   const [target, setTarget] = useState("all");
   const [subject, setSubject] = useState("Subscription reminder");
   const [message, setMessage] = useState("Your ClinicFlow subscription is nearing its renewal date. Please complete payment to avoid an access pause.");
+
+  const notifications = auditLogs.slice(0, 10).map(entry => ({
+    type: "info" as const,
+    title: entry.action,
+    time: `${entry.date} ${entry.time}`,
+  }));
+
   const toneMap = {
     warning: "bg-warning/20 text-warning-foreground",
     destructive: "bg-destructive/10 text-destructive",
@@ -66,18 +72,23 @@ function NotificationsPage() {
         </section>
       )}
       <div className="divide-y rounded-2xl border bg-card shadow-soft">
-        {notifications.map((n, i) => (
-          <div key={i} className="flex items-start gap-3 p-4">
-            <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${toneMap[n.type as keyof typeof toneMap]}`}>
-              <BellRing className="h-4 w-4" />
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="font-semibold">{n.title}</div>
-              <div className="text-xs text-muted-foreground">{n.time}</div>
-            </div>
-            <Button variant="ghost" size="sm">View</Button>
+        {notifications.length === 0 ? (
+          <div className="p-8 text-center text-sm text-muted-foreground">
+            No notifications yet.
           </div>
-        ))}
+        ) : (
+          notifications.map((n, i) => (
+            <div key={i} className="flex items-start gap-3 p-4">
+              <div className={`grid h-9 w-9 shrink-0 place-items-center rounded-xl ${toneMap[n.type]}`}>
+                <BellRing className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="font-semibold">{n.title}</div>
+                <div className="text-xs text-muted-foreground">{n.time}</div>
+              </div>
+            </div>
+          ))
+        )}
       </div>
     </>
   );

@@ -7,23 +7,24 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { followUps as INITIAL, type FollowUp } from "@/lib/sample-data";
+import { useWorkspaceData, type Appointment } from "@/lib/workspace-data";
 import { CalendarClock, Check, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/followups")({ component: FollowUpsPage });
 
 function FollowUpsPage() {
-  const [rows, setRows] = useState<FollowUp[]>(INITIAL);
-  const [rescheduling, setRescheduling] = useState<FollowUp | null>(null);
+  const { appointments } = useWorkspaceData();
+  const [rows, setRows] = useState(appointments.filter(a => a.status === "Pending"));
+  const [rescheduling, setRescheduling] = useState<Appointment | null>(null);
   const [newDate, setNewDate] = useState("");
 
-  const mark = (id: string, status: FollowUp["status"]) => {
+  const mark = (id: string, status: string) => {
     setRows(rs => rs.map(r => r.id === id ? { ...r, status } : r));
     toast.success(`Follow-up ${status.toLowerCase()}`);
   };
 
-  const openReschedule = (r: FollowUp) => {
+  const openReschedule = (r: Appointment) => {
     setRescheduling(r);
     setNewDate(r.date);
   };
@@ -41,15 +42,15 @@ function FollowUpsPage() {
     <>
       <PageHeader
         title="Follow-ups"
-        description={`${pending} pending follow-up${pending === 1 ? "" : "s"} scheduled from your prescriptions.`}
+        description={`${pending} pending follow-up${pending === 1 ? "" : "s"} scheduled from your appointments.`}
       />
       <div className="overflow-x-auto rounded-2xl border bg-card shadow-soft">
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Follow-up</TableHead>
+              <TableHead>Appointment</TableHead>
               <TableHead>Patient</TableHead>
-              <TableHead>Reason</TableHead>
+              <TableHead>Doctor</TableHead>
               <TableHead>Date</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
@@ -69,16 +70,16 @@ function FollowUpsPage() {
                   </Link>
                   <div className="text-xs text-muted-foreground font-mono">{r.patientId}</div>
                 </TableCell>
-                <TableCell className="text-muted-foreground">{r.reason}</TableCell>
+                <TableCell className="text-muted-foreground">{r.doctor}</TableCell>
                 <TableCell>{r.date}</TableCell>
                 <TableCell>
-                  <Badge variant={r.status === "Done" ? "secondary" : r.status === "Rescheduled" ? "outline" : "default"}>
+                  <Badge variant={r.status === "Completed" ? "secondary" : r.status === "Rescheduled" ? "outline" : "default"}>
                     {r.status}
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
                   <div className="flex justify-end gap-1">
-                    <Button size="sm" variant="ghost" onClick={() => mark(r.id, "Done")}>
+                    <Button size="sm" variant="ghost" onClick={() => mark(r.id, "Completed")}>
                       <Check className="mr-1 h-3.5 w-3.5" />Done
                     </Button>
                     <Button size="sm" variant="ghost" onClick={() => openReschedule(r)}>
@@ -88,6 +89,13 @@ function FollowUpsPage() {
                 </TableCell>
               </TableRow>
             ))}
+            {rows.length === 0 && (
+              <TableRow>
+                <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                  No pending follow-ups.
+                </TableCell>
+              </TableRow>
+            )}
           </TableBody>
         </Table>
       </div>
@@ -99,7 +107,7 @@ function FollowUpsPage() {
             <div className="space-y-3">
               <div className="text-sm">
                 <div className="font-semibold">{rescheduling.patient}</div>
-                <div className="text-xs text-muted-foreground">{rescheduling.reason}</div>
+                <div className="text-xs text-muted-foreground">{rescheduling.doctor} - {rescheduling.type}</div>
               </div>
               <div className="space-y-1.5">
                 <Label>New date</Label>

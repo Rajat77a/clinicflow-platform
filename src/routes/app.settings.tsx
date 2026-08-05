@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
 import { MIN_PASSWORD_LENGTH, passwordPolicyError } from "@/lib/password-policy";
-import { SUBSCRIPTION_PRICE } from "@/lib/sample-data";
+const SUBSCRIPTION_PRICE = 499;
 import { supabaseConfig } from "@/lib/supabase/config";
 import { toast } from "sonner";
 

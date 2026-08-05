@@ -303,7 +303,7 @@ function GlobalSearch() {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { user, logout, setRole, isDemoMode } = useAuth();
+  const { user, logout, isDemoMode } = useAuth();
   const { syncStatus } = useWorkspaceData();
   const navigate = useNavigate();
   const [dark, setDark] = useState(false);
@@ -422,19 +422,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                   <div className="text-xs font-normal text-muted-foreground">{user.email}</div>
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator />
-                {isDemoMode && (
-                  <DropdownMenuLabel className="text-[11px] uppercase tracking-wider text-muted-foreground">
-                    Switch role (demo)
-                  </DropdownMenuLabel>
-                )}
-                {isDemoMode &&
-                  (Object.keys(ROLE_LABELS) as Role[]).map((r) => (
-                    <DropdownMenuItem key={r} onClick={() => setRole(r)}>
-                      <span className={user.role === r ? "font-semibold text-primary" : ""}>
-                        {ROLE_LABELS[r]}
-                      </span>
-                    </DropdownMenuItem>
-                  ))}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
                   onClick={() => {

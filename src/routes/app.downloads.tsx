@@ -6,7 +6,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { useAuth, type Role } from "@/lib/auth";
-import { followUps, payments } from "@/lib/sample-data";
+
 import { useWorkspaceData } from "@/lib/workspace-data";
 import { downloadCSV } from "@/lib/exporters";
 import { Download } from "lucide-react";
@@ -27,7 +27,7 @@ function DownloadCenter() {
     const byRole: Record<Role, Dataset[]> = {
       super_admin: [
         { key: "clinics", label: "Clinics", rows: clinics },
-        { key: "payments", label: "Payments", rows: payments },
+        { key: "bills", label: "Payments", rows: bills },
         { key: "auditLogs", label: "Audit Logs", rows: auditLogs },
         { key: "allUsers", label: "All Users", rows: getAllUsers(patients, doctors, receptionists, staffMembers) },
       ],
@@ -47,7 +47,7 @@ function DownloadCenter() {
         { key: "prescriptions", label: "My prescriptions", rows: prescriptions.map(p => ({ ...p, medicines: p.medicines.length })) },
         { key: "labReports", label: "My patients' lab reports", rows: labReports },
         { key: "appointments", label: "My appointments", rows: appointments },
-        { key: "followUps", label: "Follow-ups", rows: followUps.filter(item => item.doctor === user?.name) },
+        { key: "followUps", label: "Follow-ups", rows: appointments.filter(item => item.doctor === user?.name) },
       ],
       receptionist: [
         { key: "appointments", label: "Appointments", rows: appointments },

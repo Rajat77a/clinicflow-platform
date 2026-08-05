@@ -55,7 +55,6 @@ function Login() {
     completePasswordSetup,
   } = useAuth();
   const navigate = useNavigate();
-  const [role, setRole] = useState<Role>("clinic_admin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -81,7 +80,7 @@ function Login() {
 
     setSubmitting(true);
     try {
-      await login(email, password, role);
+      await login(email, password);
       navigate({ to: "/app" });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to sign in");
@@ -209,34 +208,6 @@ function Login() {
               </div>
             </div>
 
-            {isDemoMode && (
-              <div className="space-y-2">
-                <Label>Sign in as (demo)</Label>
-                <div className="grid grid-cols-2 gap-2">
-                  {(Object.keys(ROLE_LABELS) as Role[]).map((r) => {
-                    const Icon = ROLE_ICONS[r];
-                    const active = role === r;
-
-                    return (
-                      <button
-                        type="button"
-                        key={r}
-                        onClick={() => setRole(r)}
-                        className={`flex items-center gap-2 rounded-xl border px-3 py-2.5 text-left text-sm transition-all ${
-                          active
-                            ? "border-primary bg-primary-soft text-primary shadow-soft"
-                            : "border-border hover:bg-muted"
-                        }`}
-                      >
-                        <Icon className="h-4 w-4 shrink-0" />
-                        <span className="font-medium">{ROLE_LABELS[r]}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
             <Button
               type="submit"
               disabled={submitting}
@@ -254,8 +225,7 @@ function Login() {
             {isDemoMode ? (
               <>
                 <span className="font-semibold text-foreground">Demo mode:</span> no real
-                authentication - enter your email, password and pick a role to explore the matching
-                dashboard.{" "}
+                authentication — enter your email and password to explore the platform.{" "}
               </>
             ) : (
               <>

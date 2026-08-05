@@ -101,13 +101,13 @@ const NAV: Record<Role, NavSection[]> = {
 };
 
 export function SidebarNav({ onNavigate }: { onNavigate?: () => void }) {
-  const { user, isDemoMode } = useAuth();
+  const { user } = useAuth();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   if (!user) return null;
   const sections = NAV[user.role]
     .map(section => ({
       ...section,
-      items: section.items.filter(item => isDemoMode || isProductionReadyPath(item.to)),
+      items: section.items.filter(item => isProductionReadyPath(item.to)),
     }))
     .filter(section => section.items.length > 0);
 

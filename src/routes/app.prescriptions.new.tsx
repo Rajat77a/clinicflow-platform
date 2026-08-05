@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { EntityPicker, toPatientOptions, toDoctorOptions, type PatientOption, type DoctorOption } from "@/components/forms/entity-picker";
 import { useAuth } from "@/lib/auth";
-import { type LabReport } from "@/lib/sample-data";
+import { type LabReport } from "@/lib/workspace-data";
 import { useWorkspaceData } from "@/lib/workspace-data";
 import { Activity, Plus, Trash2, Send, Printer, FlaskConical } from "lucide-react";
 import { sendWhatsApp } from "@/lib/whatsapp";

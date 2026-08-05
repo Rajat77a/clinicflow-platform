@@ -17,61 +17,13 @@ export interface AuthUser {
   clinicLogo: string;
 }
 
-const DEFAULT_USERS: Record<Role, AuthUser> = {
-  super_admin: {
-    userId: "USR-SA-001",
-    name: "Dr. Helena Vance",
-    email: "helena@clinicflow.io",
-    role: "super_admin",
-    clinicId: null,
-    facilityId: null,
-    departmentId: null,
-    clinic: "ClinicFlow HQ",
-    clinicLogo: "CF",
-  },
-  clinic_admin: {
-    userId: "USR-CA-001",
-    name: "Marcus Lindqvist",
-    email: "marcus@northwood.health",
-    role: "clinic_admin",
-    clinicId: "CL-001",
-    facilityId: null,
-    departmentId: null,
-    clinic: "Northwood Health",
-    clinicLogo: "NH",
-  },
-  doctor: {
-    userId: "DR-01",
-    name: "Dr. Amelia Chen",
-    email: "amelia.chen@northwood.health",
-    role: "doctor",
-    clinicId: "CL-001",
-    facilityId: null,
-    departmentId: null,
-    clinic: "Northwood Health",
-    clinicLogo: "NH",
-  },
-  receptionist: {
-    userId: "RC-01",
-    name: "Sofia Romero",
-    email: "sofia@northwood.health",
-    role: "receptionist",
-    clinicId: "CL-001",
-    facilityId: null,
-    departmentId: null,
-    clinic: "Northwood Health",
-    clinicLogo: "NH",
-  },
-};
-
 interface AuthCtx {
   user: AuthUser | null;
   isReady: boolean;
   isDemoMode: boolean;
   passwordSetupRequired: boolean;
-  login: (email: string, password: string, demoRole?: Role) => Promise<void>;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  setRole: (role: Role) => void;
   requestPasswordReset: (email: string) => Promise<void>;
   updatePassword: (password: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
@@ -169,51 +121,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
-    if (!supabaseConfig.demoMode) {
-      const supabase = getSupabaseBrowserClient();
-      void supabase.auth
-        .getUser()
-        .then(async ({ data, error }: { data: { user: User | null }; error: AuthError | null }) => {
-          try {
-            if (error) throw error;
-            await hydrateSupabaseUser(data.user);
-          } catch {
-            setUser(null);
-          } finally {
-            setIsReady(true);
-          }
-        });
-
-      const { data: listener } = supabase.auth.onAuthStateChange(
-        (event: AuthChangeEvent, session: Session | null) => {
-          if (event === "PASSWORD_RECOVERY") setPasswordSetupRequired(true);
-          if (event === "SIGNED_OUT") setPasswordSetupRequired(false);
-          queueMicrotask(() => {
-            void hydrateSupabaseUser(session?.user ?? null).catch(() => setUser(null));
-          });
-        },
-      );
-
-      return () => listener.subscription.unsubscribe();
-    }
-
-    const raw = localStorage.getItem("cf_user");
-
-    if (raw) {
-      try {
-        const savedUser: unknown = JSON.parse(raw);
-        if (isAuthUser(savedUser)) {
-          const normalizedUser = { ...DEFAULT_USERS[savedUser.role], email: savedUser.email };
-          setUser(normalizedUser);
-          localStorage.setItem("cf_user", JSON.stringify(normalizedUser));
-        } else {
-          localStorage.removeItem("cf_user");
+    const supabase = getSupabaseBrowserClient();
+    void supabase.auth
+      .getUser()
+      .then(async ({ data, error }: { data: { user: User | null }; error: AuthError | null }) => {
+        try {
+          if (error) throw error;
+          await hydrateSupabaseUser(data.user);
+        } catch {
+          setUser(null);
+        } finally {
+          setIsReady(true);
         }
-      } catch {
-        localStorage.removeItem("cf_user");
-      }
-    }
-    setIsReady(true);
+      });
+
+    const { data: listener } = supabase.auth.onAuthStateChange(
+      (event: AuthChangeEvent, session: Session | null) => {
+        if (event === "PASSWORD_RECOVERY") setPasswordSetupRequired(true);
+        if (event === "SIGNED_OUT") setPasswordSetupRequired(false);
+        queueMicrotask(() => {
+          void hydrateSupabaseUser(session?.user ?? null).catch(() => setUser(null));
+        });
+      },
+    );
+
+    return () => listener.subscription.unsubscribe();
   }, [hydrateSupabaseUser]);
 
   useEffect(() => {
@@ -278,15 +210,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isReady,
         isDemoMode: supabaseConfig.demoMode,
         passwordSetupRequired,
-        login: async (email, password, demoRole = "clinic_admin") => {
-          if (supabaseConfig.demoMode) {
-            persist({
-              ...DEFAULT_USERS[demoRole],
-              email: email.trim(),
-            });
-            return;
-          }
-
+        login: async (email, password) => {
           const { data, error } = await getSupabaseBrowserClient().auth.signInWithPassword({
             email: email.trim(),
             password,
@@ -295,20 +219,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await hydrateSupabaseUser(data.user);
         },
         logout: async () => {
-          if (!supabaseConfig.demoMode) {
-            const { error } = await getSupabaseBrowserClient().auth.signOut();
-            if (error) throw error;
-          }
+          const { error } = await getSupabaseBrowserClient().auth.signOut();
+          if (error) throw error;
           persist(null);
         },
-        setRole: (role) => {
-          if (!supabaseConfig.demoMode) {
-            throw new Error("Roles can only be changed by an authorized administrator");
-          }
-          persist(DEFAULT_USERS[role]);
-        },
         requestPasswordReset: async (email) => {
-          if (supabaseConfig.demoMode) return;
           const { error } = await getSupabaseBrowserClient().auth.resetPasswordForEmail(
             email.trim(),
             { redirectTo: `${supabaseConfig.appUrl}/login?setup=recovery` },
@@ -316,7 +231,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (error) throw error;
         },
         updatePassword: async (password) => {
-          if (supabaseConfig.demoMode) return;
           const client = getSupabaseBrowserClient();
           const { error } = await client.auth.updateUser({ password });
           if (error) throw error;
@@ -327,7 +241,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (revokeError) throw revokeError;
         },
         changePassword: async (currentPassword, newPassword) => {
-          if (supabaseConfig.demoMode) return;
           if (!user?.email) throw new Error("An authenticated account is required");
 
           const client = getSupabaseBrowserClient();

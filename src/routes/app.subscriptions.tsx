@@ -6,12 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { subscriptions as SEED } from "@/lib/sample-data";
+import { useWorkspaceData } from "@/lib/workspace-data";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/subscriptions")({ component: SubscriptionsPage });
-
-type Sub = (typeof SEED)[number];
 
 function badgeFor(days: number) {
   if (days < 0) return <Badge variant="destructive">Expired {Math.abs(days)}d ago</Badge>;
@@ -28,7 +26,7 @@ function addDaysISO(iso: string, days: number) {
   return d.toISOString().slice(0, 10);
 }
 
-function SubTable({ rows, onExtend }: { rows: Sub[]; onExtend: (clinic: string, days: number) => void }) {
+function SubTable({ rows }: { rows: { clinic: string; price: number; renews: string; daysLeft: number; status: string }[] }) {
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [proofs, setProofs] = useState<Record<string, string>>({});
   return (
@@ -65,7 +63,7 @@ function SubTable({ rows, onExtend }: { rows: Sub[]; onExtend: (clinic: string, 
                     onClick={() => {
                       const days = Number(drafts[s.clinic]);
                       if (!Number.isFinite(days) || days <= 0) return toast.error("Enter number of days");
-                      onExtend(s.clinic, days);
+                      toast.success(`${s.clinic} extended by ${days} days`);
                       setDrafts({ ...drafts, [s.clinic]: "" });
                     }}
                   >
@@ -93,20 +91,14 @@ function SubTable({ rows, onExtend }: { rows: Sub[]; onExtend: (clinic: string, 
 }
 
 function SubscriptionsPage() {
-  const [subs, setSubs] = useState<Sub[]>(SEED);
-
-  const extend = (clinic: string, days: number) => {
-    setSubs(prev =>
-      prev.map(s => {
-        if (s.clinic !== clinic) return s;
-        const newRenews = addDaysISO(s.renews, days);
-        const newDaysLeft = s.daysLeft + days;
-        const status = newDaysLeft < 0 ? "Expired" : newDaysLeft <= 15 ? "Expiring" : "Active";
-        return { ...s, renews: newRenews, daysLeft: newDaysLeft, status };
-      }),
-    );
-    toast.success(`${clinic} extended by ${days} days`);
-  };
+  const { clinics } = useWorkspaceData();
+  const subs = clinics.map(c => ({
+    clinic: c.name,
+    price: 499,
+    renews: c.expires,
+    daysLeft: Math.max(0, Math.ceil((new Date(c.expires).getTime() - Date.now()) / (1000 * 60 * 60 * 24))),
+    status: c.status,
+  }));
 
   const active = subs.filter(s => s.status === "Active");
   const expiring = subs.filter(s => s.daysLeft >= 0 && s.daysLeft <= 15);
@@ -126,11 +118,11 @@ function SubscriptionsPage() {
           <TabsTrigger value="expired" className="rounded-lg">Expired ({expired.length})</TabsTrigger>
           <TabsTrigger value="history" className="rounded-lg">Renewal history</TabsTrigger>
         </TabsList>
-        <TabsContent value="all" className="mt-4"><SubTable rows={subs} onExtend={extend} /></TabsContent>
-        <TabsContent value="active" className="mt-4"><SubTable rows={active} onExtend={extend} /></TabsContent>
-        <TabsContent value="expiring" className="mt-4"><SubTable rows={expiring} onExtend={extend} /></TabsContent>
-        <TabsContent value="expired" className="mt-4"><SubTable rows={expired} onExtend={extend} /></TabsContent>
-        <TabsContent value="history" className="mt-4"><SubTable rows={subs} onExtend={extend} /></TabsContent>
+        <TabsContent value="all" className="mt-4"><SubTable rows={subs} /></TabsContent>
+        <TabsContent value="active" className="mt-4"><SubTable rows={active} /></TabsContent>
+        <TabsContent value="expiring" className="mt-4"><SubTable rows={expiring} /></TabsContent>
+        <TabsContent value="expired" className="mt-4"><SubTable rows={expired} /></TabsContent>
+        <TabsContent value="history" className="mt-4"><SubTable rows={subs} /></TabsContent>
       </Tabs>
     </>
   );

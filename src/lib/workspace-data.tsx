@@ -511,17 +511,16 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [syncStatus, setSyncStatus] = useState<WorkspaceData["syncStatus"]>(() => {
-    if (supabaseConfig.demoMode) return "live";
     if (typeof navigator !== "undefined" && !navigator.onLine) return "offline";
     return "connecting";
   });
   const loadSequence = useRef(0);
   const visibleLoads = useRef(0);
   const repository = useMemo(
-    () => (supabaseConfig.demoMode || typeof window === "undefined"
+    () => (typeof window === "undefined"
       ? null
       : new SupabaseWorkspaceRepository()),
-    [],
+    []
   );
 
   const loadSnapshot = useCallback(async (showLoading: boolean) => {
@@ -564,7 +563,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   }, [refresh, repository, user]);
 
   useEffect(() => {
-    if (supabaseConfig.demoMode || typeof window === "undefined") return;
+    if (typeof window === "undefined") return;
     const handleOffline = () => setSyncStatus("offline");
     const handleOnline = () => {
       setSyncStatus("connecting");

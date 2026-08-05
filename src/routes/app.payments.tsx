@@ -6,73 +6,56 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { payments as seedPayments } from "@/lib/sample-data";
+import { useWorkspaceData } from "@/lib/workspace-data";
 import { CheckCircle2, Clock3, IndianRupee, Search, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/payments")({ component: PaymentsPage });
 
-type Payment = (typeof seedPayments)[number];
-
-function statusBadge(status: Payment["status"]) {
-  if (status === "Verified") return <Badge variant="secondary">Verified</Badge>;
-  return <Badge className="bg-warning text-warning-foreground hover:bg-warning/90">Pending</Badge>;
-}
-
 function PaymentsPage() {
-  const [payments, setPayments] = useState<Payment[]>(seedPayments);
+  const { bills, clinics } = useWorkspaceData();
   const [query, setQuery] = useState("");
 
-  const visiblePayments = useMemo(() => {
+  const paidBills = bills.filter(b => b.status === "Paid");
+  const pendingBills = bills.filter(b => b.status !== "Paid");
+
+  const visibleBills = useMemo(() => {
     const needle = query.trim().toLocaleLowerCase();
-    if (!needle) return payments;
-    return payments.filter((payment) =>
-      [payment.id, payment.clinic, payment.method, payment.txn, payment.status]
+    if (!needle) return paidBills;
+    return paidBills.filter(b =>
+      [b.id, b.patient, b.method, b.status]
         .join(" ")
         .toLocaleLowerCase()
         .includes(needle),
     );
-  }, [payments, query]);
+  }, [paidBills, query]);
 
-  const verifiedTotal = payments
-    .filter((payment) => payment.status === "Verified")
-    .reduce((sum, payment) => sum + payment.amount, 0);
-  const pendingTotal = payments
-    .filter((payment) => payment.status === "Pending")
-    .reduce((sum, payment) => sum + payment.amount, 0);
-
-  const verifyPayment = (paymentId: string) => {
-    setPayments((current) =>
-      current.map((payment) =>
-        payment.id === paymentId ? { ...payment, status: "Verified" } : payment,
-      ),
-    );
-    toast.success(`Payment ${paymentId} verified`);
-  };
+  const verifiedTotal = paidBills.reduce((sum, b) => sum + b.amount, 0);
+  const pendingTotal = pendingBills.reduce((sum, b) => sum + b.amount, 0);
 
   return (
     <>
       <PageHeader
         title="Payments"
-        description="Review subscription payment references and mark verified collections."
+        description="Review billing payments and collections."
       />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
-          label="Verified collections"
-          value={`Rs ${verifiedTotal.toLocaleString()}`}
+          label="Collected"
+          value={`₹${verifiedTotal.toLocaleString("en-IN")}`}
           tone="success"
           icon={<IndianRupee className="h-4 w-4" />}
         />
         <StatCard
-          label="Pending review"
-          value={`Rs ${pendingTotal.toLocaleString()}`}
+          label="Pending"
+          value={`₹${pendingTotal.toLocaleString("en-IN")}`}
           tone="warning"
           icon={<Clock3 className="h-4 w-4" />}
         />
         <StatCard
-          label="Verified payments"
-          value={payments.filter((payment) => payment.status === "Verified").length.toString()}
+          label="Paid invoices"
+          value={paidBills.length.toString()}
           tone="info"
           icon={<ShieldCheck className="h-4 w-4" />}
         />
@@ -85,7 +68,7 @@ function PaymentsPage() {
             <Input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search clinic, transaction or status"
+              placeholder="Search invoice, patient or status"
               className="h-10 rounded-xl bg-muted/30 pl-9"
             />
           </div>
@@ -95,43 +78,33 @@ function PaymentsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Payment</TableHead>
-                <TableHead>Clinic</TableHead>
-                <TableHead>Method</TableHead>
-                <TableHead>Transaction</TableHead>
+                <TableHead>Invoice</TableHead>
+                <TableHead>Patient</TableHead>
                 <TableHead>Date</TableHead>
+                <TableHead>Method</TableHead>
                 <TableHead className="text-right">Amount</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {visiblePayments.map((payment) => (
-                <TableRow key={payment.id}>
-                  <TableCell className="font-mono text-xs">{payment.id}</TableCell>
-                  <TableCell className="font-semibold">{payment.clinic}</TableCell>
-                  <TableCell className="text-muted-foreground">{payment.method}</TableCell>
-                  <TableCell className="font-mono text-xs text-muted-foreground">{payment.txn}</TableCell>
-                  <TableCell className="text-muted-foreground">{payment.date}</TableCell>
-                  <TableCell className="text-right tabular-nums">Rs {payment.amount.toLocaleString()}</TableCell>
-                  <TableCell>{statusBadge(payment.status)}</TableCell>
-                  <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      variant={payment.status === "Verified" ? "outline" : "default"}
-                      disabled={payment.status === "Verified"}
-                      onClick={() => verifyPayment(payment.id)}
-                    >
-                      <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
-                      Verify
-                    </Button>
+              {visibleBills.map((bill) => (
+                <TableRow key={bill.id}>
+                  <TableCell className="font-mono text-xs">{bill.id}</TableCell>
+                  <TableCell className="font-semibold">{bill.patient}</TableCell>
+                  <TableCell className="text-muted-foreground">{bill.date}</TableCell>
+                  <TableCell className="text-muted-foreground">{bill.method || "—"}</TableCell>
+                  <TableCell className="text-right tabular-nums">₹{bill.amount.toLocaleString("en-IN")}</TableCell>
+                  <TableCell>
+                    <Badge variant={bill.status === "Paid" ? "secondary" : bill.status === "Overdue" ? "destructive" : "outline"}>
+                      {bill.status}
+                    </Badge>
                   </TableCell>
                 </TableRow>
               ))}
-              {visiblePayments.length === 0 && (
+              {visibleBills.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-24 text-center text-muted-foreground">
-                    No payments match this search.
+                  <TableCell colSpan={6} className="h-24 text-center text-muted-foreground">
+                    No paid invoices found.
                   </TableCell>
                 </TableRow>
               )}
