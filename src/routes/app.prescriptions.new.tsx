@@ -94,6 +94,7 @@ function NewPrescription() {
     const id = `LR-${2300 + labs.length + 1}`;
     setLabs([...labs, {
       id, prescriptionId: edit ?? "RX-DRAFT",
+      clinicId: user?.clinicId ?? "",
       patient: patient?.primary ?? "", patientId: patient?.id ?? "",
       test: newLab.test, date: new Date().toISOString().slice(0, 10),
       result: newLab.result, reference: newLab.reference, notes: newLab.notes,
@@ -309,10 +310,12 @@ function NewPrescription() {
                         {l.fileName ? `📎 ${l.fileName}` : `${l.result} · ref ${l.reference}`} · by {l.uploadedBy}
                       </div>
                     </div>
-                    <Button type="button" size="sm" variant="ghost"
-                      onClick={() => patient && sendWhatsApp(patient.tertiary ?? "", `Lab report — ${l.test}: ${l.result} (ref ${l.reference})`)}>
-                      <Send className="mr-1 h-3.5 w-3.5" />WhatsApp
-                    </Button>
+                    {supabaseConfig.demoMode && (
+                      <Button type="button" size="sm" variant="ghost"
+                        onClick={() => patient && sendWhatsApp(patient.tertiary ?? "", `Lab report — ${l.test}: ${l.result} (ref ${l.reference})`)}>
+                        <Send className="mr-1 h-3.5 w-3.5" />WhatsApp
+                      </Button>
+                    )}
                   </div>
                 ))}
               </div>
@@ -383,9 +386,11 @@ function NewPrescription() {
               <Button type="button" variant="outline" size="sm" className="flex-1" onClick={printRx}>
                 <Printer className="mr-1 h-3.5 w-3.5" />Print
               </Button>
-              <Button type="button" size="sm" className="flex-1" onClick={shareRx}>
+              {supabaseConfig.demoMode && (
+                <Button type="button" size="sm" className="flex-1" onClick={shareRx}>
                   <Send className="mr-1 h-3.5 w-3.5" />WhatsApp
                 </Button>
+              )}
             </div>
           </div>
         </aside>

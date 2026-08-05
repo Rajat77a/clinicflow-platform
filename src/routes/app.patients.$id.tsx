@@ -81,7 +81,7 @@ function PatientProfile() {
   const canEditRx = Boolean(user && hasPermission(user.role, "prescriptions.write"));
   const canAddLab = Boolean(user && hasPermission(user.role, "labs.write"));
   const canBook = Boolean(user && hasPermission(user.role, "appointments.create"));
-  const canUseExternalSharing = false;
+  const canUseExternalSharing = supabaseConfig.demoMode;
 
   const printRx = (rx: Prescription) => {
     printDocument(`
@@ -189,7 +189,7 @@ function PatientProfile() {
                       {canUseExternalSharing && (
                          <Button size="sm" variant="ghost" onClick={() => shareRx(r)} aria-label={`Share ${r.id}`} title={`Share ${r.id}`}><Send className="h-3.5 w-3.5" /></Button>
                        )}
-                       {canEditRx && <Button asChild size="sm" variant="ghost">
+                       {canEditRx && supabaseConfig.demoMode && <Button asChild size="sm" variant="ghost">
                          <Link to="/app/prescriptions/new" search={{ edit: r.id }} aria-label={`Edit ${r.id}`} title={`Edit ${r.id}`}><Edit className="h-3.5 w-3.5" /></Link>
                        </Button>}
                     </div>

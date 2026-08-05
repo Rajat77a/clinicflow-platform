@@ -8,7 +8,7 @@ values (
   'INR',
   'en-IN'
 )
-on conflict (singleton_key) do nothing;
+on conflict (slug) do nothing;
 
 insert into public.facilities (hospital_id, code, name)
 select id, 'MAIN', 'Main Facility'

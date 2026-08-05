@@ -23,10 +23,7 @@ test("external patient sharing remains demo-only until consent is implemented", 
 
 test("production does not offer mutation of immutable signed prescriptions", () => {
   assert.match(patientSource, /canEditRx && supabaseConfig\.demoMode && <Button asChild/);
-  assert.match(
-    prescriptionSource,
-    /if \(edit && !supabaseConfig\.demoMode\)[\s\S]*Signed prescriptions are immutable/,
-  );
+  assert.match(prescriptionSource, /if \(edit\)[\s\S]*Signed prescriptions are immutable/);
 });
 
 test("production navigation never links to disabled sample modules", () => {

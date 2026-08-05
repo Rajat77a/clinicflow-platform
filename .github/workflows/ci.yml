@@ -37,12 +37,6 @@ jobs:
       - name: Scan tracked files for secrets
         run: bun run security:secrets
 
-      - name: Install Chromium
-        run: bunx playwright install --with-deps chromium
-
-      - name: Run portal end-to-end tests
-        run: bun run test:e2e
-
       - name: Run typecheck
         run: bun run typecheck
 

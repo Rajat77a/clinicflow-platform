@@ -17,9 +17,8 @@ export const Route = createFileRoute("/app/clinics/")({ component: ClinicsPage }
 
 function ClinicsPage() {
   const { user } = useAuth();
-  const { clinics, updateClinic } = useWorkspaceData();
+  const { clinics, setClinicAccess } = useWorkspaceData();
   const navigate = useNavigate();
-  const [access, setAccess] = useState<Record<string, "Allowed" | "Suspended">>({});
   const [suspendTarget, setSuspendTarget] = useState<Clinic | null>(null);
   const [isSuspending, setIsSuspending] = useState(false);
    const isSuperAdmin = user?.role === "super_admin";
@@ -48,8 +47,8 @@ function ClinicsPage() {
     if (!suspendTarget) return;
     setIsSuspending(true);
     try {
-      const next = (access[suspendTarget.id] ?? "Allowed") === "Allowed" ? "Suspended" : "Allowed";
-      setAccess({ ...access, [suspendTarget.id]: next });
+      const next = suspendTarget.access === "Allowed" ? "Suspended" : "Allowed";
+      await setClinicAccess(suspendTarget.id, next === "Allowed");
       toast.success(`${suspendTarget.name} set to ${next.toLowerCase()}`);
       setSuspendTarget(null);
     } catch (error) {
@@ -130,11 +129,11 @@ function ClinicsPage() {
                     <TableCell>
                       <Button
                         size="sm"
-                        variant={(access[c.id] ?? "Allowed") === "Allowed" ? "outline" : "destructive"}
+                        variant={c.access === "Allowed" ? "outline" : "destructive"}
                         onClick={() => setSuspendTarget(c)}
                       >
                         <Power className="mr-1 h-3.5 w-3.5" />
-                        {access[c.id] ?? "Allowed"}
+                        {c.access}
                       </Button>
                     </TableCell>
                   )}
@@ -173,14 +172,14 @@ function ClinicsPage() {
             <DialogTitle>Toggle clinic access</DialogTitle>
             <DialogDescription>
               {suspendTarget?.name} will be set to{" "}
-              {(access[suspendTarget?.id ?? ""] ?? "Allowed") === "Allowed" ? "Suspended" : "Allowed"}.
+              {suspendTarget?.access === "Allowed" ? "Suspended" : "Allowed"}.
               This affects staff access to the clinic.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button variant="outline" onClick={() => setSuspendTarget(null)} disabled={isSuspending}>Cancel</Button>
             <Button
-              variant={(access[suspendTarget?.id ?? ""] ?? "Allowed") === "Allowed" ? "destructive" : "default"}
+              variant={suspendTarget?.access === "Allowed" ? "destructive" : "default"}
               onClick={handleSuspend}
               disabled={isSuspending}
             >
