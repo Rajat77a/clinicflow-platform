@@ -179,8 +179,7 @@ Deno.serve(async (request) => {
         .maybeSingle();
       if (facilityError || !facility) return response(422, { error: "Invalid facility" });
     } else {
-      const facilityClient = isCrossHospital ? adminClient : userClient;
-      const { data: facility, error: facilityError } = await facilityClient
+      const { data: facility, error: facilityError } = await adminClient
         .from("facilities")
         .select("id")
         .eq("hospital_id", effectiveHospitalId)
@@ -189,8 +188,26 @@ Deno.serve(async (request) => {
         .limit(1)
         .maybeSingle();
       facilityId = facility?.id ?? null;
-      if (facilityError || !facilityId) {
-        return response(422, { error: "Create an active facility before inviting staff" });
+      if (!facilityId) {
+        const { data: hospital } = await adminClient
+          .from("hospitals")
+          .select("name")
+          .eq("id", effectiveHospitalId)
+          .maybeSingle();
+        const { data: created, error: createError } = await adminClient
+          .from("facilities")
+          .insert({
+            hospital_id: effectiveHospitalId,
+            code: "MAIN",
+            name: hospital?.name ? `${hospital.name} Main Facility` : "Main Facility",
+            active: true,
+          })
+          .select("id")
+          .single();
+        if (createError || !created) {
+          return response(422, { error: "Create an active facility before inviting staff" });
+        }
+        facilityId = created.id;
       }
     }
     if (departmentId) {
