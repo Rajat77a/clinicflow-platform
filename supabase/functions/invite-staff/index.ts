@@ -1,6 +1,6 @@
 import { createClient } from "npm:@supabase/supabase-js@2.110.8";
 
-const allowedRoles = new Set(["clinic_admin", "doctor", "receptionist"]);
+const allowedRoles = new Set(["clinic_admin", "doctor", "receptionist", "super_admin"]);
 const allowedOrigin = Deno.env.get("CLINICFLOW_ALLOWED_ORIGIN") ?? "";
 const allowedHeaders = [
   "authorization",
@@ -101,13 +101,9 @@ Deno.serve(async (request) => {
     const administrativeNotes = typeof payload.notes === "string" ? payload.notes.trim() : null;
     let facilityId = typeof payload.facilityId === "string" ? payload.facilityId : null;
     const departmentId = typeof payload.departmentId === "string" ? payload.departmentId : null;
-    const redirectTo = typeof payload.redirectTo === "string" ? payload.redirectTo : allowedOrigin;
 
     if (!email || !fullName || !allowedRoles.has(roleCode)) {
       return response(422, { error: "A valid name, email, and supported role are required" });
-    }
-    if (!redirectTo.startsWith(`${allowedOrigin}/`)) {
-      return response(422, { error: "Invalid invitation redirect" });
     }
 
     const userClient = createClient(supabaseUrl, anonKey, {
@@ -211,68 +207,47 @@ Deno.serve(async (request) => {
       }
     }
 
-    const { data: invited, error: inviteError } = await adminClient.auth.admin.inviteUserByEmail(
+    // Generate an unlimited-validity invite token
+    const token = crypto.randomUUID().replace(/-/g, "") + crypto.randomUUID().replace(/-/g, "");
+
+    // Look up hospital details for the email
+    const { data: hospital } = await adminClient
+      .from("hospitals")
+      .select("name, email, phone, address")
+      .eq("id", effectiveHospitalId)
+      .maybeSingle();
+
+    const { error: insertError } = await adminClient.from("invite_tokens").insert({
       email,
-      { data: { full_name: fullName, phone }, redirectTo },
-    );
-    if (inviteError || !invited.user) {
-      const providerMessage = inviteError?.message.toLowerCase() ?? "";
-      if (inviteError?.status === 429) {
-        return response(429, {
-          error: "Email invitation limit reached. Try again later or configure hospital SMTP.",
-        });
-      }
-      if (providerMessage.includes("not authorized")) {
-        return response(503, {
-          error: "Staff email delivery is not configured. Connect custom SMTP in Supabase Auth.",
-        });
-      }
-      if (
-        providerMessage.includes("already") ||
-        providerMessage.includes("registered") ||
-        providerMessage.includes("exists")
-      ) {
-        return response(409, { error: "An account or invitation already exists for this email" });
-      }
-      return response(503, {
-        error: "The email provider rejected the invitation. Check Supabase Auth email settings.",
-      });
+      full_name: fullName,
+      phone,
+      role_code: roleCode,
+      hospital_id: effectiveHospitalId,
+      facility_id: facilityId,
+      department_id: departmentId,
+      token,
+      clinic_name: hospital?.name ?? null,
+      clinic_email: hospital?.email ?? null,
+      clinic_phone: hospital?.phone ?? null,
+      clinic_address: typeof hospital?.address === "object" ? JSON.stringify(hospital.address) : (hospital?.address ?? null),
+      specialty,
+      shift,
+      gender,
+      qualification,
+      medical_registration_number: medicalRegistrationNumber,
+      experience_years: experienceYears,
+      consultation_fee: consultationFee,
+      working_hours: workingHours,
+      administrative_notes: administrativeNotes,
+    });
+    if (insertError) {
+      console.error(JSON.stringify({ event: "invite_token_insert_failed", error: insertError.message }));
+      return response(500, { error: "Failed to generate invite token" });
     }
 
-    const provisionResult = isCrossHospital
-      ? await userClient.rpc("provision_platform_invited_admin", {
-          p_user_id: invited.user.id,
-          p_hospital_id: effectiveHospitalId,
-          p_email: email,
-          p_full_name: fullName,
-          p_phone: phone,
-          p_facility_id: facilityId,
-        })
-      : await userClient.rpc("provision_invited_staff", {
-          p_user_id: invited.user.id,
-          p_email: email,
-          p_full_name: fullName,
-          p_phone: phone,
-          p_role_code: roleCode,
-          p_facility_id: facilityId,
-          p_department_id: departmentId,
-          p_specialty: specialty,
-          p_shift: shift,
-          p_gender: gender,
-          p_qualification: qualification,
-          p_medical_registration_number: medicalRegistrationNumber,
-          p_experience_years: experienceYears,
-          p_consultation_fee: consultationFee,
-          p_working_hours: workingHours,
-          p_administrative_notes: administrativeNotes,
-        });
-    const provisionError = provisionResult.error;
-    if (provisionError) {
-      await adminClient.auth.admin.deleteUser(invited.user.id);
-      return response(409, { error: "The staff account could not be provisioned" });
-    }
+    const setupUrl = `${allowedOrigin}/setup?token=${token}`;
 
-    const result = { userId: invited.user.id, status: "invited" };
+    const result = { userId: token, status: "invited", setupUrl };
     await adminClient.from("idempotency_keys").insert({
       hospital_id: effectiveHospitalId,
       actor_user_id: userData.user.id,

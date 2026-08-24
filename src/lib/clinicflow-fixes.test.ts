@@ -83,7 +83,6 @@ test("billing loads the assigned doctor's configured consultation fee", () => {
 });
 
 test("invite and recovery password setup survives the PKCE redirect", () => {
-  assert.match(repositorySource, /\/login\?setup=invite/);
   assert.match(authSource, /\/login\?setup=recovery/);
   assert.match(authSource, /passwordSetupRequired\s*\|\|/);
   assert.match(loginSource, /showPw2/);

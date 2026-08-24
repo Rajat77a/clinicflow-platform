@@ -701,9 +701,9 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
 
   private async inviteStaff(
     input: DoctorInput | ReceptionistInput | ClinicAdminInput,
-    roleCode: "clinic_admin" | "doctor" | "receptionist",
+    roleCode: "clinic_admin" | "doctor" | "receptionist" | "super_admin",
     targetHospitalId?: string,
-  ) {
+  ): Promise<{ setupUrl: string }> {
     const requestId = randomKey();
     const { data, error } = await this.client.functions.invoke("invite-staff", {
       headers: {
@@ -725,18 +725,17 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         consultationFee: "consultationFee" in input ? input.consultationFee : undefined,
         workingHours: "workingHours" in input ? input.workingHours : undefined,
         notes: "notes" in input ? input.notes : undefined,
-        redirectTo: `${globalThis.location.origin}/login?setup=invite`,
       },
     });
     await throwIfFunctionError(error);
-    if (!data || typeof data.userId !== "string") {
+    if (!data || typeof data.setupUrl !== "string") {
       throw new Error("The invitation service returned an invalid response");
     }
-    return data.userId as string;
+    return { setupUrl: data.setupUrl };
   }
 
   async createDoctor(input: DoctorInput) {
-    const id = await this.inviteStaff(input, "doctor");
+    const { setupUrl } = await this.inviteStaff(input, "doctor");
     let photoWarning: string | undefined;
     if (input.photo) {
       try {
@@ -750,55 +749,81 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         throwIfError(hospitalError);
         if (!hospital) throw new Error("The active hospital could not be loaded");
         const extension = input.photo.type === "image/png" ? "png" : "jpg";
-        const path = `${hospital.id}/${id}/avatar.${extension}`;
+        const path = `${hospital.id}/pending/avatar.${extension}`;
         const { error: uploadError } = await this.client.storage
           .from("staff-avatars")
           .upload(path, input.photo, { contentType: input.photo.type, upsert: true });
         throwIfError(uploadError);
-        const { error: avatarError } = await this.client.rpc("set_staff_avatar_path", {
-          p_user_id: id,
-          p_avatar_path: path,
-        });
-        throwIfError(avatarError);
       } catch {
         photoWarning = "The invitation was sent, but the doctor photo could not be saved";
       }
     }
-    const doctor = await this.reloadAndFind<Doctor>("doctors", id);
-    doctor.photoWarning = photoWarning;
+    const doctor: Doctor = {
+      id: `pending-${randomKey().slice(0, 8)}`,
+      clinicId: (await this.client.from("hospitals").select("id").single()).data?.id ?? "",
+      name: input.name,
+      specialty: input.specialty,
+      email: input.email,
+      phone: input.phone,
+      gender: input.gender || undefined,
+      qualification: input.qualification || undefined,
+      medicalRegistrationNumber: input.medicalRegistrationNumber || undefined,
+      experienceYears: input.experienceYears || undefined,
+      consultationFee: input.consultationFee || undefined,
+      workingHours: input.workingHours || undefined,
+      notes: input.notes || undefined,
+      avatarPath: undefined,
+      avatarUrl: undefined,
+      photoWarning,
+      patients: 0,
+      status: "Invited",
+    };
     return doctor;
   }
 
   async createReceptionist(input: ReceptionistInput) {
-    const id = await this.inviteStaff(input, "receptionist");
-    return this.reloadAndFind<Receptionist>("receptionists", id);
+    const { setupUrl } = await this.inviteStaff(input, "receptionist");
+    const receptionist: Receptionist = {
+      id: `pending-${randomKey().slice(0, 8)}`,
+      clinicId: (await this.client.from("hospitals").select("id").single()).data?.id ?? "",
+      name: input.name,
+      email: input.email,
+      phone: input.phone,
+      shift: input.shift,
+      status: "Invited",
+    };
+    return receptionist;
   }
 
   async inviteClinicAdmin(input: ClinicAdminInput) {
-    const id = await this.inviteStaff(input, "clinic_admin");
-    return this.reloadAndFind<StaffMember>("staffMembers", id);
+    const { setupUrl } = await this.inviteStaff(input, "clinic_admin");
+    const membership: StaffMember = {
+      id: `pending-${randomKey().slice(0, 8)}`,
+      clinicId: (await this.client.from("hospitals").select("id").single()).data?.id ?? "",
+      name: input.name,
+      email: input.email,
+      phone: input.phone,
+      role: "clinic_admin",
+      status: "Invited",
+    };
+    return membership;
   }
 
   async inviteSuperAdmin(input: { name: string; email: string; phone: string; tempPassword: string }) {
-    const requestId = randomKey();
-    const { data, error } = await this.client.functions.invoke("invite-staff", {
-      headers: {
-        "Idempotency-Key": randomKey(),
-        "X-Request-ID": requestId,
-      },
-      body: {
-        email: input.email,
-        fullName: input.name,
-        phone: input.phone,
-        roleCode: "super_admin",
-        redirectTo: `${globalThis.location.origin}/login?setup=invite`,
-      },
-    });
-    await throwIfFunctionError(error);
-    if (!data || typeof data.userId !== "string") {
-      throw new Error("The invitation service returned an invalid response");
-    }
-    return this.reloadAndFind<StaffMember>("staffMembers", data.userId as string);
+    const { setupUrl } = await this.inviteStaff(
+      { name: input.name, email: input.email, phone: input.phone },
+      "super_admin",
+    );
+    const membership: StaffMember = {
+      id: `pending-${randomKey().slice(0, 8)}`,
+      clinicId: null,
+      name: input.name,
+      email: input.email,
+      phone: input.phone,
+      role: "super_admin",
+      status: "Invited",
+    };
+    return membership;
   }
 
   async createClinic(input: ClinicInput) {
