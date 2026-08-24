@@ -30,12 +30,13 @@ test("staff invitation failures include a safe code and request ID", () => {
   assert.match(functionSource, /"X-Request-ID": requestId/);
 });
 
-test("staff invitations persist contact details and select an active facility", () => {
-  assert.match(functionSource, /\.rpc\("provision_invited_staff"/);
-  assert.match(functionSource, /p_medical_registration_number: medicalRegistrationNumber/);
-  assert.match(functionSource, /p_consultation_fee: consultationFee/);
+test("staff invitations store details in invite tokens for unlimited-validity setup links", () => {
+  assert.match(functionSource, /\.from\("invite_tokens"\)/);
+  assert.match(functionSource, /medical_registration_number: medicalRegistrationNumber/);
+  assert.match(functionSource, /consultation_fee: consultationFee/);
   assert.match(functionSource, /\.from\("facilities"\)/);
   assert.match(functionSource, /\.eq\("active", true\)/);
+  assert.match(functionSource, /setupUrl/);
 });
 
 test("staff provisioning RPCs are scoped to authenticated hospital users", () => {
