@@ -16,6 +16,7 @@ import { Route as ContactRouteImport } from './routes/contact'
 import { Route as FaqRouteImport } from './routes/faq'
 import { Route as FeaturesRouteImport } from './routes/features'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as SetupRouteImport } from './routes/setup'
 import { Route as AppIndexRouteImport } from './routes/app.index'
 import { Route as AppAppointmentsRouteImport } from './routes/app.appointments'
 import { Route as AppAuditLogsRouteImport } from './routes/app.audit-logs'
@@ -86,6 +87,11 @@ const FeaturesRoute = FeaturesRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SetupRoute = SetupRouteImport.update({
+  id: '/setup',
+  path: '/setup',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -277,6 +283,7 @@ export interface FileRoutesByFullPath {
   '/faq': typeof FaqRoute
   '/features': typeof FeaturesRoute
   '/login': typeof LoginRoute
+  '/setup': typeof SetupRoute
   '/app/appointments': typeof AppAppointmentsRouteWithChildren
   '/app/audit-logs': typeof AppAuditLogsRoute
   '/app/billing': typeof AppBillingRouteWithChildren
@@ -321,6 +328,7 @@ export interface FileRoutesByTo {
   '/faq': typeof FaqRoute
   '/features': typeof FeaturesRoute
   '/login': typeof LoginRoute
+  '/setup': typeof SetupRoute
   '/app/audit-logs': typeof AppAuditLogsRoute
   '/app/doctors': typeof AppDoctorsRouteWithChildren
   '/app/downloads': typeof AppDownloadsRoute
@@ -361,6 +369,7 @@ export interface FileRoutesById {
   '/faq': typeof FaqRoute
   '/features': typeof FeaturesRoute
   '/login': typeof LoginRoute
+  '/setup': typeof SetupRoute
   '/app/appointments': typeof AppAppointmentsRouteWithChildren
   '/app/audit-logs': typeof AppAuditLogsRoute
   '/app/billing': typeof AppBillingRouteWithChildren
@@ -408,6 +417,7 @@ export interface FileRouteTypes {
     | '/faq'
     | '/features'
     | '/login'
+    | '/setup'
     | '/app/appointments'
     | '/app/audit-logs'
     | '/app/billing'
@@ -452,6 +462,7 @@ export interface FileRouteTypes {
     | '/faq'
     | '/features'
     | '/login'
+    | '/setup'
     | '/app/audit-logs'
     | '/app/doctors'
     | '/app/downloads'
@@ -491,6 +502,7 @@ export interface FileRouteTypes {
     | '/faq'
     | '/features'
     | '/login'
+    | '/setup'
     | '/app/appointments'
     | '/app/audit-logs'
     | '/app/billing'
@@ -537,6 +549,7 @@ export interface RootRouteChildren {
   FaqRoute: typeof FaqRoute
   FeaturesRoute: typeof FeaturesRoute
   LoginRoute: typeof LoginRoute
+  SetupRoute: typeof SetupRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -588,6 +601,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/setup': {
+      id: '/setup'
+      path: '/setup'
+      fullPath: '/setup'
+      preLoaderRoute: typeof SetupRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/app/': {
@@ -1002,6 +1022,7 @@ const rootRouteChildren: RootRouteChildren = {
   FaqRoute: FaqRoute,
   FeaturesRoute: FeaturesRoute,
   LoginRoute: LoginRoute,
+  SetupRoute: SetupRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

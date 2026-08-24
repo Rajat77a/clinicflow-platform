@@ -33,10 +33,12 @@ function generateTempPassword() {
 
 function UsersPage() {
   const { user } = useAuth();
-  const { staffMembers, inviteSuperAdmin, deactivateStaff } = useWorkspaceData();
-  const [dialogOpen, setDialogOpen] = useState(false);
+  const { staffMembers, inviteSuperAdmin, inviteClinicAdmin, deactivateStaff } = useWorkspaceData();
+  const [superAdminDialogOpen, setSuperAdminDialogOpen] = useState(false);
+  const [clinicAdminDialogOpen, setClinicAdminDialogOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
-  const [form, setForm] = useState({ name: "", email: "", phone: "" });
+  const [superAdminForm, setSuperAdminForm] = useState({ name: "", email: "", phone: "" });
+  const [clinicAdminForm, setClinicAdminForm] = useState({ name: "", email: "", phone: "" });
   const [deactivationTarget, setDeactivationTarget] = useState<StaffMember | null>(null);
   const [deactivationReason, setDeactivationReason] = useState("");
   const [isDeactivating, setIsDeactivating] = useState(false);
@@ -51,8 +53,8 @@ function UsersPage() {
     )
   );
 
-  const submit = async () => {
-    if (!form.name.trim() || !form.email.trim()) {
+  const submitSuperAdmin = async () => {
+    if (!superAdminForm.name.trim() || !superAdminForm.email.trim()) {
       toast.error("Name and email are required");
       return;
     }
@@ -60,16 +62,38 @@ function UsersPage() {
     try {
       const tempPassword = generateTempPassword();
       await inviteSuperAdmin({
-        name: form.name.trim(),
-        email: form.email.trim(),
-        phone: form.phone.trim(),
+        name: superAdminForm.name.trim(),
+        email: superAdminForm.email.trim(),
+        phone: superAdminForm.phone.trim(),
         tempPassword,
       });
-      toast.success(`Super Admin added · temporary password sent to ${form.email.trim()}`);
-      setDialogOpen(false);
-      setForm({ name: "", email: "", phone: "" });
+      toast.success(`Super Admin added · invitation sent to ${superAdminForm.email.trim()}`);
+      setSuperAdminDialogOpen(false);
+      setSuperAdminForm({ name: "", email: "", phone: "" });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to add the super admin");
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const submitClinicAdmin = async () => {
+    if (!clinicAdminForm.name.trim() || !clinicAdminForm.email.trim()) {
+      toast.error("Name and email are required");
+      return;
+    }
+    setIsSending(true);
+    try {
+      await inviteClinicAdmin({
+        name: clinicAdminForm.name.trim(),
+        email: clinicAdminForm.email.trim(),
+        phone: clinicAdminForm.phone.trim(),
+      });
+      toast.success(`Clinic Admin invited · email sent to ${clinicAdminForm.email.trim()}`);
+      setClinicAdminDialogOpen(false);
+      setClinicAdminForm({ name: "", email: "", phone: "" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to invite the clinic admin");
     } finally {
       setIsSending(false);
     }
@@ -96,55 +120,108 @@ function UsersPage() {
         title="Users"
         description="Hospital staff with access to ClinicFlow."
         actions={user?.role === "super_admin" ? (
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <div className="flex gap-2">
+            <Dialog open={clinicAdminDialogOpen} onOpenChange={setClinicAdminDialogOpen}>
+              <DialogTrigger asChild>
+                <Button variant="outline"><UserPlus className="mr-1.5 h-4 w-4" />Invite Clinic Admin</Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Invite Clinic Admin</DialogTitle>
+                  <DialogDescription>
+                    A secure password setup link will be sent to the email address provided.
+                    The link remains valid until the admin sets their password.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label>Full name</Label>
+                    <Input
+                      value={clinicAdminForm.name}
+                      onChange={(event) => setClinicAdminForm({ ...clinicAdminForm, name: event.target.value })}
+                      className="h-11 rounded-xl"
+                      autoComplete="name"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Email</Label>
+                    <Input
+                      type="email"
+                      value={clinicAdminForm.email}
+                      onChange={(event) => setClinicAdminForm({ ...clinicAdminForm, email: event.target.value })}
+                      className="h-11 rounded-xl"
+                      autoComplete="email"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Phone</Label>
+                    <Input
+                      type="tel"
+                      value={clinicAdminForm.phone}
+                      onChange={(event) => setClinicAdminForm({ ...clinicAdminForm, phone: event.target.value })}
+                      className="h-11 rounded-xl"
+                      autoComplete="tel"
+                    />
+                  </div>
+                </div>
+                <DialogFooter>
+                  <Button onClick={submitClinicAdmin} disabled={isSending} className="w-full">
+                    {isSending ? "Sending invitation..." : "Send invitation"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+            <Dialog open={superAdminDialogOpen} onOpenChange={setSuperAdminDialogOpen}>
               <DialogTrigger asChild>
                 <Button><UserPlus className="mr-1.5 h-4 w-4" />Add Super Admin</Button>
               </DialogTrigger>
               <DialogContent className="max-w-md">
-              <DialogHeader>
-                <DialogTitle>Add Super Admin</DialogTitle>
-                <DialogDescription>
-                  A temporary password will be generated and sent to the email address provided.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label>Full name</Label>
-                  <Input
-                    value={form.name}
-                    onChange={(event) => setForm({ ...form, name: event.target.value })}
-                    className="h-11 rounded-xl"
-                    autoComplete="name"
-                  />
+                <DialogHeader>
+                  <DialogTitle>Add Super Admin</DialogTitle>
+                  <DialogDescription>
+                    A secure password setup link will be sent to the email address provided.
+                    The link remains valid until the super admin sets their password.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3">
+                  <div className="space-y-1.5">
+                    <Label>Full name</Label>
+                    <Input
+                      value={superAdminForm.name}
+                      onChange={(event) => setSuperAdminForm({ ...superAdminForm, name: event.target.value })}
+                      className="h-11 rounded-xl"
+                      autoComplete="name"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Email</Label>
+                    <Input
+                      type="email"
+                      value={superAdminForm.email}
+                      onChange={(event) => setSuperAdminForm({ ...superAdminForm, email: event.target.value })}
+                      className="h-11 rounded-xl"
+                      autoComplete="email"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Phone</Label>
+                    <Input
+                      type="tel"
+                      value={superAdminForm.phone}
+                      onChange={(event) => setSuperAdminForm({ ...superAdminForm, phone: event.target.value })}
+                      className="h-11 rounded-xl"
+                      autoComplete="tel"
+                    />
+                  </div>
                 </div>
-                <div className="space-y-1.5">
-                  <Label>Email</Label>
-                  <Input
-                    type="email"
-                    value={form.email}
-                    onChange={(event) => setForm({ ...form, email: event.target.value })}
-                    className="h-11 rounded-xl"
-                    autoComplete="email"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Phone</Label>
-                  <Input
-                    type="tel"
-                    value={form.phone}
-                    onChange={(event) => setForm({ ...form, phone: event.target.value })}
-                    className="h-11 rounded-xl"
-                    autoComplete="tel"
-                  />
-                </div>
-              </div>
-              <DialogFooter>
-                <Button onClick={submit} disabled={isSending} className="w-full">
-                  {isSending ? "Adding..." : "Add Super Admin"}
-                </Button>
-              </DialogFooter>
+                <DialogFooter>
+                  <Button onClick={submitSuperAdmin} disabled={isSending} className="w-full">
+                    {isSending ? "Sending invitation..." : "Send invitation"}
+                  </Button>
+                </DialogFooter>
               </DialogContent>
-          </Dialog>
+            </Dialog>
+          </div>
         ) : undefined}
       />
 
