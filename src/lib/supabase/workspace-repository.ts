@@ -15,6 +15,8 @@ import type {
   ClinicInput,
   Doctor,
   DoctorInput,
+  Facility,
+  FacilityInput,
   LabReport,
   Patient,
   PatientInput,
@@ -46,6 +48,7 @@ const EMPTY_SNAPSHOT: WorkspaceSnapshot = {
   bills: [],
   auditLogs: [],
   staffMembers: [],
+  facilities: [],
 };
 
 function randomKey() {
@@ -197,6 +200,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       labOrdersResult,
       invoicesResult,
       auditResult,
+      facilitiesResult,
     ] = await Promise.all([
       this.client.rpc("list_visible_clinics"),
       this.client.rpc("list_active_doctors_with_counts"),
@@ -241,6 +245,10 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         )
         .order("occurred_at", { ascending: false })
         .limit(100),
+      this.client
+        .from("facilities")
+        .select("id,hospital_id,code,name,timezone,phone,email,address,active")
+        .order("created_at"),
     ]);
 
     for (const result of [hospitalResult, doctorsResult, membershipsResult, patientsResult,
@@ -403,6 +411,21 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       access: row.access === "Suspended" ? "Suspended" as const : "Allowed" as const,
     }));
 
+    const facilities: Facility[] = ((facilitiesResult.data ?? []) as Row[]).map((row) => ({
+      id: row.id,
+      clinicId: row.hospital_id,
+      code: row.code,
+      name: row.name,
+      timezone: row.timezone || undefined,
+      phone: row.phone || undefined,
+      email: row.email || undefined,
+      address:
+        row.address && typeof row.address === "object" && typeof row.address.line === "string"
+          ? row.address.line
+          : undefined,
+      active: Boolean(row.active),
+    }));
+
     return {
       clinics,
       patients,
@@ -425,6 +448,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         };
       }),
       staffMembers,
+      facilities,
     };
   }
 
@@ -981,5 +1005,34 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     const updated = page.rows[0];
     if (!updated) throw new Error("Updated invoice is not visible to the current role");
     return updated;
+  }
+
+  async createFacility(input: FacilityInput): Promise<Facility> {
+    const { data, error } = await this.client
+      .from("facilities")
+      .insert({
+        code: input.code,
+        name: input.name,
+        timezone: input.timezone ?? null,
+        phone: input.phone ?? null,
+        email: input.email ?? null,
+        address: input.address ? { line: input.address } : "{}",
+        active: true,
+      })
+      .select("id, hospital_id, code, name, timezone, phone, email, address, active")
+      .single();
+    throwIfError(error);
+    if (!data) throw new Error("Failed to create facility");
+    return {
+      id: data.id,
+      clinicId: data.hospital_id,
+      code: data.code,
+      name: data.name,
+      timezone: data.timezone,
+      phone: data.phone,
+      email: data.email,
+      address: typeof data.address === "object" && data.address !== null ? data.address.line : undefined,
+      active: data.active,
+    };
   }
 }

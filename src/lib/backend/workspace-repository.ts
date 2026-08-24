@@ -7,6 +7,8 @@ import type {
   ClinicInput,
   Doctor,
   DoctorInput,
+  Facility,
+  FacilityInput,
   LabReport,
   Patient,
   PatientInput,
@@ -63,4 +65,5 @@ export interface WorkspaceRepository {
   updateBill(bill: Bill): Promise<Bill>;
   inviteSuperAdmin(input: { name: string; email: string; phone: string; tempPassword: string }): Promise<StaffMember>;
   deactivateStaff(userId: string, reason: string): Promise<void>;
+  createFacility(input: FacilityInput): Promise<Facility>;
 }
