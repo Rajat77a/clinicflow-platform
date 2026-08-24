@@ -22,7 +22,6 @@ create or replace function public.create_staff_invite_token(
 returns jsonb
 language plpgsql
 security definer
-set search_path = 'public', 'private'
 as $$
 declare
   v_facility_id uuid;
@@ -58,7 +57,7 @@ begin
   end if;
 
   -- Generate token
-  v_token := generate_invite_token();
+  v_token := private.generate_invite_token();
 
   -- Get hospital details for the invite email
   select name, email, phone, address
