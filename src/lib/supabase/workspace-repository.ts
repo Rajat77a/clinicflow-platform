@@ -796,6 +796,21 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   }
 
   async inviteClinicAdmin(input: ClinicAdminInput) {
+    const { data: existingFacility } = await this.client
+      .from("facilities")
+      .select("id")
+      .eq("active", true)
+      .limit(1)
+      .maybeSingle();
+    if (!existingFacility) {
+      const { data: hospital } = await this.client.from("hospitals").select("id, name").single();
+      if (hospital) {
+        await this.createFacility({
+          code: "MAIN",
+          name: hospital.name,
+        });
+      }
+    }
     const { setupUrl } = await this.inviteStaff(input, "clinic_admin");
     const membership: StaffMember = {
       id: `pending-${randomKey().slice(0, 8)}`,
@@ -859,6 +874,13 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       throwIfError(logoConfigError);
     }
     if (input.adminName && input.adminEmail) {
+      await this.createFacility({
+        code: "MAIN",
+        name: input.name,
+        phone: input.phone || undefined,
+        email: input.email || undefined,
+        address: input.address || undefined,
+      });
       await this.inviteStaff(
         { name: input.adminName, email: input.adminEmail, phone: input.adminPhone ?? "" },
         "clinic_admin",
