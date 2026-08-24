@@ -16,6 +16,7 @@ export type Permission =
   | "billing.read"
   | "billing.write"
   | "people.manage"
+  | "facilities.manage"
   | "files.read"
   | "reports.read"
   | "audit.read"
@@ -32,6 +33,7 @@ const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     "platform.subscriptions.manage",
     "platform.payments.manage",
     "people.manage",
+    "facilities.manage",
     "users.manage",
     "reports.read",
     "audit.read",
@@ -52,6 +54,7 @@ const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
      "billing.read",
      "billing.write",
      "people.manage",
+     "facilities.manage",
      "users.manage",
      "files.read",
      "reports.read",
@@ -99,6 +102,7 @@ const ROUTE_RULES: ReadonlyArray<{ matches: RegExp; permission: Permission }> = 
   { matches: /^\/app\/payments(?:\/|$)/, permission: "platform.payments.manage" },
   { matches: /^\/app\/doctors(?:\/|$)/, permission: "people.manage" },
   { matches: /^\/app\/receptionists(?:\/|$)/, permission: "people.manage" },
+  { matches: /^\/app\/facilities(?:\/|$)/, permission: "facilities.manage" },
   { matches: /^\/app\/users(?:\/|$)/, permission: "users.manage" },
   { matches: /^\/app\/patients\/new\/?$/, permission: "patients.create" },
   { matches: /^\/app\/patients(?:\/|$)/, permission: "patients.read" },

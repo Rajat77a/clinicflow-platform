@@ -90,6 +90,17 @@ export type Receptionist = {
   shift: string;
   status: string;
 };
+export type Facility = {
+  id: string;
+  clinicId: string;
+  code: string;
+  name: string;
+  timezone: string | undefined;
+  phone: string | undefined;
+  email: string | undefined;
+  address: string | undefined;
+  active: boolean;
+};
 export type Appointment = {
   id: string;
   clinicId: string;
@@ -177,6 +188,7 @@ export interface WorkspaceSnapshot {
   bills: Bill[];
   auditLogs: AuditEntry[];
   staffMembers: StaffMember[];
+  facilities: Facility[];
 }
 
 export interface PatientInput {
@@ -281,6 +293,14 @@ export interface ClinicInput {
   adminPhone?: string;
   tempPassword?: string;
 }
+export interface FacilityInput {
+  code: string;
+  name: string;
+  timezone?: string;
+  phone?: string;
+  email?: string;
+  address?: string;
+}
 
 type Command =
   | { type: "snapshot.loaded"; value: WorkspaceSnapshot }
@@ -295,7 +315,8 @@ type Command =
   | { type: "bill.created"; value: Bill; actor: AuthUser }
   | { type: "bill.updated"; value: Bill; actor: AuthUser }
   | { type: "staff.invited"; value: StaffMember; actor: AuthUser }
-  | { type: "staff.deactivated"; userId: string; actor: AuthUser };
+  | { type: "staff.deactivated"; userId: string; actor: AuthUser }
+  | { type: "facility.created"; value: Facility; actor: AuthUser };
 
 function createId(prefix: string) {
   const suffix = globalThis.crypto?.randomUUID?.().slice(0, 8).toUpperCase()
@@ -317,6 +338,7 @@ function emptySnapshot(): WorkspaceSnapshot {
     bills: [],
     auditLogs: [],
     staffMembers: [],
+    facilities: [],
   };
 }
 
@@ -449,6 +471,12 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         command.actor,
         `Deactivated staff member ${command.userId}`,
       );
+    case "facility.created":
+      return appendAudit(
+        { ...state, facilities: [command.value, ...state.facilities] },
+        command.actor,
+        `Created facility ${command.value.id}`,
+      );
   }
 }
 
@@ -466,6 +494,7 @@ interface WorkspaceData {
   bills: Bill[];
   auditLogs: AuditEntry[];
   staffMembers: StaffMember[];
+  facilities: Facility[];
   refresh: () => Promise<void>;
   searchPatients: (input?: PatientSearch) => Promise<PatientPage>;
   getPatient: (id: string) => Promise<Patient | null>;
@@ -491,6 +520,7 @@ interface WorkspaceData {
   saveLabReports: (reports: Omit<LabReport, "clinicId">[]) => Promise<LabReport[]>;
   createBill: (input: BillInput) => Promise<Bill>;
   updateBill: (bill: Bill) => Promise<Bill>;
+  createFacility: (input: FacilityInput) => Promise<Facility>;
 }
 
 const WorkspaceCtx = createContext<WorkspaceData | null>(null);
@@ -679,6 +709,9 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         : state.auditLogs.filter(entry => entry.clinicId === clinicId),
       staffMembers: user && hasPermission(user.role, "people.manage")
         ? clinicScope(state.staffMembers)
+        : [],
+      facilities: user && hasPermission(user.role, "facilities.manage")
+        ? clinicScope(state.facilities)
         : [],
       searchPatients: async (input = {}) => {
         requireUser(user, "patients.read");
@@ -1116,6 +1149,28 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         if (bill.clinicId !== requireClinic(actor)) throw new Error("Cross-clinic updates are not allowed");
         dispatch({ type: "bill.updated", value: bill, actor });
         return bill;
+      },
+      createFacility: async (input) => {
+        const actor = requireUser(user, "facilities.manage");
+        if (repository) {
+          const facility = await repository.createFacility(input);
+          await refresh();
+          return facility;
+        }
+        const tenantId = requireClinic(actor);
+        const facility: Facility = {
+          id: createId("FAC"),
+          clinicId: tenantId,
+          code: input.code,
+          name: input.name,
+          timezone: input.timezone,
+          phone: input.phone,
+          email: input.email,
+          address: input.address,
+          active: true,
+        };
+        dispatch({ type: "facility.created", value: facility, actor });
+        return facility;
       },
     };
   }, [error, isLoading, refresh, repository, state, syncStatus, user]);
