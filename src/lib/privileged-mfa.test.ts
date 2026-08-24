@@ -73,10 +73,10 @@ test("historical migrations document the previous AAL2 policy", () => {
 });
 
 test("current development permissions accept password-authenticated sessions", () => {
-  const adminInvite = functionSource.indexOf("admin.inviteUserByEmail");
   const permissionCheck = functionSource.indexOf('eq("permission_code", "people.manage")');
+  const tokenInsert = functionSource.indexOf('.from("invite_tokens")');
   assert.ok(permissionCheck > 0);
-  assert.ok(adminInvite > permissionCheck);
+  assert.ok(tokenInsert > permissionCheck);
   assert.doesNotMatch(functionSource, /getAuthenticatorAssuranceLevel/);
   assert.doesNotMatch(functionSource, /Two-step verification is required/);
   assert.match(disabledMfaSource, /membership\.active/);
