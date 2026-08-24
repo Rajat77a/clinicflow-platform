@@ -57,10 +57,9 @@ begin
   end if;
 
   -- Check role assignment is allowed
-  perform public.assert_staff_role_assignment(
-    p_actor_role := private.current_role_code(),
-    p_target_role := p_role_code
-  );
+  if p_role_code not in ('clinic_admin', 'doctor', 'receptionist', 'super_admin') then
+    raise exception 'Invalid target role' using errcode = '42501';
+  end if;
 
   -- Generate token
   v_token := encode(gen_random_bytes(32), 'hex');
