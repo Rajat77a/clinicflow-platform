@@ -703,6 +703,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     input: DoctorInput | ReceptionistInput | ClinicAdminInput,
     roleCode: "clinic_admin" | "doctor" | "receptionist" | "super_admin",
     targetHospitalId?: string,
+    facilityId?: string,
   ): Promise<{ setupUrl: string }> {
     const requestId = randomKey();
     const { data, error } = await this.client.functions.invoke("invite-staff", {
@@ -716,6 +717,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         phone: input.phone,
         roleCode,
         targetHospitalId,
+        facilityId,
         specialty: "specialty" in input ? input.specialty : undefined,
         shift: "shift" in input ? input.shift : undefined,
         gender: "gender" in input ? input.gender : undefined,
@@ -796,10 +798,25 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   }
 
   async inviteClinicAdmin(input: ClinicAdminInput) {
-    const { setupUrl } = await this.inviteStaff(input, "clinic_admin");
+    const { data: hospital } = await this.client.from("hospitals").select("id").single();
+    const hospitalId = hospital?.id ?? "";
+    const { data: tokenResult, error: tokenError } = await this.client.rpc(
+      "create_staff_invite_token",
+      {
+        p_email: input.email,
+        p_full_name: input.name,
+        p_phone: input.phone,
+        p_role_code: "clinic_admin",
+        p_hospital_id: hospitalId,
+      },
+    );
+    throwIfError(tokenError);
+    if (!tokenResult || typeof tokenResult.token !== "string") {
+      throw new Error("Failed to generate admin invite token");
+    }
     const membership: StaffMember = {
       id: `pending-${randomKey().slice(0, 8)}`,
-      clinicId: (await this.client.from("hospitals").select("id").single()).data?.id ?? "",
+      clinicId: hospitalId,
       name: input.name,
       email: input.email,
       phone: input.phone,
@@ -859,11 +876,20 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       throwIfError(logoConfigError);
     }
     if (input.adminName && input.adminEmail) {
-      await this.inviteStaff(
-        { name: input.adminName, email: input.adminEmail, phone: input.adminPhone ?? "" },
-        "clinic_admin",
-        data,
+      const { data: tokenResult, error: tokenError } = await this.client.rpc(
+        "create_staff_invite_token",
+        {
+          p_email: input.adminEmail,
+          p_full_name: input.adminName,
+          p_phone: input.adminPhone ?? "",
+          p_role_code: "clinic_admin",
+          p_hospital_id: data,
+        },
       );
+      throwIfError(tokenError);
+      if (!tokenResult || typeof tokenResult.token !== "string") {
+        throw new Error("Failed to generate admin invite token");
+      }
     }
     return { id: data as string };
   }
