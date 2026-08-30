@@ -9,7 +9,6 @@ create or replace function public.create_staff_invite_token(
 returns jsonb
 language sql
 security definer
-set search_path = 'public', 'private'
 as $$
   select jsonb_build_object('token', encode(gen_random_bytes(32), 'hex'), 'facilityId', p_facility_id);
 $$;
