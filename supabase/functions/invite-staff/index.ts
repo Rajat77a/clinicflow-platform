@@ -243,6 +243,7 @@ Deno.serve(async (request) => {
       facility_id: facilityId,
       department_id: departmentId,
       token,
+      expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       clinic_name: hospital?.name ?? null,
       clinic_email: hospital?.email ?? null,
       clinic_phone: hospital?.phone ?? null,

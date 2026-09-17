@@ -75,7 +75,7 @@ function SetupPage() {
     supabase.rpc("consume_invite_token", { p_token: t })
       .then(({ data, error: rpcError }: { data: TokenInfo[] | null; error: { message: string } | null }) => {
         if (rpcError || !data || data.length === 0) {
-          setError("This invite link has already been used or is invalid. Please contact your administrator.");
+          setError("This invite link has expired (links are valid for 24 hours) or has already been used. Please contact your administrator for a new link.");
         } else {
           setTokenInfo(data[0] as TokenInfo);
         }
@@ -353,10 +353,11 @@ function SetupPage() {
           </form>
 
           <p className="mt-6 text-center text-xs text-muted-foreground">
-            This invite link is valid until you set your password. Keep it safe.
+            This invite link expires in 24 hours. Set your password before it expires.
           </p>
         </div>
       </div>
     </div>
   );
 }
+
