@@ -12,6 +12,7 @@ import { useAuth, type Role } from "@/lib/auth";
 import { useWorkspaceData, type StaffMember } from "@/lib/workspace-data";
 import { UserMinus, UserPlus } from "lucide-react";
 import { toast } from "sonner";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export const Route = createFileRoute("/app/users")({ component: UsersPage });
 
@@ -33,12 +34,12 @@ function generateTempPassword() {
 
 function UsersPage() {
   const { user } = useAuth();
-  const { staffMembers, inviteSuperAdmin, inviteClinicAdmin, deactivateStaff } = useWorkspaceData();
+  const { staffMembers, clinics, inviteSuperAdmin, inviteClinicAdmin, deactivateStaff } = useWorkspaceData();
   const [superAdminDialogOpen, setSuperAdminDialogOpen] = useState(false);
   const [clinicAdminDialogOpen, setClinicAdminDialogOpen] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [superAdminForm, setSuperAdminForm] = useState({ name: "", email: "", phone: "" });
-  const [clinicAdminForm, setClinicAdminForm] = useState({ name: "", email: "", phone: "" });
+  const [clinicAdminForm, setClinicAdminForm] = useState({ name: "", email: "", phone: "", hospitalId: "" });
   const [deactivationTarget, setDeactivationTarget] = useState<StaffMember | null>(null);
   const [deactivationReason, setDeactivationReason] = useState("");
   const [isDeactivating, setIsDeactivating] = useState(false);
@@ -88,10 +89,11 @@ function UsersPage() {
         name: clinicAdminForm.name.trim(),
         email: clinicAdminForm.email.trim(),
         phone: clinicAdminForm.phone.trim(),
+        hospitalId: clinicAdminForm.hospitalId || undefined,
       });
       toast.success(`Clinic Admin invited · email sent to ${clinicAdminForm.email.trim()}`);
       setClinicAdminDialogOpen(false);
-      setClinicAdminForm({ name: "", email: "", phone: "" });
+      setClinicAdminForm({ name: "", email: "", phone: "", hospitalId: "" });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to invite the clinic admin");
     } finally {
@@ -162,6 +164,29 @@ function UsersPage() {
                       className="h-11 rounded-xl"
                       autoComplete="tel"
                     />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Assign to Hospital</Label>
+                    <Select
+                      value={clinicAdminForm.hospitalId}
+                      onValueChange={(value) => setClinicAdminForm({ ...clinicAdminForm, hospitalId: value })}
+                    >
+                      <SelectTrigger className="h-11 rounded-xl">
+                        <SelectValue placeholder="Select a hospital" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clinics.map((clinic) => (
+                          <SelectItem key={clinic.id} value={clinic.id}>
+                            {clinic.name} ({clinic.id})
+                          </SelectItem>
+                        ))}
+                        {clinics.length === 0 && user?.clinicId && (
+                          <SelectItem value={user.clinicId}>
+                            {user.clinic}
+                          </SelectItem>
+                        )}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 <DialogFooter>

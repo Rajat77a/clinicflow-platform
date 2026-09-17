@@ -269,6 +269,7 @@ export interface ClinicAdminInput {
   name: string;
   email: string;
   phone: string;
+  hospitalId?: string;
   tempPassword?: string;
 }
 
@@ -942,16 +943,16 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         if (actor.role !== "super_admin") {
           throw new Error("Only a super admin can invite a clinic admin");
         }
+        const targetHospitalId = input.hospitalId || actor.clinicId;
+        if (!targetHospitalId) throw new Error("A hospital must be selected");
         if (repository) {
-          const membership = await repository.inviteClinicAdmin(input);
+          const membership = await repository.inviteClinicAdmin({ ...input, hospitalId: targetHospitalId });
           await refresh();
           return membership;
         }
-        const installationClinicId = actor.clinicId ?? state.clinics[0]?.id;
-        if (!installationClinicId) throw new Error("A clinic workspace is required");
         const membership: StaffMember = {
           id: createId("AD"),
-          clinicId: installationClinicId,
+          clinicId: targetHospitalId,
           name: input.name,
           email: input.email,
           phone: input.phone,
