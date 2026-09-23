@@ -1002,7 +1002,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         .maybeSingle();
 
       const name = hospital?.name || "Clinic";
-      const config = {
+      const config: Record<string, unknown> = {
         ...((hospital?.configuration as Record<string, unknown>) ?? {}),
         deleted_at: deletedAt,
       };
@@ -1011,19 +1011,18 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       await this.client
         .from("hospitals")
         .update({ active: false, configuration: config })
-        .eq("id", id)
-        .catch(() => undefined);
+        .eq("id", id);
 
       await this.client.rpc("update_platform_clinic", {
         p_hospital_id: id,
         p_name: name,
         p_configuration: config,
-      }).catch(() => undefined);
+      });
 
       await this.client.rpc("set_platform_clinic_access", {
         p_hospital_id: id,
         p_active: false,
-      }).catch(() => undefined);
+      });
     }
   }
 
@@ -1039,26 +1038,25 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         .maybeSingle();
 
       const name = hospital?.name || "Clinic";
-      const config = { ...((hospital?.configuration as Record<string, unknown>) ?? {}) };
+      const config: Record<string, unknown> = { ...((hospital?.configuration as Record<string, unknown>) ?? {}) };
       delete config.deleted_at;
       delete config.purged;
 
       await this.client
         .from("hospitals")
         .update({ active: true, configuration: config })
-        .eq("id", id)
-        .catch(() => undefined);
+        .eq("id", id);
 
       await this.client.rpc("update_platform_clinic", {
         p_hospital_id: id,
         p_name: name,
         p_configuration: config,
-      }).catch(() => undefined);
+      });
 
       await this.client.rpc("set_platform_clinic_access", {
         p_hospital_id: id,
         p_active: true,
-      }).catch(() => undefined);
+      });
     }
   }
 
@@ -1074,7 +1072,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         .maybeSingle();
 
       const name = hospital?.name || "Clinic";
-      const config = {
+      const config: Record<string, unknown> = {
         ...((hospital?.configuration as Record<string, unknown>) ?? {}),
         purged: "true",
         deleted_at: new Date().toISOString(),
@@ -1083,19 +1081,18 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       await this.client
         .from("hospitals")
         .update({ active: false, configuration: config })
-        .eq("id", id)
-        .catch(() => undefined);
+        .eq("id", id);
 
       await this.client.rpc("update_platform_clinic", {
         p_hospital_id: id,
         p_name: name,
         p_configuration: config,
-      }).catch(() => undefined);
+      });
 
       await this.client.rpc("set_platform_clinic_access", {
         p_hospital_id: id,
         p_active: false,
-      }).catch(() => undefined);
+      });
     }
   }
 

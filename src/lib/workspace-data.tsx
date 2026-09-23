@@ -191,6 +191,7 @@ export interface WorkspaceSnapshot {
   auditLogs: AuditEntry[];
   staffMembers: StaffMember[];
   facilities: Facility[];
+  permanentlyDeletedIds?: Set<string>;
 }
 
 export interface PatientInput {
