@@ -624,12 +624,16 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   });
   const loadSequence = useRef(0);
   const visibleLoads = useRef(0);
-  const repository = useMemo(
-    () => (typeof window === "undefined"
-      ? null
-      : new SupabaseWorkspaceRepository()),
-    []
-  );
+  const repository = useMemo(() => {
+    if (typeof window === "undefined" || !supabaseConfig.configured) {
+      return null;
+    }
+    try {
+      return new SupabaseWorkspaceRepository();
+    } catch {
+      return null;
+    }
+  }, []);
 
   const loadSnapshot = useCallback(async (showLoading: boolean) => {
     if (!repository || !user) return;
@@ -661,7 +665,10 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(() => loadSnapshot(true), [loadSnapshot]);
 
   useEffect(() => {
-    if (!repository) return;
+    if (!repository) {
+      setIsLoading(false);
+      return;
+    }
     if (!user) {
       dispatch({ type: "snapshot.loaded", value: emptySnapshot() });
       setIsLoading(false);
