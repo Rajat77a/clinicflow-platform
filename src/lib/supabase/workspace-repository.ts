@@ -948,9 +948,10 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       }
     }
 
+    let setupUrl: string | undefined;
     if (input.adminName && input.adminEmail && hospitalId) {
       try {
-        await this.inviteStaff(
+        const inviteResult = await this.inviteStaff(
           {
             email: input.adminEmail,
             name: input.adminName,
@@ -959,12 +960,13 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
           "clinic_admin",
           hospitalId,
         );
+        setupUrl = inviteResult.setupUrl;
       } catch (inviteError) {
         console.warn("Clinical admin invitation error:", inviteError);
       }
     }
 
-    return { id: hospitalId };
+    return { id: hospitalId, setupUrl };
   }
 
   async updateClinic(input: ClinicInput) {

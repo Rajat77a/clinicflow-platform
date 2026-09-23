@@ -39,6 +39,7 @@ export type Clinic = {
   price: number;
   access: "Allowed" | "Suspended";
   deletedAt?: string;
+  setupUrl?: string;
 };
 export type Patient = {
   id: string;
@@ -857,10 +858,10 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       createClinic: async (input) => {
         const actor = requireUser(user, "platform.clinics.manage");
         if (repository) {
-          const { id } = await repository.createClinic(input);
+          const { id, setupUrl } = await repository.createClinic(input);
           await refresh().catch(() => undefined);
           const saved = state.clinics.find((clinic) => clinic.id === id);
-          if (saved) return saved;
+          if (saved) return { ...saved, setupUrl };
           const expires = new Date();
           expires.setDate(expires.getDate() + 14);
           return {
@@ -875,10 +876,14 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             expires: expires.toISOString().slice(0, 10),
             price: 499,
             access: "Allowed",
+            setupUrl,
           };
         }
         const expires = new Date();
         expires.setDate(expires.getDate() + 14);
+        const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:5173";
+        const dummyToken = createId("TOK");
+        const setupUrl = `${origin}/setup?token=${dummyToken}`;
         const clinic: Clinic = {
           id: createId("CL"),
           name: input.name,
@@ -891,6 +896,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           expires: expires.toISOString().slice(0, 10),
           price: 499,
           access: "Allowed",
+          setupUrl,
         };
         dispatch({ type: "clinic.created", value: clinic, actor });
         if (input.adminName && input.adminEmail) {

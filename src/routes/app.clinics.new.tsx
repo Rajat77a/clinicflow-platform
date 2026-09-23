@@ -6,8 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FileUploader } from "@/components/forms/file-uploader";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useWorkspaceData } from "@/lib/workspace-data";
 import { toast } from "sonner";
+import { Copy, Check, Mail, ShieldCheck } from "lucide-react";
 
 export const Route = createFileRoute("/app/clinics/new")({ component: AddClinic });
 
@@ -36,6 +38,14 @@ function AddClinic() {
   });
   const [logo, setLogo] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [createdInfo, setCreatedInfo] = useState<{
+    clinicId: string;
+    clinicName: string;
+    adminName: string;
+    adminEmail: string;
+    setupUrl: string;
+  } | null>(null);
+  const [copied, setCopied] = useState(false);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -69,13 +79,37 @@ function AddClinic() {
         adminEmail: form.adminEmail.trim(),
         adminPhone: form.adminPhone.trim(),
       });
-      toast.success(`Clinic ${clinic.id} created. A secure setup invitation was sent to ${form.adminEmail.trim()}`);
-      navigate({ to: "/app/clinics" });
+
+      const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:5173";
+      const setupUrl = clinic.setupUrl || `${origin}/setup?token=demo-${clinic.id}`;
+
+      setCreatedInfo({
+        clinicId: clinic.id,
+        clinicName: form.name.trim(),
+        adminName: form.adminName.trim(),
+        adminEmail: form.adminEmail.trim(),
+        setupUrl,
+      });
+
+      toast.success(`Clinic ${clinic.id} created successfully!`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to create the clinic");
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const copyLink = () => {
+    if (!createdInfo?.setupUrl) return;
+    void navigator.clipboard.writeText(createdInfo.setupUrl);
+    setCopied(true);
+    toast.success("Password setup link copied to clipboard!");
+    setTimeout(() => setCopied(false), 3000);
+  };
+
+  const handleFinish = () => {
+    setCreatedInfo(null);
+    navigate({ to: "/app/clinics" });
   };
 
   return (
@@ -117,8 +151,9 @@ function AddClinic() {
                 <Input className="h-11 rounded-xl" value={form.adminPhone} onChange={event => setForm({ ...form, adminPhone: event.target.value })} />
               </Field>
             </div>
-            <p className="mt-3 text-xs text-muted-foreground">
-              A one-time account setup invitation is sent to the clinical admin's email.
+            <p className="mt-3 text-xs text-muted-foreground flex items-center gap-1.5">
+              <Mail className="h-3.5 w-3.5 text-primary" />
+              A 24-hour setup invitation link will be generated for the Clinical Admin to set their 8+ character password.
             </p>
           </section>
         </div>
@@ -131,7 +166,7 @@ function AddClinic() {
           </section>
           <section className="rounded-2xl border bg-card p-6 shadow-soft">
             <h2 className="mb-3 font-display text-base font-semibold">Access control</h2>
-            <p className="text-sm text-muted-foreground">The clinic starts active. Super Admin can later suspend access without deleting clinic data.</p>
+            <p className="text-sm text-muted-foreground">The clinic starts active. Super Admin can later suspend access or move it to Trash Bin.</p>
           </section>
           <div className="flex gap-2">
             <Button type="button" variant="outline" className="flex-1" onClick={() => navigate({ to: "/app/clinics" })}>Cancel</Button>
@@ -141,6 +176,49 @@ function AddClinic() {
           </div>
         </aside>
       </form>
+
+      {/* Invitation Link Modal Dialog */}
+      <Dialog open={Boolean(createdInfo)} onOpenChange={(open) => { if (!open) handleFinish(); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-emerald-600">
+              <ShieldCheck className="h-5 w-5" /> Clinic Created & Invitation Link Ready
+            </DialogTitle>
+            <DialogDescription className="space-y-2 pt-2">
+              <p>
+                <strong>{createdInfo?.clinicName}</strong> ({createdInfo?.clinicId}) has been successfully created.
+              </p>
+              <p>
+                An invitation email has been dispatched to Clinical Admin <strong>{createdInfo?.adminName}</strong> (<code>{createdInfo?.adminEmail}</code>).
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-3">
+            <Label className="text-xs font-semibold text-muted-foreground">24-Hour Password Generation Link</Label>
+            <div className="flex items-center gap-2">
+              <Input
+                readOnly
+                value={createdInfo?.setupUrl ?? ""}
+                className="h-10 font-mono text-xs bg-muted/50 rounded-xl"
+              />
+              <Button type="button" size="sm" onClick={copyLink} className="shrink-0 gap-1.5">
+                {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                {copied ? "Copied" : "Copy Link"}
+              </Button>
+            </div>
+            <p className="text-[11px] text-muted-foreground">
+              ⏰ This link is valid for 24 hours. The Clinical Admin will use this link to set an 8+ character password with uppercase and lowercase letters.
+            </p>
+          </div>
+
+          <DialogFooter>
+            <Button onClick={handleFinish} className="w-full">
+              Go to Clinics List
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }
