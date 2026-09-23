@@ -27,21 +27,25 @@ function Field({ label, children, span = 6 }: { label: string; children: React.R
 function EditClinic() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { updateClinic, softDeleteClinic, clinics } = useWorkspaceData();
+  const { updateClinic, softDeleteClinic, clinics, staffMembers } = useWorkspaceData();
   const { id } = useParams({ from: "/app/clinics/$id/edit" });
   const clinic = clinics.find(c => c.id === id);
   const isSuperAdmin = user?.role === "super_admin";
 
+  const adminStaff = staffMembers?.find(
+    (m) => m.clinicId === clinic?.id && m.role === "clinic_admin"
+  );
+
   const [form, setForm] = useState(() => ({
     id: clinic?.id ?? "",
     name: clinic?.name ?? "",
-    email: "",
-    phone: "",
-    address: clinic?.city ?? "",
-    logoName: "",
-    adminName: "",
-    adminEmail: "",
-    adminPhone: "",
+    email: clinic?.email ?? "",
+    phone: clinic?.phone ?? "",
+    address: clinic?.address ?? clinic?.city ?? "",
+    logoName: clinic?.logoName ?? "",
+    adminName: clinic?.adminName ?? adminStaff?.name ?? "",
+    adminEmail: clinic?.adminEmail ?? adminStaff?.email ?? "",
+    adminPhone: clinic?.adminPhone ?? adminStaff?.phone ?? "",
   }));
   const [isSaving, setIsSaving] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -49,14 +53,22 @@ function EditClinic() {
 
   useEffect(() => {
     if (clinic) {
-      setForm(prev => ({
-        ...prev,
+      const admin = staffMembers?.find(
+        (m) => m.clinicId === clinic.id && m.role === "clinic_admin"
+      );
+      setForm((prev) => ({
         id: clinic.id,
-        name: prev.name || clinic.name,
-        address: prev.address || clinic.city,
+        name: prev.name || clinic.name || "",
+        email: prev.email || clinic.email || "",
+        phone: prev.phone || clinic.phone || "",
+        address: prev.address || clinic.address || clinic.city || "",
+        logoName: prev.logoName || clinic.logoName || "",
+        adminName: prev.adminName || clinic.adminName || admin?.name || "",
+        adminEmail: prev.adminEmail || clinic.adminEmail || admin?.email || "",
+        adminPhone: prev.adminPhone || clinic.adminPhone || admin?.phone || "",
       }));
     }
-  }, [clinic]);
+  }, [clinic, staffMembers]);
 
   if (!clinic) {
     return (
@@ -81,8 +93,11 @@ function EditClinic() {
         phone: form.phone.trim(),
         address: form.address.trim(),
         logoName: form.logoName.trim(),
+        adminName: form.adminName.trim(),
+        adminEmail: form.adminEmail.trim(),
+        adminPhone: form.adminPhone.trim(),
       });
-      toast.success(`Clinic ${form.name.trim()} updated`);
+      toast.success(`Clinic ${form.name.trim()} updated successfully`);
       navigate({ to: "/app/clinics" });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to update the clinic");
@@ -150,13 +165,13 @@ function EditClinic() {
             <h2 className="mb-4 font-display text-base font-semibold">Clinical Admin</h2>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
               <Field label="Full name" span={3}>
-                <Input className="h-11 rounded-xl" value={form.adminName} onChange={event => setForm({ ...form, adminName: event.target.value })} />
+                <Input placeholder="Dr. Sarah Jenkins" className="h-11 rounded-xl" value={form.adminName} onChange={event => setForm({ ...form, adminName: event.target.value })} />
               </Field>
               <Field label="Email" span={3}>
-                <Input type="email" className="h-11 rounded-xl" value={form.adminEmail} onChange={event => setForm({ ...form, adminEmail: event.target.value })} />
+                <Input type="email" placeholder="admin@clinic.com" className="h-11 rounded-xl" value={form.adminEmail} onChange={event => setForm({ ...form, adminEmail: event.target.value })} />
               </Field>
               <Field label="Phone" span={3}>
-                <Input className="h-11 rounded-xl" value={form.adminPhone} onChange={event => setForm({ ...form, adminPhone: event.target.value })} />
+                <Input placeholder="+91 98765 43210" className="h-11 rounded-xl" value={form.adminPhone} onChange={event => setForm({ ...form, adminPhone: event.target.value })} />
               </Field>
             </div>
           </section>

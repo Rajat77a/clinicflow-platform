@@ -54,6 +54,9 @@ export interface WorkspaceRepository {
   softDeleteClinic(id: string): Promise<void>;
   restoreClinic(id: string): Promise<void>;
   permanentlyDeleteClinic(id: string): Promise<void>;
+  bulkSoftDeleteClinics?(ids: string[]): Promise<void>;
+  bulkRestoreClinics?(ids: string[]): Promise<void>;
+  bulkPermanentlyDeleteClinics?(ids: string[]): Promise<void>;
   setClinicAccess(id: string, active: boolean): Promise<void>;
   extendSubscription(id: string, days: number, proofRef?: string): Promise<void>;
   createDoctor(input: DoctorInput): Promise<Doctor>;

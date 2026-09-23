@@ -7,6 +7,13 @@ export interface InvitationEmailParams {
   expiresInHours?: number;
 }
 
+export interface DispatchedEmailRecord extends InvitationEmailParams {
+  id: string;
+  sentAt: string;
+}
+
+const memoryDispatchedEmails: DispatchedEmailRecord[] = [];
+
 export function generateInvitationEmailHtml({
   recipientName,
   clinicName,
@@ -117,13 +124,105 @@ If you were not expecting this invitation, please ignore this message.
 — ClinicFlow Healthcare OS`;
 }
 
-export async function sendInvitationEmail(params: InvitationEmailParams): Promise<{ success: boolean; message: string }> {
-  console.log(`[Email Dispatch] Sending invitation email to ${params.recipientEmail} for clinic ${params.clinicName}...`);
-  console.log(`[Email Setup Link] ${params.setupUrl}`);
+export function registerLocalInviteToken(tokenInfo: {
+  token: string;
+  email: string;
+  name: string;
+  phone?: string;
+  clinicName: string;
+  clinicId: string;
+  roleCode?: string;
+  expiresAt: string;
+  used?: boolean;
+}) {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = localStorage.getItem("cf_local_tokens");
+    const tokens = raw ? JSON.parse(raw) : {};
+    tokens[tokenInfo.token] = tokenInfo;
+    localStorage.setItem("cf_local_tokens", JSON.stringify(tokens));
+  } catch {
+    // ignore
+  }
+}
 
-  // Returns email payload detail for integration or logging
+export function getLocalInviteToken(token: string) {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = localStorage.getItem("cf_local_tokens");
+    if (!raw) return null;
+    const tokens = JSON.parse(raw);
+    return tokens[token] || null;
+  } catch {
+    return null;
+  }
+}
+
+export function markLocalInviteTokenUsed(token: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = localStorage.getItem("cf_local_tokens");
+    if (!raw) return;
+    const tokens = JSON.parse(raw);
+    if (tokens[token]) {
+      tokens[token].used = true;
+      localStorage.setItem("cf_local_tokens", JSON.stringify(tokens));
+    }
+  } catch {
+    // ignore
+  }
+}
+
+export async function sendInvitationEmail(params: InvitationEmailParams): Promise<{
+  success: boolean;
+  message: string;
+  emailId: string;
+  setupUrl: string;
+  expiresInHours: number;
+}> {
+  const expiresInHours = params.expiresInHours ?? 24;
+  const record: DispatchedEmailRecord = {
+    ...params,
+    expiresInHours,
+    id: `INV-${Date.now()}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
+    sentAt: new Date().toISOString(),
+  };
+
+  memoryDispatchedEmails.unshift(record);
+
+  if (typeof window !== "undefined") {
+    try {
+      const raw = localStorage.getItem("cf_sent_invitations");
+      const existing = raw ? JSON.parse(raw) : [];
+      localStorage.setItem("cf_sent_invitations", JSON.stringify([record, ...existing].slice(0, 50)));
+    } catch {
+      // ignore storage error
+    }
+  }
+
+  console.log(`[Email Dispatch] Invitation email sent to ${params.recipientEmail} for clinic ${params.clinicName}.`);
+  console.log(`[Email Setup Link] Valid for ${expiresInHours} hours: ${params.setupUrl}`);
+
   return {
     success: true,
-    message: `Invitation email sent to ${params.recipientEmail}. Secure setup link valid for ${params.expiresInHours ?? 24} hours.`,
+    emailId: record.id,
+    setupUrl: params.setupUrl,
+    expiresInHours,
+    message: `Invitation email sent to ${params.recipientEmail}. Secure setup link valid for ${expiresInHours} hours.`,
   };
+}
+
+export function getDispatchedInvitationEmails(): DispatchedEmailRecord[] {
+  if (typeof window !== "undefined") {
+    try {
+      const raw = localStorage.getItem("cf_sent_invitations");
+      if (raw) {
+        const stored = JSON.parse(raw);
+        if (Array.isArray(stored) && stored.length > 0) return stored;
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return memoryDispatchedEmails;
 }

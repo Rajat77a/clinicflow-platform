@@ -6,6 +6,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { supabaseConfig } from "@/lib/supabase/config";
+import { getLocalInviteToken, markLocalInviteTokenUsed } from "@/lib/email-service";
 import { MIN_PASSWORD_LENGTH, passwordPolicyError } from "@/lib/password-policy";
 
 export const Route = createFileRoute("/setup")({
@@ -71,57 +73,114 @@ function SetupPage() {
     }
     setToken(t);
 
-    const supabase = getSupabaseBrowserClient();
-    supabase.rpc("validate_invite_token", { p_token: t })
-      .then(({ data, error: rpcError }: { data: Array<{ status: string; p_email: string | null; p_full_name: string | null; p_phone: string | null; p_role_code: string | null; p_hospital_id: string | null; p_facility_id: string | null; p_department_id: string | null; p_clinic_name: string | null; p_clinic_email: string | null; p_clinic_phone: string | null; p_clinic_address: string | null; p_specialty: string | null; p_shift: string | null; p_gender: string | null; p_qualification: string | null; p_medical_registration_number: string | null; p_experience_years: number | null; p_consultation_fee: number | null; p_working_hours: string | null; p_administrative_notes: string | null }> | null; error: { message: string } | null }) => {
-        if (rpcError || !data || data.length === 0) {
-          // Fallback if RPC not yet deployed: try direct consume_invite_token preview
-          return supabase.rpc("consume_invite_token", { p_token: t })
-            .then(({ data: consumeData }: { data: TokenInfo[] | null }) => {
-              if (!consumeData || consumeData.length === 0) {
-                setError("This invitation link has expired. Please contact the Super Admin to request a new invitation.");
-              } else {
-                setTokenInfo(consumeData[0] as TokenInfo);
-              }
-            });
-        }
-
-        const row = data[0];
-        if (row.status === "expired") {
-          setError("This invitation link has expired. Please contact the Super Admin to request a new invitation.");
-        } else if (row.status === "used") {
+    const tryLocalToken = () => {
+      const local = getLocalInviteToken(t);
+      if (local) {
+        if (local.used) {
           setError("This invitation link has already been used. Please contact your administrator or sign in.");
-        } else if (row.status === "invalid" || !row.p_email) {
-          setError("This invitation link is invalid. Please check the link you received.");
-        } else {
-          setTokenInfo({
-            email: row.p_email ?? "",
-            full_name: row.p_full_name ?? "",
-            phone: row.p_phone ?? "",
-            role_code: row.p_role_code ?? "",
-            hospital_id: row.p_hospital_id ?? "",
-            facility_id: row.p_facility_id,
-            department_id: row.p_department_id,
-            clinic_name: row.p_clinic_name,
-            clinic_email: row.p_clinic_email,
-            clinic_phone: row.p_clinic_phone,
-            clinic_address: row.p_clinic_address,
-            specialty: row.p_specialty,
-            shift: row.p_shift,
-            gender: row.p_gender,
-            qualification: row.p_qualification,
-            medical_registration_number: row.p_medical_registration_number,
-            experience_years: row.p_experience_years,
-            consultation_fee: row.p_consultation_fee,
-            working_hours: row.p_working_hours,
-            administrative_notes: row.p_administrative_notes,
-          });
+          return true;
         }
-      })
-      .catch(() => {
+        if (new Date(local.expiresAt) <= new Date()) {
+          setError("This invitation link has expired. Invitation links are valid for 24 hours. Please contact the Super Admin for a new invitation.");
+          return true;
+        }
+        setTokenInfo({
+          email: local.email,
+          full_name: local.name,
+          phone: local.phone || "",
+          role_code: local.roleCode || "clinic_admin",
+          hospital_id: local.clinicId,
+          facility_id: null,
+          department_id: null,
+          clinic_name: local.clinicName,
+          clinic_email: null,
+          clinic_phone: null,
+          clinic_address: null,
+          specialty: null,
+          shift: null,
+          gender: null,
+          qualification: null,
+          medical_registration_number: null,
+          experience_years: null,
+          consultation_fee: null,
+          working_hours: null,
+          administrative_notes: null,
+        });
+        return true;
+      }
+      return false;
+    };
+
+    if (!supabaseConfig.configured) {
+      if (!tryLocalToken()) {
+        setError("Unable to validate the invite link. Please contact the Super Admin to request a new invitation.");
+      }
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const supabase = getSupabaseBrowserClient();
+      supabase.rpc("validate_invite_token", { p_token: t })
+        .then(({ data, error: rpcError }: { data: Array<{ status: string; p_email: string | null; p_full_name: string | null; p_phone: string | null; p_role_code: string | null; p_hospital_id: string | null; p_facility_id: string | null; p_department_id: string | null; p_clinic_name: string | null; p_clinic_email: string | null; p_clinic_phone: string | null; p_clinic_address: string | null; p_specialty: string | null; p_shift: string | null; p_gender: string | null; p_qualification: string | null; p_medical_registration_number: string | null; p_experience_years: number | null; p_consultation_fee: number | null; p_working_hours: string | null; p_administrative_notes: string | null }> | null; error: { message: string } | null }) => {
+          if (rpcError || !data || data.length === 0) {
+            if (tryLocalToken()) return;
+            return supabase.rpc("consume_invite_token", { p_token: t })
+              .then(({ data: consumeData }: { data: TokenInfo[] | null }) => {
+                if (!consumeData || consumeData.length === 0) {
+                  setError("This invitation link has expired (links are valid for 24 hours). Please contact the Super Admin to request a new invitation.");
+                } else {
+                  setTokenInfo(consumeData[0] as TokenInfo);
+                }
+              });
+          }
+
+          const row = data[0];
+          if (row.status === "expired") {
+            setError("This invitation link has expired. Invitation links are valid for 24 hours. Please contact the Super Admin to request a new invitation.");
+          } else if (row.status === "used") {
+            setError("This invitation link has already been used. Please contact your administrator or sign in.");
+          } else if (row.status === "invalid" || !row.p_email) {
+            if (!tryLocalToken()) {
+              setError("This invitation link is invalid. Please check the link you received.");
+            }
+          } else {
+            setTokenInfo({
+              email: row.p_email ?? "",
+              full_name: row.p_full_name ?? "",
+              phone: row.p_phone ?? "",
+              role_code: row.p_role_code ?? "",
+              hospital_id: row.p_hospital_id ?? "",
+              facility_id: row.p_facility_id,
+              department_id: row.p_department_id,
+              clinic_name: row.p_clinic_name,
+              clinic_email: row.p_clinic_email,
+              clinic_phone: row.p_clinic_phone,
+              clinic_address: row.p_clinic_address,
+              specialty: row.p_specialty,
+              shift: row.p_shift,
+              gender: row.p_gender,
+              qualification: row.p_qualification,
+              medical_registration_number: row.p_medical_registration_number,
+              experience_years: row.p_experience_years,
+              consultation_fee: row.p_consultation_fee,
+              working_hours: row.p_working_hours,
+              administrative_notes: row.p_administrative_notes,
+            });
+          }
+        })
+        .catch(() => {
+          if (!tryLocalToken()) {
+            setError("Unable to validate the invite link. Please try again.");
+          }
+        })
+        .finally(() => setLoading(false));
+    } catch {
+      if (!tryLocalToken()) {
         setError("Unable to validate the invite link. Please try again.");
-      })
-      .finally(() => setLoading(false));
+      }
+      setLoading(false);
+    }
   }, []);
 
   const submit = async (e: React.FormEvent) => {
@@ -140,94 +199,91 @@ function SetupPage() {
 
     setSubmitting(true);
     try {
-      const supabase = getSupabaseBrowserClient();
+      if (supabaseConfig.configured) {
+        const supabase = getSupabaseBrowserClient();
 
-      // Consume the invite token first to enforce single-use
-      const { data: consumedData, error: consumeError } = await supabase.rpc("consume_invite_token", { p_token: token });
-      if (consumeError || !consumedData || consumedData.length === 0) {
-        throw new Error("This invitation link has expired or has already been used.");
-      }
+        // Consume the invite token first to enforce single-use
+        const { data: consumedData, error: consumeError } = await supabase.rpc("consume_invite_token", { p_token: token });
+        if (consumeError || !consumedData || consumedData.length === 0) {
+          throw new Error("This invitation link has expired or has already been used.");
+        }
 
-      // Check if user already exists
-      const { data: existingUser } = await supabase.auth.admin.listUsers({
-        filter: `email = "${tokenInfo.email}"`,
-      });
-      const existing = existingUser?.users?.find((u: { email?: string }) => u.email === tokenInfo.email);
-
-      let userId: string;
-
-      if (existing) {
-        // User exists (e.g. from a previous invite) - just update password
-        const { error: updateError } = await supabase.auth.admin.updateUserById(
-          existing.id,
-          { password: pw },
-        );
-        if (updateError) throw updateError;
-        userId = existing.id;
-      } else {
-        // Create new user
-        const { data: created, error: createError } = await supabase.auth.admin.createUser({
-          email: tokenInfo.email,
-          password: pw,
-          email_confirm: true,
-          user_metadata: {
-            full_name: tokenInfo.full_name,
-            phone: tokenInfo.phone,
-          },
+        // Check if user already exists
+        const { data: existingUser } = await supabase.auth.admin.listUsers({
+          filter: `email = "${tokenInfo.email}"`,
         });
-        if (createError) throw createError;
-        if (!created.user) throw new Error("User creation failed");
-        userId = created.user.id;
+        const existing = existingUser?.users?.find((u: { email?: string }) => u.email === tokenInfo.email);
 
-        // Create profile
-        await supabase.from("profiles").upsert({
-          id: userId,
-          display_name: tokenInfo.full_name,
-          email: tokenInfo.email,
-        });
+        let userId: string;
 
-        // Create staff membership
-        await supabase.from("staff_memberships").insert({
-          user_id: userId,
-          hospital_id: tokenInfo.hospital_id,
-          facility_id: tokenInfo.facility_id,
-          department_id: tokenInfo.department_id,
-          role_code: tokenInfo.role_code,
-          active: true,
-        });
+        if (existing) {
+          const { error: updateError } = await supabase.auth.admin.updateUserById(
+            existing.id,
+            { password: pw },
+          );
+          if (updateError) throw updateError;
+          userId = existing.id;
+        } else {
+          const { data: created, error: createError } = await supabase.auth.admin.createUser({
+            email: tokenInfo.email,
+            password: pw,
+            email_confirm: true,
+            user_metadata: {
+              full_name: tokenInfo.full_name,
+              phone: tokenInfo.phone,
+            },
+          });
+          if (createError) throw createError;
+          if (!created.user) throw new Error("User creation failed");
+          userId = created.user.id;
 
-        // For doctors, also create the doctor record with all provided details
-        if (tokenInfo.role_code === "doctor") {
-          await supabase.from("doctors").insert({
+          await supabase.from("profiles").upsert({
+            id: userId,
+            display_name: tokenInfo.full_name,
+            email: tokenInfo.email,
+          });
+
+          await supabase.from("staff_memberships").insert({
             user_id: userId,
             hospital_id: tokenInfo.hospital_id,
             facility_id: tokenInfo.facility_id,
             department_id: tokenInfo.department_id,
-            display_name: tokenInfo.full_name,
-            email: tokenInfo.email,
-            phone: tokenInfo.phone,
-            gender: tokenInfo.gender,
-            specialty: tokenInfo.specialty,
-            qualification: tokenInfo.qualification,
-            medical_registration_number: tokenInfo.medical_registration_number,
-            experience_years: tokenInfo.experience_years,
-            consultation_fee: tokenInfo.consultation_fee,
-            working_hours: tokenInfo.working_hours,
-            administrative_notes: tokenInfo.administrative_notes,
-            status: "active",
+            role_code: tokenInfo.role_code,
+            active: true,
           });
-        }
 
-        // For receptionists, update the membership with shift info
-        if (tokenInfo.role_code === "receptionist" && tokenInfo.shift) {
-          await supabase.from("staff_memberships")
-            .update({ shift: tokenInfo.shift })
-            .eq("user_id", userId);
+          if (tokenInfo.role_code === "doctor") {
+            await supabase.from("doctors").insert({
+              user_id: userId,
+              hospital_id: tokenInfo.hospital_id,
+              facility_id: tokenInfo.facility_id,
+              department_id: tokenInfo.department_id,
+              display_name: tokenInfo.full_name,
+              email: tokenInfo.email,
+              phone: tokenInfo.phone,
+              gender: tokenInfo.gender,
+              specialty: tokenInfo.specialty,
+              qualification: tokenInfo.qualification,
+              medical_registration_number: tokenInfo.medical_registration_number,
+              experience_years: tokenInfo.experience_years,
+              consultation_fee: tokenInfo.consultation_fee,
+              working_hours: tokenInfo.working_hours,
+              administrative_notes: tokenInfo.administrative_notes,
+              status: "active",
+            });
+          }
+
+          if (tokenInfo.role_code === "receptionist" && tokenInfo.shift) {
+            await supabase.from("staff_memberships")
+              .update({ shift: tokenInfo.shift })
+              .eq("user_id", userId);
+          }
         }
       }
 
-      toast.success("Password set successfully! You can now sign in.");
-      navigate({ to: "/login" });
+      markLocalInviteTokenUsed(token);
+      toast.success("Password set successfully! You can now sign in with your email and password.");
+      navigate({ to: "/login", search: { email: tokenInfo.email } });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Unable to set password");
     } finally {
@@ -331,6 +387,9 @@ function SetupPage() {
                 Specialty: {tokenInfo.specialty}
               </div>
             )}
+            <div className="mt-2.5 inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300 px-2 py-0.5 rounded-md">
+              <span>⏰ 24-Hour Invitation Link · Valid for password generation</span>
+            </div>
           </div>
 
           <form onSubmit={submit} className="mt-6 space-y-4">

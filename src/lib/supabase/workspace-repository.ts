@@ -400,20 +400,30 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
 
     const clinics = clinicRows
       .filter((row) => row.configuration?.purged !== "true" && row.configuration?.purged !== true)
-      .map((row) => ({
-        id: row.id,
-        name: row.name,
-        city: row.city ?? "Not set",
-        doctors: Number(row.doctors ?? 0),
-        receptionists: Number(row.receptionists ?? 0),
-        patients: Number(row.patients ?? 0),
-        plan: row.plan ?? "ClinicFlow",
-        status: row.status ?? "Expired",
-        expires: row.expires ?? "Not set",
-        price: Number(row.price ?? 499),
-        access: row.access === "Suspended" ? "Suspended" as const : "Allowed" as const,
-        deletedAt: row.configuration?.deleted_at || undefined,
-      }));
+      .map((row) => {
+        const config = (row.configuration as Record<string, unknown>) || {};
+        return {
+          id: row.id,
+          name: row.name,
+          city: row.city ?? (config.city as string) ?? "Not set",
+          doctors: Number(row.doctors ?? 0),
+          receptionists: Number(row.receptionists ?? 0),
+          patients: Number(row.patients ?? 0),
+          plan: row.plan ?? "ClinicFlow",
+          status: row.status ?? "Expired",
+          expires: row.expires ?? "Not set",
+          price: Number(row.price ?? 499),
+          access: row.access === "Suspended" ? ("Suspended" as const) : ("Allowed" as const),
+          deletedAt: (config.deleted_at as string) || undefined,
+          email: (config.email as string) || (row.email as string) || undefined,
+          phone: (config.phone as string) || (row.phone as string) || undefined,
+          address: (config.address as string) || (row.address as string) || row.city || undefined,
+          logoName: (config.logo_name as string) || undefined,
+          adminName: (config.admin_name as string) || undefined,
+          adminEmail: (config.admin_email as string) || undefined,
+          adminPhone: (config.admin_phone as string) || undefined,
+        };
+      });
 
     const facilities: Facility[] = ((facilitiesResult.data ?? []) as Row[]).map((row) => ({
       id: row.id,
@@ -916,6 +926,9 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       phone: input.phone ?? null,
       address: input.address ?? null,
       logo_name: input.logoName ?? null,
+      admin_name: input.adminName ?? null,
+      admin_email: input.adminEmail ?? null,
+      admin_phone: input.adminPhone ?? null,
     };
 
     const { data, error } = await this.client.rpc("create_platform_clinic", {
@@ -939,7 +952,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
             await this.client.rpc("update_platform_clinic", {
               p_hospital_id: hospitalId,
               p_name: input.name,
-              p_configuration: { logo_path: logoPath, logo_name: input.logo.name },
+              p_configuration: { ...configuration, logo_path: logoPath, logo_name: input.logo.name },
             });
           }
         }
@@ -975,11 +988,14 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       p_hospital_id: input.id,
       p_name: input.name,
       p_configuration: {
-          city: input.city,
-          email: input.email ?? null,
-          phone: input.phone ?? null,
-          address: input.address ?? null,
-          logo_name: input.logoName ?? null,
+        city: input.city,
+        email: input.email ?? null,
+        phone: input.phone ?? null,
+        address: input.address ?? null,
+        logo_name: input.logoName ?? null,
+        admin_name: input.adminName ?? null,
+        admin_email: input.adminEmail ?? null,
+        admin_phone: input.adminPhone ?? null,
       },
     });
     throwIfError(error);
@@ -987,6 +1003,18 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
 
   async deleteClinic(id: string) {
     await this.softDeleteClinic(id);
+  }
+
+  async bulkSoftDeleteClinics(ids: string[]) {
+    await Promise.all(ids.map((id) => this.softDeleteClinic(id)));
+  }
+
+  async bulkRestoreClinics(ids: string[]) {
+    await Promise.all(ids.map((id) => this.restoreClinic(id)));
+  }
+
+  async bulkPermanentlyDeleteClinics(ids: string[]) {
+    await Promise.all(ids.map((id) => this.permanentlyDeleteClinic(id)));
   }
 
   async softDeleteClinic(id: string) {

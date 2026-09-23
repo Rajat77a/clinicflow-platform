@@ -22,7 +22,7 @@ import type {
   RecordPageInput,
 } from "./backend/workspace-repository";
 import { localRecordPage } from "./record-page";
-
+import { sendInvitationEmail, registerLocalInviteToken } from "./email-service";
 
 const DEFAULT_CLINIC_ID = "CL-001";
 
@@ -40,6 +40,13 @@ export type Clinic = {
   access: "Allowed" | "Suspended";
   deletedAt?: string;
   setupUrl?: string;
+  email?: string;
+  phone?: string;
+  address?: string;
+  logoName?: string;
+  adminName?: string;
+  adminEmail?: string;
+  adminPhone?: string;
 };
 export type Patient = {
   id: string;
@@ -323,7 +330,11 @@ type Command =
   | { type: "facility.created"; value: Facility; actor: AuthUser }
   | { type: "clinic.soft_deleted"; id: string; actor: AuthUser }
   | { type: "clinic.restored"; id: string; actor: AuthUser }
-  | { type: "clinic.permanently_deleted"; id: string; actor: AuthUser };
+  | { type: "clinic.permanently_deleted"; id: string; actor: AuthUser }
+  | { type: "clinic.updated"; value: ClinicInput; actor: AuthUser }
+  | { type: "clinic.bulk_soft_deleted"; ids: string[]; actor: AuthUser }
+  | { type: "clinic.bulk_restored"; ids: string[]; actor: AuthUser }
+  | { type: "clinic.bulk_permanently_deleted"; ids: string[]; actor: AuthUser };
 
 function createId(prefix: string) {
   const suffix = globalThis.crypto?.randomUUID?.().slice(0, 8).toUpperCase()
@@ -546,6 +557,87 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         `Permanently deleted clinic ${command.id}`,
       );
     }
+    case "clinic.updated": {
+      const updated = command.value;
+      return appendAudit(
+        {
+          ...state,
+          clinics: state.clinics.map((c) =>
+            c.id === updated.id
+              ? {
+                  ...c,
+                  name: updated.name,
+                  city: updated.city,
+                  email: updated.email ?? c.email,
+                  phone: updated.phone ?? c.phone,
+                  address: updated.address ?? c.address,
+                  logoName: updated.logoName ?? c.logoName,
+                  adminName: updated.adminName ?? c.adminName,
+                  adminEmail: updated.adminEmail ?? c.adminEmail,
+                  adminPhone: updated.adminPhone ?? c.adminPhone,
+                }
+              : c
+          ),
+          staffMembers: state.staffMembers.map((m) =>
+            m.clinicId === updated.id && m.role === "clinic_admin"
+              ? {
+                  ...m,
+                  name: updated.adminName || m.name,
+                  email: updated.adminEmail || m.email,
+                  phone: updated.adminPhone || m.phone,
+                }
+              : m
+          ),
+        },
+        command.actor,
+        `Updated clinic ${updated.id}`,
+      );
+    }
+    case "clinic.bulk_soft_deleted": {
+      const idSet = new Set(command.ids);
+      const now = new Date().toISOString();
+      return appendAudit(
+        {
+          ...state,
+          clinics: state.clinics.map((c) =>
+            idSet.has(c.id)
+              ? { ...c, access: "Suspended", deletedAt: now }
+              : c
+          ),
+        },
+        command.actor,
+        `Soft deleted ${command.ids.length} clinics`,
+      );
+    }
+    case "clinic.bulk_restored": {
+      const idSet = new Set(command.ids);
+      return appendAudit(
+        {
+          ...state,
+          clinics: state.clinics.map((c) =>
+            idSet.has(c.id)
+              ? { ...c, access: "Allowed", deletedAt: undefined }
+              : c
+          ),
+        },
+        command.actor,
+        `Restored ${command.ids.length} clinics`,
+      );
+    }
+    case "clinic.bulk_permanently_deleted": {
+      const idSet = new Set(command.ids);
+      const nextPerm = new Set(state.permanentlyDeletedIds || []);
+      command.ids.forEach((id) => nextPerm.add(id));
+      return appendAudit(
+        {
+          ...state,
+          clinics: state.clinics.filter((c) => !idSet.has(c.id)),
+          permanentlyDeletedIds: nextPerm,
+        },
+        command.actor,
+        `Permanently deleted ${command.ids.length} clinics`,
+      );
+    }
   }
 }
 
@@ -577,8 +669,12 @@ interface WorkspaceData {
   updateClinic: (input: ClinicInput) => Promise<void>;
   deleteClinic: (id: string) => Promise<void>;
   softDeleteClinic: (id: string) => Promise<void>;
+  bulkSoftDeleteClinics: (ids: string[]) => Promise<void>;
   restoreClinic: (id: string) => Promise<void>;
+  bulkRestoreClinics: (ids: string[]) => Promise<void>;
   permanentlyDeleteClinic: (id: string) => Promise<void>;
+  bulkPermanentlyDeleteClinics: (ids: string[]) => Promise<void>;
+  emptyTrash: () => Promise<void>;
   setClinicAccess: (id: string, active: boolean) => Promise<void>;
   extendSubscription: (id: string, days: number, proofRef?: string) => Promise<void>;
   createDoctor: (input: DoctorInput) => Promise<Doctor>;
@@ -892,11 +988,33 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       },
       createClinic: async (input) => {
         const actor = requireUser(user, "platform.clinics.manage");
+        const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:5173";
         if (repository) {
           const { id, setupUrl } = await repository.createClinic(input);
           await refresh().catch(() => undefined);
+          const finalSetupUrl = setupUrl || `${origin}/setup?token=TOK-${id}`;
+          if (input.adminEmail) {
+            void sendInvitationEmail({
+              recipientEmail: input.adminEmail,
+              recipientName: input.adminName || "Clinical Admin",
+              clinicName: input.name,
+              setupUrl: finalSetupUrl,
+              roleTitle: "Clinical Admin",
+              expiresInHours: 24,
+            });
+          }
           const saved = state.clinics.find((clinic) => clinic.id === id);
-          if (saved) return { ...saved, setupUrl };
+          if (saved) return {
+            ...saved,
+            setupUrl: finalSetupUrl,
+            email: input.email || saved.email,
+            phone: input.phone || saved.phone,
+            address: input.address || saved.address,
+            logoName: input.logoName || saved.logoName,
+            adminName: input.adminName || saved.adminName,
+            adminEmail: input.adminEmail || saved.adminEmail,
+            adminPhone: input.adminPhone || saved.adminPhone,
+          };
           const expires = new Date();
           expires.setDate(expires.getDate() + 14);
           return {
@@ -911,12 +1029,18 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             expires: expires.toISOString().slice(0, 10),
             price: 499,
             access: "Allowed",
-            setupUrl,
+            setupUrl: finalSetupUrl,
+            email: input.email,
+            phone: input.phone,
+            address: input.address,
+            logoName: input.logoName,
+            adminName: input.adminName,
+            adminEmail: input.adminEmail,
+            adminPhone: input.adminPhone,
           };
         }
         const expires = new Date();
         expires.setDate(expires.getDate() + 14);
-        const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:5173";
         const dummyToken = createId("TOK");
         const setupUrl = `${origin}/setup?token=${dummyToken}`;
         const clinic: Clinic = {
@@ -932,6 +1056,13 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           price: 499,
           access: "Allowed",
           setupUrl,
+          email: input.email,
+          phone: input.phone,
+          address: input.address,
+          logoName: input.logoName,
+          adminName: input.adminName,
+          adminEmail: input.adminEmail,
+          adminPhone: input.adminPhone,
         };
         dispatch({ type: "clinic.created", value: clinic, actor });
         if (input.adminName && input.adminEmail) {
@@ -946,33 +1077,62 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             tempPassword: input.tempPassword,
           };
           dispatch({ type: "staff.invited", value: membership, actor });
+          registerLocalInviteToken({
+            token: dummyToken,
+            email: input.adminEmail,
+            name: input.adminName,
+            phone: input.adminPhone,
+            clinicName: input.name,
+            clinicId: clinic.id,
+            roleCode: "clinic_admin",
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          });
+          void sendInvitationEmail({
+            recipientEmail: input.adminEmail,
+            recipientName: input.adminName,
+            clinicName: input.name,
+            setupUrl,
+            roleTitle: "Clinical Admin",
+            expiresInHours: 24,
+          });
         }
         return clinic;
       },
       updateClinic: async (input) => {
         const actor = requireUser(user, "platform.clinics.manage");
         if (!input.id) throw new Error("Clinic ID is required");
+        dispatch({ type: "clinic.updated", value: input, actor });
         if (repository) {
           await repository.updateClinic(input);
-          await refresh();
-          return;
+          await refresh().catch(() => undefined);
         }
-        throw new Error("Clinic updates are only supported in production mode");
       },
       deleteClinic: async (id) => {
         const actor = requireUser(user, "platform.clinics.manage");
+        dispatch({ type: "clinic.soft_deleted", id, actor });
         if (repository) {
           await repository.deleteClinic(id);
-          await refresh();
-          return;
+          await refresh().catch(() => undefined);
         }
-        dispatch({ type: "clinic.soft_deleted", id, actor });
       },
       softDeleteClinic: async (id) => {
         const actor = requireUser(user, "platform.clinics.manage");
         dispatch({ type: "clinic.soft_deleted", id, actor });
         if (repository) {
           await repository.softDeleteClinic(id);
+          await refresh().catch(() => undefined);
+        }
+      },
+      bulkSoftDeleteClinics: async (ids) => {
+        const actor = requireUser(user, "platform.clinics.manage");
+        if (!ids.length) return;
+        dispatch({ type: "clinic.bulk_soft_deleted", ids, actor });
+        if (repository) {
+          if (repository.bulkSoftDeleteClinics) {
+            await repository.bulkSoftDeleteClinics(ids);
+          } else {
+            await Promise.all(ids.map((id) => repository.softDeleteClinic(id)));
+          }
           await refresh().catch(() => undefined);
         }
       },
@@ -984,11 +1144,51 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           await refresh().catch(() => undefined);
         }
       },
+      bulkRestoreClinics: async (ids) => {
+        const actor = requireUser(user, "platform.clinics.manage");
+        if (!ids.length) return;
+        dispatch({ type: "clinic.bulk_restored", ids, actor });
+        if (repository) {
+          if (repository.bulkRestoreClinics) {
+            await repository.bulkRestoreClinics(ids);
+          } else {
+            await Promise.all(ids.map((id) => repository.restoreClinic(id)));
+          }
+          await refresh().catch(() => undefined);
+        }
+      },
       permanentlyDeleteClinic: async (id) => {
         const actor = requireUser(user, "platform.clinics.manage");
         dispatch({ type: "clinic.permanently_deleted", id, actor });
         if (repository) {
           await repository.permanentlyDeleteClinic(id);
+          await refresh().catch(() => undefined);
+        }
+      },
+      bulkPermanentlyDeleteClinics: async (ids) => {
+        const actor = requireUser(user, "platform.clinics.manage");
+        if (!ids.length) return;
+        dispatch({ type: "clinic.bulk_permanently_deleted", ids, actor });
+        if (repository) {
+          if (repository.bulkPermanentlyDeleteClinics) {
+            await repository.bulkPermanentlyDeleteClinics(ids);
+          } else {
+            await Promise.all(ids.map((id) => repository.permanentlyDeleteClinic(id)));
+          }
+          await refresh().catch(() => undefined);
+        }
+      },
+      emptyTrash: async () => {
+        const actor = requireUser(user, "platform.clinics.manage");
+        const trashIds = state.clinics.filter((c) => Boolean(c.deletedAt)).map((c) => c.id);
+        if (!trashIds.length) return;
+        dispatch({ type: "clinic.bulk_permanently_deleted", ids: trashIds, actor });
+        if (repository) {
+          if (repository.bulkPermanentlyDeleteClinics) {
+            await repository.bulkPermanentlyDeleteClinics(trashIds);
+          } else {
+            await Promise.all(trashIds.map((id) => repository.permanentlyDeleteClinic(id)));
+          }
           await refresh().catch(() => undefined);
         }
       },
