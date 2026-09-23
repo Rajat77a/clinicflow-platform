@@ -83,15 +83,23 @@ function UsersPage() {
       toast.error("Name and email are required");
       return;
     }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clinicAdminForm.email.trim())) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+    if (!clinicAdminForm.hospitalId) {
+      toast.error("Please select a clinic/hospital");
+      return;
+    }
     setIsSending(true);
     try {
       await inviteClinicAdmin({
         name: clinicAdminForm.name.trim(),
         email: clinicAdminForm.email.trim(),
         phone: clinicAdminForm.phone.trim(),
-        hospitalId: clinicAdminForm.hospitalId || undefined,
+        hospitalId: clinicAdminForm.hospitalId,
       });
-      toast.success(`Clinic Admin invited · email sent to ${clinicAdminForm.email.trim()}`);
+      toast.success(`Clinic Admin invited · 24-hour setup link sent to ${clinicAdminForm.email.trim()}`);
       setClinicAdminDialogOpen(false);
       setClinicAdminForm({ name: "", email: "", phone: "", hospitalId: "" });
     } catch (error) {

@@ -40,7 +40,6 @@ const NAV: Record<Role, NavSection[]> = {
        { to: "/app", label: "Dashboard", icon: LayoutDashboard },
      ]},
      { label: "People", items: [
-       { to: "/app/facilities", label: "Facilities", icon: HospitalIcon },
        { to: "/app/doctors", label: "Doctors", icon: Stethoscope },
        { to: "/app/receptionists", label: "Receptionists", icon: UserCog },
        { to: "/app/patients", label: "Patients", icon: UsersRound },

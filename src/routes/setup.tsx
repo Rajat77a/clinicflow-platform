@@ -72,12 +72,50 @@ function SetupPage() {
     setToken(t);
 
     const supabase = getSupabaseBrowserClient();
-    supabase.rpc("consume_invite_token", { p_token: t })
-      .then(({ data, error: rpcError }: { data: TokenInfo[] | null; error: { message: string } | null }) => {
+    supabase.rpc("validate_invite_token", { p_token: t })
+      .then(({ data, error: rpcError }: { data: Array<{ status: string; p_email: string | null; p_full_name: string | null; p_phone: string | null; p_role_code: string | null; p_hospital_id: string | null; p_facility_id: string | null; p_department_id: string | null; p_clinic_name: string | null; p_clinic_email: string | null; p_clinic_phone: string | null; p_clinic_address: string | null; p_specialty: string | null; p_shift: string | null; p_gender: string | null; p_qualification: string | null; p_medical_registration_number: string | null; p_experience_years: number | null; p_consultation_fee: number | null; p_working_hours: string | null; p_administrative_notes: string | null }> | null; error: { message: string } | null }) => {
         if (rpcError || !data || data.length === 0) {
-          setError("This invite link has expired (links are valid for 24 hours) or has already been used. Please contact your administrator for a new link.");
+          // Fallback if RPC not yet deployed: try direct consume_invite_token preview
+          return supabase.rpc("consume_invite_token", { p_token: t })
+            .then(({ data: consumeData }: { data: TokenInfo[] | null }) => {
+              if (!consumeData || consumeData.length === 0) {
+                setError("This invitation link has expired. Please contact the Super Admin to request a new invitation.");
+              } else {
+                setTokenInfo(consumeData[0] as TokenInfo);
+              }
+            });
+        }
+
+        const row = data[0];
+        if (row.status === "expired") {
+          setError("This invitation link has expired. Please contact the Super Admin to request a new invitation.");
+        } else if (row.status === "used") {
+          setError("This invitation link has already been used. Please contact your administrator or sign in.");
+        } else if (row.status === "invalid" || !row.p_email) {
+          setError("This invitation link is invalid. Please check the link you received.");
         } else {
-          setTokenInfo(data[0] as TokenInfo);
+          setTokenInfo({
+            email: row.p_email,
+            full_name: row.p_full_name,
+            phone: row.p_phone,
+            role_code: row.p_role_code,
+            hospital_id: row.p_hospital_id,
+            facility_id: row.p_facility_id,
+            department_id: row.p_department_id,
+            clinic_name: row.p_clinic_name,
+            clinic_email: row.p_clinic_email,
+            clinic_phone: row.p_clinic_phone,
+            clinic_address: row.p_clinic_address,
+            specialty: row.p_specialty,
+            shift: row.p_shift,
+            gender: row.p_gender,
+            qualification: row.p_qualification,
+            medical_registration_number: row.p_medical_registration_number,
+            experience_years: row.p_experience_years,
+            consultation_fee: row.p_consultation_fee,
+            working_hours: row.p_working_hours,
+            administrative_notes: row.p_administrative_notes,
+          });
         }
       })
       .catch(() => {
@@ -103,6 +141,12 @@ function SetupPage() {
     setSubmitting(true);
     try {
       const supabase = getSupabaseBrowserClient();
+
+      // Consume the invite token first to enforce single-use
+      const { data: consumedData, error: consumeError } = await supabase.rpc("consume_invite_token", { p_token: token });
+      if (consumeError || !consumedData || consumedData.length === 0) {
+        throw new Error("This invitation link has expired or has already been used.");
+      }
 
       // Check if user already exists
       const { data: existingUser } = await supabase.auth.admin.listUsers({

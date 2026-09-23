@@ -39,9 +39,19 @@ function AddClinic() {
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!form.name.trim() || !form.address.trim()) return toast.error("Clinic name and address are required");
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!form.name.trim() || !form.address.trim()) {
+      return toast.error("Clinic name and address are required");
+    }
     if (!form.adminName.trim() || !form.adminEmail.trim()) {
       return toast.error("Clinical admin name and email are required");
+    }
+    if (!emailRegex.test(form.adminEmail.trim())) {
+      return toast.error("Please enter a valid email address for the Clinical Admin");
+    }
+    if (form.email.trim() && !emailRegex.test(form.email.trim())) {
+      return toast.error("Please enter a valid clinic email address");
     }
 
     setIsSaving(true);
