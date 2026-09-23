@@ -914,6 +914,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       address: input.address ?? null,
       logo_name: input.logoName ?? null,
     };
+
     const { data, error } = await this.client.rpc("create_platform_clinic", {
       p_name: input.name,
       p_configuration: configuration,
@@ -921,17 +922,19 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     });
     throwIfError(error);
     if (!data) throw new Error("Failed to create clinic");
-    if (input.logo) {
+    const hospitalId = data as string;
+
+    if (input.logo && hospitalId) {
       try {
         if (["image/jpeg", "image/png", "image/webp"].includes(input.logo.type) && input.logo.size <= 2 * 1024 * 1024) {
           const extension = input.logo.type === "image/png" ? "png" : input.logo.type === "image/webp" ? "webp" : "jpg";
-          const logoPath = `${data}/logo.${extension}`;
+          const logoPath = `${hospitalId}/logo.${extension}`;
           const { error: uploadError } = await this.client.storage
             .from("clinic-branding")
             .upload(logoPath, input.logo, { contentType: input.logo.type, upsert: true });
           if (!uploadError) {
             await this.client.rpc("update_platform_clinic", {
-              p_hospital_id: data,
+              p_hospital_id: hospitalId,
               p_name: input.name,
               p_configuration: { logo_path: logoPath, logo_name: input.logo.name },
             });
@@ -941,18 +944,24 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         console.warn("Logo upload skipped:", err);
       }
     }
-    if (input.adminName && input.adminEmail) {
-      await this.inviteStaff(
-        {
-          email: input.adminEmail,
-          name: input.adminName,
-          phone: input.adminPhone ?? "",
-        },
-        "clinic_admin",
-        data as string,
-      );
+
+    if (input.adminName && input.adminEmail && hospitalId) {
+      try {
+        await this.inviteStaff(
+          {
+            email: input.adminEmail,
+            name: input.adminName,
+            phone: input.adminPhone ?? "",
+          },
+          "clinic_admin",
+          hospitalId,
+        );
+      } catch (inviteError) {
+        console.warn("Clinical admin invitation error:", inviteError);
+      }
     }
-    return { id: data as string };
+
+    return { id: hospitalId };
   }
 
   async updateClinic(input: ClinicInput) {
