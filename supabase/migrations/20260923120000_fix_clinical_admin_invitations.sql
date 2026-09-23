@@ -30,7 +30,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = ''
+set search_path = 'public'
 as $$
 declare
   v_rec record;
@@ -96,7 +96,7 @@ returns table (
 )
 language plpgsql
 security definer
-set search_path = ''
+set search_path = 'public'
 as $$
 begin
   return query
