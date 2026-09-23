@@ -24,7 +24,6 @@ import { Route as AppBillingRouteImport } from './routes/app.billing'
 import { Route as AppClinicsRouteImport } from './routes/app.clinics'
 import { Route as AppDoctorsRouteImport } from './routes/app.doctors'
 import { Route as AppDownloadsRouteImport } from './routes/app.downloads'
-import { Route as AppFacilitiesRouteImport } from './routes/app.facilities'
 import { Route as AppFilesRouteImport } from './routes/app.files'
 import { Route as AppFollowupsRouteImport } from './routes/app.followups'
 import { Route as AppMedicalHistoryRouteImport } from './routes/app.medical-history'
@@ -45,8 +44,6 @@ import { Route as AppBillingNewRouteImport } from './routes/app.billing.new'
 import { Route as AppClinicsIndexRouteImport } from './routes/app.clinics.index'
 import { Route as AppClinicsNewRouteImport } from './routes/app.clinics.new'
 import { Route as AppDoctorsNewRouteImport } from './routes/app.doctors.new'
-import { Route as AppFacilitiesIndexRouteImport } from './routes/app.facilities.index'
-import { Route as AppFacilitiesNewRouteImport } from './routes/app.facilities.new'
 import { Route as AppPatientsIndexRouteImport } from './routes/app.patients.index'
 import { Route as AppPatientsIdRouteImport } from './routes/app.patients.$id'
 import { Route as AppPatientsNewRouteImport } from './routes/app.patients.new'
@@ -127,11 +124,6 @@ const AppDoctorsRoute = AppDoctorsRouteImport.update({
 const AppDownloadsRoute = AppDownloadsRouteImport.update({
   id: '/downloads',
   path: '/downloads',
-  getParentRoute: () => AppRoute,
-} as any)
-const AppFacilitiesRoute = AppFacilitiesRouteImport.update({
-  id: '/facilities',
-  path: '/facilities',
   getParentRoute: () => AppRoute,
 } as any)
 const AppFilesRoute = AppFilesRouteImport.update({
@@ -234,16 +226,6 @@ const AppDoctorsNewRoute = AppDoctorsNewRouteImport.update({
   path: '/new',
   getParentRoute: () => AppDoctorsRoute,
 } as any)
-const AppFacilitiesIndexRoute = AppFacilitiesIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AppFacilitiesRoute,
-} as any)
-const AppFacilitiesNewRoute = AppFacilitiesNewRouteImport.update({
-  id: '/new',
-  path: '/new',
-  getParentRoute: () => AppFacilitiesRoute,
-} as any)
 const AppPatientsIndexRoute = AppPatientsIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -290,7 +272,6 @@ export interface FileRoutesByFullPath {
   '/app/clinics': typeof AppClinicsRouteWithChildren
   '/app/doctors': typeof AppDoctorsRouteWithChildren
   '/app/downloads': typeof AppDownloadsRoute
-  '/app/facilities': typeof AppFacilitiesRouteWithChildren
   '/app/files': typeof AppFilesRoute
   '/app/followups': typeof AppFollowupsRoute
   '/app/medical-history': typeof AppMedicalHistoryRoute
@@ -309,14 +290,12 @@ export interface FileRoutesByFullPath {
   '/app/billing/new': typeof AppBillingNewRoute
   '/app/clinics/new': typeof AppClinicsNewRoute
   '/app/doctors/new': typeof AppDoctorsNewRoute
-  '/app/facilities/new': typeof AppFacilitiesNewRoute
   '/app/patients/$id': typeof AppPatientsIdRoute
   '/app/patients/new': typeof AppPatientsNewRoute
   '/app/prescriptions/new': typeof AppPrescriptionsNewRoute
   '/app/appointments/': typeof AppAppointmentsIndexRoute
   '/app/billing/': typeof AppBillingIndexRoute
   '/app/clinics/': typeof AppClinicsIndexRoute
-  '/app/facilities/': typeof AppFacilitiesIndexRoute
   '/app/patients/': typeof AppPatientsIndexRoute
   '/app/prescriptions/': typeof AppPrescriptionsIndexRoute
   '/app/clinics/$id/edit': typeof AppClinicsIdEditRoute
@@ -348,14 +327,12 @@ export interface FileRoutesByTo {
   '/app/billing/new': typeof AppBillingNewRoute
   '/app/clinics/new': typeof AppClinicsNewRoute
   '/app/doctors/new': typeof AppDoctorsNewRoute
-  '/app/facilities/new': typeof AppFacilitiesNewRoute
   '/app/patients/$id': typeof AppPatientsIdRoute
   '/app/patients/new': typeof AppPatientsNewRoute
   '/app/prescriptions/new': typeof AppPrescriptionsNewRoute
   '/app/appointments': typeof AppAppointmentsIndexRoute
   '/app/billing': typeof AppBillingIndexRoute
   '/app/clinics': typeof AppClinicsIndexRoute
-  '/app/facilities': typeof AppFacilitiesIndexRoute
   '/app/patients': typeof AppPatientsIndexRoute
   '/app/prescriptions': typeof AppPrescriptionsIndexRoute
   '/app/clinics/$id/edit': typeof AppClinicsIdEditRoute
@@ -376,7 +353,6 @@ export interface FileRoutesById {
   '/app/clinics': typeof AppClinicsRouteWithChildren
   '/app/doctors': typeof AppDoctorsRouteWithChildren
   '/app/downloads': typeof AppDownloadsRoute
-  '/app/facilities': typeof AppFacilitiesRouteWithChildren
   '/app/files': typeof AppFilesRoute
   '/app/followups': typeof AppFollowupsRoute
   '/app/medical-history': typeof AppMedicalHistoryRoute
@@ -395,14 +371,12 @@ export interface FileRoutesById {
   '/app/billing/new': typeof AppBillingNewRoute
   '/app/clinics/new': typeof AppClinicsNewRoute
   '/app/doctors/new': typeof AppDoctorsNewRoute
-  '/app/facilities/new': typeof AppFacilitiesNewRoute
   '/app/patients/$id': typeof AppPatientsIdRoute
   '/app/patients/new': typeof AppPatientsNewRoute
   '/app/prescriptions/new': typeof AppPrescriptionsNewRoute
   '/app/appointments/': typeof AppAppointmentsIndexRoute
   '/app/billing/': typeof AppBillingIndexRoute
   '/app/clinics/': typeof AppClinicsIndexRoute
-  '/app/facilities/': typeof AppFacilitiesIndexRoute
   '/app/patients/': typeof AppPatientsIndexRoute
   '/app/prescriptions/': typeof AppPrescriptionsIndexRoute
   '/app/clinics/$id/edit': typeof AppClinicsIdEditRoute
@@ -424,7 +398,6 @@ export interface FileRouteTypes {
     | '/app/clinics'
     | '/app/doctors'
     | '/app/downloads'
-    | '/app/facilities'
     | '/app/files'
     | '/app/followups'
     | '/app/medical-history'
@@ -443,14 +416,12 @@ export interface FileRouteTypes {
     | '/app/billing/new'
     | '/app/clinics/new'
     | '/app/doctors/new'
-    | '/app/facilities/new'
     | '/app/patients/$id'
     | '/app/patients/new'
     | '/app/prescriptions/new'
     | '/app/appointments/'
     | '/app/billing/'
     | '/app/clinics/'
-    | '/app/facilities/'
     | '/app/patients/'
     | '/app/prescriptions/'
     | '/app/clinics/$id/edit'
@@ -482,14 +453,12 @@ export interface FileRouteTypes {
     | '/app/billing/new'
     | '/app/clinics/new'
     | '/app/doctors/new'
-    | '/app/facilities/new'
     | '/app/patients/$id'
     | '/app/patients/new'
     | '/app/prescriptions/new'
     | '/app/appointments'
     | '/app/billing'
     | '/app/clinics'
-    | '/app/facilities'
     | '/app/patients'
     | '/app/prescriptions'
     | '/app/clinics/$id/edit'
@@ -509,7 +478,6 @@ export interface FileRouteTypes {
     | '/app/clinics'
     | '/app/doctors'
     | '/app/downloads'
-    | '/app/facilities'
     | '/app/files'
     | '/app/followups'
     | '/app/medical-history'
@@ -528,14 +496,12 @@ export interface FileRouteTypes {
     | '/app/billing/new'
     | '/app/clinics/new'
     | '/app/doctors/new'
-    | '/app/facilities/new'
     | '/app/patients/$id'
     | '/app/patients/new'
     | '/app/prescriptions/new'
     | '/app/appointments/'
     | '/app/billing/'
     | '/app/clinics/'
-    | '/app/facilities/'
     | '/app/patients/'
     | '/app/prescriptions/'
     | '/app/clinics/$id/edit'
@@ -657,13 +623,6 @@ declare module '@tanstack/react-router' {
       path: '/downloads'
       fullPath: '/app/downloads'
       preLoaderRoute: typeof AppDownloadsRouteImport
-      parentRoute: typeof AppRoute
-    }
-    '/app/facilities': {
-      id: '/app/facilities'
-      path: '/facilities'
-      fullPath: '/app/facilities'
-      preLoaderRoute: typeof AppFacilitiesRouteImport
       parentRoute: typeof AppRoute
     }
     '/app/files': {
@@ -806,20 +765,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDoctorsNewRouteImport
       parentRoute: typeof AppDoctorsRoute
     }
-    '/app/facilities/': {
-      id: '/app/facilities/'
-      path: '/'
-      fullPath: '/app/facilities/'
-      preLoaderRoute: typeof AppFacilitiesIndexRouteImport
-      parentRoute: typeof AppFacilitiesRoute
-    }
-    '/app/facilities/new': {
-      id: '/app/facilities/new'
-      path: '/new'
-      fullPath: '/app/facilities/new'
-      preLoaderRoute: typeof AppFacilitiesNewRouteImport
-      parentRoute: typeof AppFacilitiesRoute
-    }
     '/app/patients/': {
       id: '/app/patients/'
       path: '/'
@@ -921,20 +866,6 @@ const AppDoctorsRouteWithChildren = AppDoctorsRoute._addFileChildren(
   AppDoctorsRouteChildren,
 )
 
-interface AppFacilitiesRouteChildren {
-  AppFacilitiesNewRoute: typeof AppFacilitiesNewRoute
-  AppFacilitiesIndexRoute: typeof AppFacilitiesIndexRoute
-}
-
-const AppFacilitiesRouteChildren: AppFacilitiesRouteChildren = {
-  AppFacilitiesNewRoute: AppFacilitiesNewRoute,
-  AppFacilitiesIndexRoute: AppFacilitiesIndexRoute,
-}
-
-const AppFacilitiesRouteWithChildren = AppFacilitiesRoute._addFileChildren(
-  AppFacilitiesRouteChildren,
-)
-
 interface AppPatientsRouteChildren {
   AppPatientsIdRoute: typeof AppPatientsIdRoute
   AppPatientsNewRoute: typeof AppPatientsNewRoute
@@ -971,7 +902,6 @@ interface AppRouteChildren {
   AppClinicsRoute: typeof AppClinicsRouteWithChildren
   AppDoctorsRoute: typeof AppDoctorsRouteWithChildren
   AppDownloadsRoute: typeof AppDownloadsRoute
-  AppFacilitiesRoute: typeof AppFacilitiesRouteWithChildren
   AppFilesRoute: typeof AppFilesRoute
   AppFollowupsRoute: typeof AppFollowupsRoute
   AppMedicalHistoryRoute: typeof AppMedicalHistoryRoute
@@ -995,7 +925,6 @@ const AppRouteChildren: AppRouteChildren = {
   AppClinicsRoute: AppClinicsRouteWithChildren,
   AppDoctorsRoute: AppDoctorsRouteWithChildren,
   AppDownloadsRoute: AppDownloadsRoute,
-  AppFacilitiesRoute: AppFacilitiesRouteWithChildren,
   AppFilesRoute: AppFilesRoute,
   AppFollowupsRoute: AppFollowupsRoute,
   AppMedicalHistoryRoute: AppMedicalHistoryRoute,
