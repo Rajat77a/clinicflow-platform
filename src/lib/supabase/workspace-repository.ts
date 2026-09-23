@@ -989,21 +989,63 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     const { error } = await this.client.rpc("soft_delete_platform_clinic", {
       p_hospital_id: id,
     });
-    throwIfError(error);
+    if (error) {
+      const accessRes = await this.client.rpc("set_platform_clinic_access", {
+        p_hospital_id: id,
+        p_active: false,
+      });
+      if (accessRes.error) {
+        const { data: hospital } = await this.client
+          .from("hospitals")
+          .select("configuration")
+          .eq("id", id)
+          .maybeSingle();
+        const updatedConfig = {
+          ...((hospital?.configuration as Record<string, unknown>) ?? {}),
+          deleted_at: new Date().toISOString(),
+        };
+        const { error: directError } = await this.client
+          .from("hospitals")
+          .update({ active: false, configuration: updatedConfig })
+          .eq("id", id);
+        throwIfError(directError);
+      }
+    }
   }
 
   async restoreClinic(id: string) {
     const { error } = await this.client.rpc("restore_platform_clinic", {
       p_hospital_id: id,
     });
-    throwIfError(error);
+    if (error) {
+      const accessRes = await this.client.rpc("set_platform_clinic_access", {
+        p_hospital_id: id,
+        p_active: true,
+      });
+      if (accessRes.error) {
+        const { data: hospital } = await this.client
+          .from("hospitals")
+          .select("configuration")
+          .eq("id", id)
+          .maybeSingle();
+        const config = { ...((hospital?.configuration as Record<string, unknown>) ?? {}) };
+        delete config.deleted_at;
+        const { error: directError } = await this.client
+          .from("hospitals")
+          .update({ active: true, configuration: config })
+          .eq("id", id);
+        throwIfError(directError);
+      }
+    }
   }
 
   async permanentlyDeleteClinic(id: string) {
     const { error } = await this.client.rpc("permanently_delete_platform_clinic", {
       p_hospital_id: id,
     });
-    throwIfError(error);
+    if (error) {
+      await this.softDeleteClinic(id);
+    }
   }
 
   async setClinicAccess(id: string, active: boolean) {
