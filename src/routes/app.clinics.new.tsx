@@ -182,20 +182,31 @@ function AddClinic() {
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-emerald-600">
-              <ShieldCheck className="h-5 w-5" /> Clinic Created & Invitation Link Ready
+              <ShieldCheck className="h-5 w-5" /> Clinic Created & Invitation Email Dispatched
             </DialogTitle>
             <DialogDescription className="space-y-2 pt-2">
               <p>
                 <strong>{createdInfo?.clinicName}</strong> ({createdInfo?.clinicId}) has been successfully created.
               </p>
-              <p>
-                An invitation email has been dispatched to Clinical Admin <strong>{createdInfo?.adminName}</strong> (<code>{createdInfo?.adminEmail}</code>).
-              </p>
+              <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/50 p-3 text-emerald-950 dark:bg-emerald-950/20 dark:text-emerald-200">
+                <div className="flex items-center gap-2 font-medium text-xs">
+                  <Mail className="h-4 w-4 text-emerald-600" />
+                  <span>Invitation email dispatched to: <strong>{createdInfo?.adminEmail}</strong></span>
+                </div>
+                <p className="mt-1 text-[11px] text-muted-foreground">
+                  The Clinical Admin ({createdInfo?.adminName}) has been sent their 24-hour password generation link to activate their account and sign in.
+                </p>
+              </div>
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3 py-3">
-            <Label className="text-xs font-semibold text-muted-foreground">24-Hour Password Generation Link</Label>
+          <div className="space-y-3 py-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold text-muted-foreground">24-Hour Password Generation Link</Label>
+              <span className="text-[11px] font-semibold text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 rounded-full">
+                Valid for 24 Hours
+              </span>
+            </div>
             <div className="flex items-center gap-2">
               <Input
                 readOnly
@@ -208,12 +219,22 @@ function AddClinic() {
               </Button>
             </div>
             <p className="text-[11px] text-muted-foreground">
-              ⏰ This link is valid for 24 hours. The Clinical Admin will use this link to set an 8+ character password with uppercase and lowercase letters.
+              ⏰ This link expires in 24 hours. The Clinical Admin will use this link to set an 8+ character password, after which they can sign in using their email and newly set password.
             </p>
           </div>
 
-          <DialogFooter>
-            <Button onClick={handleFinish} className="w-full">
+          <DialogFooter className="gap-2 sm:gap-0">
+            {createdInfo?.setupUrl && (
+              <Button
+                variant="outline"
+                type="button"
+                className="w-full sm:w-auto"
+                onClick={() => window.open(createdInfo.setupUrl, "_blank")}
+              >
+                Open Setup Link in New Tab
+              </Button>
+            )}
+            <Button onClick={handleFinish} className="w-full sm:w-auto">
               Go to Clinics List
             </Button>
           </DialogFooter>

@@ -68,3 +68,33 @@ test("workspace state moves soft deleted clinics to binClinics and excludes from
   assert.match(repositorySource, /restoreClinic/);
   assert.match(repositorySource, /permanentlyDeleteClinic/);
 });
+
+test("clinics list includes select all and bulk delete to trash", () => {
+  assert.match(clinicsListSource, /bulkSoftDeleteClinics/);
+  assert.match(clinicsListSource, /toggleSelectAll/);
+  assert.match(clinicsListSource, /Move Selected to Trash/);
+  assert.match(clinicsListSource, /aria-label="Select all clinics"/);
+  assert.match(workspaceDataSource, /bulkSoftDeleteClinics:\s*async/);
+});
+
+test("trash bin provides empty trash and delete all from trash", () => {
+  assert.match(clinicsBinSource, /emptyTrash/);
+  assert.match(clinicsBinSource, /Empty Trash/);
+  assert.match(clinicsBinSource, /Delete All from Trash/);
+  assert.match(clinicsBinSource, /aria-label="Select all clinics in trash"/);
+  assert.match(clinicsBinSource, /bulkPermanentlyDeleteClinics/);
+  assert.match(workspaceDataSource, /emptyTrash:\s*async/);
+});
+
+test("clinical admin invitation email is generated with 24-hour setup link", () => {
+  assert.match(workspaceDataSource, /sendInvitationEmail\(\{[\s\S]*?expiresInHours:\s*24/);
+  assert.match(workspaceDataSource, /registerLocalInviteToken/);
+});
+
+test("clinic edit pre-populates existing clinic and clinical admin details", () => {
+  assert.match(clinicEditSource, /adminStaff/);
+  assert.match(clinicEditSource, /clinic\?\.adminName\s*\?\?\s*adminStaff\?\.name/);
+  assert.match(clinicEditSource, /clinic\?\.email/);
+  assert.match(clinicEditSource, /clinic\?\.phone/);
+  assert.match(clinicEditSource, /clinic\?\.address/);
+});
