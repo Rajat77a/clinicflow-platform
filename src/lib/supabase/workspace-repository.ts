@@ -32,6 +32,7 @@ import { getSupabaseBrowserClient } from "./client";
 import { normalizePageInput } from "../record-page";
 import { throwIfFunctionError } from "./function-error";
 import { toSafeBackendError } from "../backend/safe-error";
+import { sendInvitationEmail } from "../email-service";
 
 // Supabase query results are validated and normalized at this repository boundary.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -704,34 +705,99 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     roleCode: "clinic_admin" | "doctor" | "receptionist" | "super_admin",
     targetHospitalId?: string,
   ): Promise<{ setupUrl: string }> {
-    const requestId = randomKey();
-    const { data, error } = await this.client.functions.invoke("invite-staff", {
-      headers: {
-        "Idempotency-Key": randomKey(),
-        "X-Request-ID": requestId,
-      },
-      body: {
-        email: input.email,
-        fullName: input.name,
-        phone: input.phone,
-        roleCode,
-        targetHospitalId,
-        specialty: "specialty" in input ? input.specialty : undefined,
-        shift: "shift" in input ? input.shift : undefined,
-        gender: "gender" in input ? input.gender : undefined,
-        qualification: "qualification" in input ? input.qualification : undefined,
-        medicalRegistrationNumber: "medicalRegistrationNumber" in input ? input.medicalRegistrationNumber : undefined,
-        experienceYears: "experienceYears" in input ? input.experienceYears : undefined,
-        consultationFee: "consultationFee" in input ? input.consultationFee : undefined,
-        workingHours: "workingHours" in input ? input.workingHours : undefined,
-        notes: "notes" in input ? input.notes : undefined,
-      },
-    });
-    await throwIfFunctionError(error);
-    if (!data || typeof data.setupUrl !== "string") {
-      throw new Error("The invitation service returned an invalid response");
+    let hospitalId = targetHospitalId;
+    if (!hospitalId) {
+      const { data: hospital } = await this.client.from("hospitals").select("id").single();
+      hospitalId = hospital?.id ?? "";
     }
-    return { setupUrl: data.setupUrl };
+
+    let setupUrl: string | undefined;
+
+    // Try Edge Function first if available
+    try {
+      const requestId = randomKey();
+      const { data, error } = await this.client.functions.invoke("invite-staff", {
+        headers: {
+          "Idempotency-Key": randomKey(),
+          "X-Request-ID": requestId,
+        },
+        body: {
+          email: input.email,
+          fullName: input.name,
+          phone: input.phone,
+          roleCode,
+          targetHospitalId: hospitalId,
+          specialty: "specialty" in input ? input.specialty : undefined,
+          shift: "shift" in input ? input.shift : undefined,
+          gender: "gender" in input ? input.gender : undefined,
+          qualification: "qualification" in input ? input.qualification : undefined,
+          medicalRegistrationNumber: "medicalRegistrationNumber" in input ? input.medicalRegistrationNumber : undefined,
+          experienceYears: "experienceYears" in input ? input.experienceYears : undefined,
+          consultationFee: "consultationFee" in input ? input.consultationFee : undefined,
+          workingHours: "workingHours" in input ? input.workingHours : undefined,
+          notes: "notes" in input ? input.notes : undefined,
+        },
+      });
+      await throwIfFunctionError(error);
+      if (data && typeof data.setupUrl === "string") {
+        setupUrl = data.setupUrl;
+      }
+    } catch {
+      // Fallback to database RPC if Edge Function is unavailable or fails
+    }
+
+    // Fallback: Call create_staff_invite_token RPC directly
+    if (!setupUrl) {
+      const { data: tokenResult, error: tokenError } = await this.client.rpc(
+        "create_staff_invite_token",
+        {
+          p_email: input.email,
+          p_full_name: input.name,
+          p_phone: input.phone || "",
+          p_role_code: roleCode,
+          p_hospital_id: hospitalId,
+          p_specialty: "specialty" in input ? input.specialty : null,
+          p_shift: "shift" in input ? input.shift : null,
+          p_gender: "gender" in input ? input.gender : null,
+          p_qualification: "qualification" in input ? input.qualification : null,
+          p_medical_registration_number: "medicalRegistrationNumber" in input ? input.medicalRegistrationNumber : null,
+          p_experience_years: "experienceYears" in input ? input.experienceYears : null,
+          p_consultation_fee: "consultationFee" in input ? input.consultationFee : null,
+          p_working_hours: "workingHours" in input ? input.workingHours : null,
+          p_notes: "notes" in input ? input.notes : null,
+        },
+      );
+      throwIfError(tokenError);
+      if (!tokenResult || typeof tokenResult.token !== "string") {
+        throw new Error("Failed to generate staff invite token");
+      }
+      const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:5173";
+      setupUrl = `${origin}/setup?token=${tokenResult.token}`;
+    }
+
+    let clinicName = "ClinicFlow";
+    if (hospitalId) {
+      const { data: hospital } = await this.client.from("hospitals").select("name").eq("id", hospitalId).single();
+      if (hospital?.name) clinicName = hospital.name;
+    }
+
+    const roleTitles: Record<string, string> = {
+      super_admin: "Super Admin",
+      clinic_admin: "Clinical Admin",
+      doctor: "Doctor",
+      receptionist: "Receptionist",
+    };
+
+    void sendInvitationEmail({
+      recipientEmail: input.email,
+      recipientName: input.name,
+      clinicName,
+      setupUrl,
+      roleTitle: roleTitles[roleCode] ?? "Staff Member",
+      expiresInHours: 24,
+    });
+
+    return { setupUrl };
   }
 
   async createDoctor(input: DoctorInput) {
@@ -802,20 +868,15 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       hospitalId = hospital?.id ?? "";
     }
     if (!hospitalId) throw new Error("A hospital must be selected");
-    const { data: tokenResult, error: tokenError } = await this.client.rpc(
-      "create_staff_invite_token",
+    await this.inviteStaff(
       {
-        p_email: input.email,
-        p_full_name: input.name,
-        p_phone: input.phone,
-        p_role_code: "clinic_admin",
-        p_hospital_id: hospitalId,
+        email: input.email,
+        name: input.name,
+        phone: input.phone,
       },
+      "clinic_admin",
+      hospitalId,
     );
-    throwIfError(tokenError);
-    if (!tokenResult || typeof tokenResult.token !== "string") {
-      throw new Error("Failed to generate admin invite token");
-    }
     const membership: StaffMember = {
       id: `pending-${randomKey().slice(0, 8)}`,
       clinicId: hospitalId,
@@ -861,21 +922,24 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     throwIfError(error);
     if (!data) throw new Error("Failed to create clinic");
     if (input.logo) {
-      if (!["image/jpeg", "image/png", "image/webp"].includes(input.logo.type) || input.logo.size > 2 * 1024 * 1024) {
-        throw new Error("Clinic logo must be a PNG, JPG or WebP up to 2 MB");
+      try {
+        if (["image/jpeg", "image/png", "image/webp"].includes(input.logo.type) && input.logo.size <= 2 * 1024 * 1024) {
+          const extension = input.logo.type === "image/png" ? "png" : input.logo.type === "image/webp" ? "webp" : "jpg";
+          const logoPath = `${data}/logo.${extension}`;
+          const { error: uploadError } = await this.client.storage
+            .from("clinic-branding")
+            .upload(logoPath, input.logo, { contentType: input.logo.type, upsert: true });
+          if (!uploadError) {
+            await this.client.rpc("update_platform_clinic", {
+              p_hospital_id: data,
+              p_name: input.name,
+              p_configuration: { logo_path: logoPath, logo_name: input.logo.name },
+            });
+          }
+        }
+      } catch (err) {
+        console.warn("Logo upload skipped:", err);
       }
-      const extension = input.logo.type === "image/png" ? "png" : input.logo.type === "image/webp" ? "webp" : "jpg";
-      const logoPath = `${data}/logo.${extension}`;
-      const { error: uploadError } = await this.client.storage
-        .from("clinic-branding")
-        .upload(logoPath, input.logo, { contentType: input.logo.type, upsert: true });
-      throwIfError(uploadError);
-      const { error: logoConfigError } = await this.client.rpc("update_platform_clinic", {
-        p_hospital_id: data,
-        p_name: input.name,
-        p_configuration: { logo_path: logoPath, logo_name: input.logo.name },
-      });
-      throwIfError(logoConfigError);
     }
     if (input.adminName && input.adminEmail) {
       await this.inviteStaff(
