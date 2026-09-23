@@ -363,8 +363,31 @@ function appendAudit(state: WorkspaceSnapshot, actor: AuthUser, action: string):
 
 function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot {
   switch (command.type) {
-    case "snapshot.loaded":
-      return command.value;
+    case "snapshot.loaded": {
+      const softDeletedMap = new Map<string, string>();
+      (state.clinics || []).forEach((c) => {
+        if (c.deletedAt) {
+          softDeletedMap.set(c.id, c.deletedAt);
+        }
+      });
+      const permDeleted = state.permanentlyDeletedIds || new Set<string>();
+
+      const updatedClinics = command.value.clinics
+        .filter((c) => !permDeleted.has(c.id))
+        .map((c) => {
+          const localDeletedAt = softDeletedMap.get(c.id);
+          if (localDeletedAt && !c.deletedAt) {
+            return { ...c, access: "Suspended" as const, deletedAt: localDeletedAt };
+          }
+          return c;
+        });
+
+      return {
+        ...command.value,
+        clinics: updatedClinics,
+        permanentlyDeletedIds: permDeleted,
+      };
+    }
     case "clinic.created":
       return appendAudit(
         { ...state, clinics: [command.value, ...state.clinics] },
@@ -509,15 +532,19 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         command.actor,
         `Restored clinic ${command.id}`,
       );
-    case "clinic.permanently_deleted":
+    case "clinic.permanently_deleted": {
+      const nextPerm = new Set(state.permanentlyDeletedIds || []);
+      nextPerm.add(command.id);
       return appendAudit(
         {
           ...state,
           clinics: state.clinics.filter((c) => c.id !== command.id),
+          permanentlyDeletedIds: nextPerm,
         },
         command.actor,
         `Permanently deleted clinic ${command.id}`,
       );
+    }
   }
 }
 
@@ -935,30 +962,27 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       },
       softDeleteClinic: async (id) => {
         const actor = requireUser(user, "platform.clinics.manage");
+        dispatch({ type: "clinic.soft_deleted", id, actor });
         if (repository) {
           await repository.softDeleteClinic(id);
-          await refresh();
-          return;
+          await refresh().catch(() => undefined);
         }
-        dispatch({ type: "clinic.soft_deleted", id, actor });
       },
       restoreClinic: async (id) => {
         const actor = requireUser(user, "platform.clinics.manage");
+        dispatch({ type: "clinic.restored", id, actor });
         if (repository) {
           await repository.restoreClinic(id);
-          await refresh();
-          return;
+          await refresh().catch(() => undefined);
         }
-        dispatch({ type: "clinic.restored", id, actor });
       },
       permanentlyDeleteClinic: async (id) => {
         const actor = requireUser(user, "platform.clinics.manage");
+        dispatch({ type: "clinic.permanently_deleted", id, actor });
         if (repository) {
           await repository.permanentlyDeleteClinic(id);
-          await refresh();
-          return;
+          await refresh().catch(() => undefined);
         }
-        dispatch({ type: "clinic.permanently_deleted", id, actor });
       },
       setClinicAccess: async (id, active) => {
         requireUser(user, "platform.clinics.manage");
