@@ -17,7 +17,7 @@ export const Route = createFileRoute("/app/clinics/")({ component: ClinicsPage }
 
 function ClinicsPage() {
   const { user } = useAuth();
-  const { clinics, setClinicAccess, softDeleteClinic } = useWorkspaceData();
+  const { clinics, binClinics, setClinicAccess, softDeleteClinic } = useWorkspaceData();
   const navigate = useNavigate();
   const [suspendTarget, setSuspendTarget] = useState<Clinic | null>(null);
   const [isSuspending, setIsSuspending] = useState(false);
@@ -65,7 +65,7 @@ function ClinicsPage() {
     setIsDeleting(true);
     try {
       await softDeleteClinic(deleteTarget.id);
-      toast.success(`${deleteTarget.name} moved to Trash Bin`);
+      toast.success(`${deleteTarget.name} moved to Trash`);
       setDeleteTarget(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to delete clinic");
@@ -85,7 +85,14 @@ function ClinicsPage() {
                <Download className="mr-1.5 h-4 w-4" />Download
              </Button>
              <Button variant="outline" asChild>
-               <Link to="/app/clinics/bin"><Trash2 className="mr-1.5 h-4 w-4" /> Trash Bin</Link>
+               <Link to="/app/clinics/bin">
+                 <Trash2 className="mr-1.5 h-4 w-4" /> Trash
+                 {binClinics.length > 0 && (
+                   <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-destructive/15 text-destructive px-1.5 py-0.5 text-xs font-semibold">
+                     {binClinics.length}
+                   </span>
+                 )}
+               </Link>
              </Button>
              <Button asChild>
                <Link to="/app/clinics/new"><Plus className="mr-1.5 h-4 w-4" /> Add Clinic</Link>
@@ -221,11 +228,11 @@ function ClinicsPage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
-              <Trash2 className="h-5 w-5" /> Move to Trash Bin
+              <Trash2 className="h-5 w-5" /> Move to Trash
             </DialogTitle>
             <DialogDescription>
               Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
-              The clinic will be moved to the Trash Bin where it will be kept for up to 30 days before being permanently deleted.
+              The clinic will be moved to the Trash where it will be kept for up to 30 days before being permanently deleted.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -235,7 +242,7 @@ function ClinicsPage() {
               onClick={handleSoftDelete}
               disabled={isDeleting}
             >
-              {isDeleting ? "Deleting..." : "Move to Trash"}
+              {isDeleting ? "Moving to Trash..." : "Move to Trash"}
             </Button>
           </DialogFooter>
         </DialogContent>

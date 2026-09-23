@@ -1,12 +1,15 @@
 import { createFileRoute, useNavigate, useParams } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FileUploader } from "@/components/forms/file-uploader";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useAuth } from "@/lib/auth";
 import { useWorkspaceData } from "@/lib/workspace-data";
+import { Trash2 } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/clinics/$id/edit")({ component: EditClinic });
@@ -23,21 +26,37 @@ function Field({ label, children, span = 6 }: { label: string; children: React.R
 
 function EditClinic() {
   const navigate = useNavigate();
-  const { updateClinic, clinics } = useWorkspaceData();
+  const { user } = useAuth();
+  const { updateClinic, softDeleteClinic, clinics } = useWorkspaceData();
   const { id } = useParams({ from: "/app/clinics/$id/edit" });
   const clinic = clinics.find(c => c.id === id);
-  const [form, setForm] = useState({
-    id: "",
-    name: "",
+  const isSuperAdmin = user?.role === "super_admin";
+
+  const [form, setForm] = useState(() => ({
+    id: clinic?.id ?? "",
+    name: clinic?.name ?? "",
     email: "",
     phone: "",
-    address: "",
+    address: clinic?.city ?? "",
     logoName: "",
     adminName: "",
     adminEmail: "",
     adminPhone: "",
-  });
+  }));
   const [isSaving, setIsSaving] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    if (clinic) {
+      setForm(prev => ({
+        ...prev,
+        id: clinic.id,
+        name: prev.name || clinic.name,
+        address: prev.address || clinic.city,
+      }));
+    }
+  }, [clinic]);
 
   if (!clinic) {
     return (
@@ -55,7 +74,7 @@ function EditClinic() {
     setIsSaving(true);
     try {
       await updateClinic({
-        id: form.id,
+        id: form.id || clinic.id,
         name: form.name.trim(),
         city: form.address.split(",").map(part => part.trim()).filter(Boolean).at(-1) ?? form.address.trim(),
         email: form.email.trim(),
@@ -72,9 +91,38 @@ function EditClinic() {
     }
   };
 
+  const handleDelete = async () => {
+    if (!clinic) return;
+    setIsDeleting(true);
+    try {
+      await softDeleteClinic(clinic.id);
+      toast.success(`${clinic.name} moved to Trash`);
+      setShowDeleteDialog(false);
+      navigate({ to: "/app/clinics" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to delete clinic");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <>
-      <PageHeader title="Edit Clinic" description="Update the clinic details." />
+      <PageHeader
+        title="Edit Clinic"
+        description="Update the clinic details or move it to trash."
+        actions={
+          isSuperAdmin ? (
+            <Button
+              variant="outline"
+              className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+              onClick={() => setShowDeleteDialog(true)}
+            >
+              <Trash2 className="mr-1.5 h-4 w-4" /> Move to Trash
+            </Button>
+          ) : undefined
+        }
+      />
       <form onSubmit={submit} className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <section className="rounded-2xl border bg-card p-6 shadow-soft">
@@ -112,6 +160,26 @@ function EditClinic() {
               </Field>
             </div>
           </section>
+
+          {isSuperAdmin && (
+            <section className="rounded-2xl border border-destructive/30 bg-destructive/5 p-6 shadow-soft">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-display text-base font-semibold text-destructive">Danger Zone</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Move this clinic to the Trash. The clinic will be deactivated and can be restored from the Trash.
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={() => setShowDeleteDialog(true)}
+                >
+                  <Trash2 className="mr-1.5 h-4 w-4" /> Move to Trash
+                </Button>
+              </div>
+            </section>
+          )}
         </div>
 
         <aside className="space-y-6">
@@ -128,6 +196,30 @@ function EditClinic() {
           </div>
         </aside>
       </form>
+
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" /> Move to Trash
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <strong>{clinic.name}</strong>?
+              The clinic will be moved to the Trash where it will be kept for up to 30 days before being permanently deleted.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)} disabled={isDeleting}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={handleDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Moving to Trash..." : "Move to Trash"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

@@ -28,7 +28,7 @@ function TrashBinPage() {
         <ShieldAlert className="h-12 w-12 text-destructive mb-4" />
         <h2 className="text-xl font-bold">Access Denied</h2>
         <p className="text-muted-foreground mt-1 mb-4">
-          The Trash Bin is accessible to Super Administrators only.
+          The Trash is accessible to Super Administrators only.
         </p>
         <Button asChild variant="outline">
           <Link to="/app">Return to Dashboard</Link>
@@ -76,8 +76,8 @@ function TrashBinPage() {
   return (
     <>
       <PageHeader
-        title="Clinic Trash Bin"
-        description="Soft-deleted clinics are stored here for 30 days before being automatically purged."
+        title="Clinic Trash"
+        description="Soft-deleted clinics are stored here for up to 30 days before being automatically purged."
         actions={
           <Button variant="outline" asChild>
             <Link to="/app/clinics">
@@ -90,7 +90,7 @@ function TrashBinPage() {
       <div className="rounded-2xl border bg-card shadow-soft">
         <div className="flex items-center gap-2 border-b p-4 text-sm font-medium text-muted-foreground">
           <Trash2 className="h-4 w-4 text-destructive" />
-          <span>{binClinics.length} deleted clinic{binClinics.length === 1 ? "" : "s"} in Trash Bin</span>
+          <span>{binClinics.length} deleted clinic{binClinics.length === 1 ? "" : "s"} in Trash</span>
         </div>
 
         <div className="overflow-x-auto">
@@ -108,7 +108,7 @@ function TrashBinPage() {
               {binClinics.length === 0 ? (
                 <TableRow>
                   <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
-                    The Trash Bin is empty. No deleted clinics found.
+                    The Trash is empty. No deleted clinics found.
                   </TableCell>
                 </TableRow>
               ) : (
