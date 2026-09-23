@@ -179,35 +179,38 @@ Deno.serve(async (request) => {
         .maybeSingle();
       if (facilityError || !facility) return response(422, { error: "Invalid facility" });
     } else {
-      const { data: facility, error: facilityError } = await adminClient
+      const { data: facility } = await adminClient
         .from("facilities")
-        .select("id")
+        .select("id, active")
         .eq("hospital_id", effectiveHospitalId)
-        .eq("active", true)
         .order("created_at")
         .limit(1)
         .maybeSingle();
-      facilityId = facility?.id ?? null;
-      if (!facilityId) {
+      if (facility) {
+        facilityId = facility.id;
+        if (!facility.active) {
+          await adminClient.from("facilities").update({ active: true }).eq("id", facility.id);
+        }
+      } else {
         const { data: hospital } = await adminClient
           .from("hospitals")
           .select("name")
           .eq("id", effectiveHospitalId)
           .maybeSingle();
-        const { data: created, error: createError } = await adminClient
+        const mainCode = `MAIN-${crypto.randomUUID().slice(0, 4).toUpperCase()}`;
+        const { data: created } = await adminClient
           .from("facilities")
           .insert({
             hospital_id: effectiveHospitalId,
-            code: "MAIN",
+            code: mainCode,
             name: hospital?.name ? `${hospital.name} Main Facility` : "Main Facility",
             active: true,
           })
           .select("id")
-          .single();
-        if (createError || !created) {
-          return response(422, { error: "Create an active facility before inviting staff" });
+          .maybeSingle();
+        if (created) {
+          facilityId = created.id;
         }
-        facilityId = created.id;
       }
     }
     if (departmentId) {
