@@ -410,6 +410,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       expires: row.expires ?? "Not set",
       price: Number(row.price ?? 499),
       access: row.access === "Suspended" ? "Suspended" as const : "Allowed" as const,
+      deletedAt: row.configuration?.deleted_at || undefined,
     }));
 
     const facilities: Facility[] = ((facilitiesResult.data ?? []) as Row[]).map((row) => ({
@@ -981,9 +982,26 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   }
 
   async deleteClinic(id: string) {
-    const { error } = await this.client.rpc("set_platform_clinic_access", {
+    await this.softDeleteClinic(id);
+  }
+
+  async softDeleteClinic(id: string) {
+    const { error } = await this.client.rpc("soft_delete_platform_clinic", {
       p_hospital_id: id,
-      p_active: false,
+    });
+    throwIfError(error);
+  }
+
+  async restoreClinic(id: string) {
+    const { error } = await this.client.rpc("restore_platform_clinic", {
+      p_hospital_id: id,
+    });
+    throwIfError(error);
+  }
+
+  async permanentlyDeleteClinic(id: string) {
+    const { error } = await this.client.rpc("permanently_delete_platform_clinic", {
+      p_hospital_id: id,
     });
     throwIfError(error);
   }
