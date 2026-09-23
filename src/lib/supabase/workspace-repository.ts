@@ -398,20 +398,22 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       mapBill(row, patientById.get(row.patient_id)?.name),
     );
 
-    const clinics = clinicRows.map((row) => ({
-      id: row.id,
-      name: row.name,
-      city: row.city ?? "Not set",
-      doctors: Number(row.doctors ?? 0),
-      receptionists: Number(row.receptionists ?? 0),
-      patients: Number(row.patients ?? 0),
-      plan: row.plan ?? "ClinicFlow",
-      status: row.status ?? "Expired",
-      expires: row.expires ?? "Not set",
-      price: Number(row.price ?? 499),
-      access: row.access === "Suspended" ? "Suspended" as const : "Allowed" as const,
-      deletedAt: row.configuration?.deleted_at || undefined,
-    }));
+    const clinics = clinicRows
+      .filter((row) => row.configuration?.purged !== "true" && row.configuration?.purged !== true)
+      .map((row) => ({
+        id: row.id,
+        name: row.name,
+        city: row.city ?? "Not set",
+        doctors: Number(row.doctors ?? 0),
+        receptionists: Number(row.receptionists ?? 0),
+        patients: Number(row.patients ?? 0),
+        plan: row.plan ?? "ClinicFlow",
+        status: row.status ?? "Expired",
+        expires: row.expires ?? "Not set",
+        price: Number(row.price ?? 499),
+        access: row.access === "Suspended" ? "Suspended" as const : "Allowed" as const,
+        deletedAt: row.configuration?.deleted_at || undefined,
+      }));
 
     const facilities: Facility[] = ((facilitiesResult.data ?? []) as Row[]).map((row) => ({
       id: row.id,
@@ -990,25 +992,25 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       p_hospital_id: id,
     });
     if (error) {
-      const accessRes = await this.client.rpc("set_platform_clinic_access", {
-        p_hospital_id: id,
-        p_active: false,
-      });
-      if (accessRes.error) {
-        const { data: hospital } = await this.client
-          .from("hospitals")
-          .select("configuration")
-          .eq("id", id)
-          .maybeSingle();
-        const updatedConfig = {
-          ...((hospital?.configuration as Record<string, unknown>) ?? {}),
-          deleted_at: new Date().toISOString(),
-        };
-        const { error: directError } = await this.client
-          .from("hospitals")
-          .update({ active: false, configuration: updatedConfig })
-          .eq("id", id);
-        throwIfError(directError);
+      const { data: hospital } = await this.client
+        .from("hospitals")
+        .select("configuration")
+        .eq("id", id)
+        .maybeSingle();
+      const config: Record<string, unknown> = {
+        ...((hospital?.configuration as Record<string, unknown>) ?? {}),
+        deleted_at: new Date().toISOString(),
+      };
+      delete config.purged;
+      const { error: directError } = await this.client
+        .from("hospitals")
+        .update({ active: false, configuration: config })
+        .eq("id", id);
+      if (directError) {
+        await this.client.rpc("set_platform_clinic_access", {
+          p_hospital_id: id,
+          p_active: false,
+        });
       }
     }
   }
@@ -1018,23 +1020,23 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       p_hospital_id: id,
     });
     if (error) {
-      const accessRes = await this.client.rpc("set_platform_clinic_access", {
-        p_hospital_id: id,
-        p_active: true,
-      });
-      if (accessRes.error) {
-        const { data: hospital } = await this.client
-          .from("hospitals")
-          .select("configuration")
-          .eq("id", id)
-          .maybeSingle();
-        const config = { ...((hospital?.configuration as Record<string, unknown>) ?? {}) };
-        delete config.deleted_at;
-        const { error: directError } = await this.client
-          .from("hospitals")
-          .update({ active: true, configuration: config })
-          .eq("id", id);
-        throwIfError(directError);
+      const { data: hospital } = await this.client
+        .from("hospitals")
+        .select("configuration")
+        .eq("id", id)
+        .maybeSingle();
+      const config: Record<string, unknown> = { ...((hospital?.configuration as Record<string, unknown>) ?? {}) };
+      delete config.deleted_at;
+      delete config.purged;
+      const { error: directError } = await this.client
+        .from("hospitals")
+        .update({ active: true, configuration: config })
+        .eq("id", id);
+      if (directError) {
+        await this.client.rpc("set_platform_clinic_access", {
+          p_hospital_id: id,
+          p_active: true,
+        });
       }
     }
   }
@@ -1044,7 +1046,23 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       p_hospital_id: id,
     });
     if (error) {
-      await this.softDeleteClinic(id);
+      const { data: hospital } = await this.client
+        .from("hospitals")
+        .select("configuration")
+        .eq("id", id)
+        .maybeSingle();
+      const config: Record<string, unknown> = {
+        ...((hospital?.configuration as Record<string, unknown>) ?? {}),
+        purged: "true",
+        deleted_at: new Date().toISOString(),
+      };
+      const { error: directError } = await this.client
+        .from("hospitals")
+        .update({ active: false, configuration: config })
+        .eq("id", id);
+      if (directError) {
+        await this.softDeleteClinic(id);
+      }
     }
   }
 
