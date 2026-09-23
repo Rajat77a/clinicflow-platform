@@ -3,7 +3,7 @@ import {
   LayoutDashboard, Building2, Users, CreditCard, Wallet, FileBarChart, Settings,
   Stethoscope, UserCog, UsersRound, CalendarDays, Receipt, FileText,
   FolderOpen, ShieldCheck, LifeBuoy, BellRing, Plus, CalendarClock, Download, FlaskConical,
-  Hospital as HospitalIcon,
+  Hospital as HospitalIcon, Trash2,
 } from "lucide-react";
 import { useAuth, type Role } from "@/lib/auth";
 import { isProductionReadyPath } from "@/lib/production-readiness";
@@ -21,6 +21,7 @@ const NAV: Record<Role, NavSection[]> = {
     { label: "Operations", items: [
       { to: "/app/clinics", label: "Clinics", icon: Building2 },
       { to: "/app/clinics/new", label: "Add Clinic", icon: Plus },
+      { to: "/app/clinics/bin", label: "Trash Bin", icon: Trash2 },
       { to: "/app/subscriptions", label: "Subscriptions", icon: CreditCard },
       { to: "/app/payments", label: "Payments", icon: Wallet },
       { to: "/app/users", label: "Users", icon: Users },

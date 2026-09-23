@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth";
 import { useWorkspaceData, type Clinic } from "@/lib/workspace-data";
-import { Search, Plus, Download, MapPin, Pencil, Power } from "lucide-react";
+import { Search, Plus, Download, MapPin, Pencil, Power, Trash2 } from "lucide-react";
 import { downloadCSV } from "@/lib/exporters";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
@@ -17,11 +17,13 @@ export const Route = createFileRoute("/app/clinics/")({ component: ClinicsPage }
 
 function ClinicsPage() {
   const { user } = useAuth();
-  const { clinics, setClinicAccess } = useWorkspaceData();
+  const { clinics, setClinicAccess, softDeleteClinic } = useWorkspaceData();
   const navigate = useNavigate();
   const [suspendTarget, setSuspendTarget] = useState<Clinic | null>(null);
   const [isSuspending, setIsSuspending] = useState(false);
-   const isSuperAdmin = user?.role === "super_admin";
+  const [deleteTarget, setDeleteTarget] = useState<Clinic | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const isSuperAdmin = user?.role === "super_admin";
 
   const exportClinic = (c: Clinic) => {
     const summary = [{
@@ -58,6 +60,20 @@ function ClinicsPage() {
     }
   };
 
+  const handleSoftDelete = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    try {
+      await softDeleteClinic(deleteTarget.id);
+      toast.success(`${deleteTarget.name} moved to Trash Bin`);
+      setDeleteTarget(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to delete clinic");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   return (
     <>
       <PageHeader
@@ -67,6 +83,9 @@ function ClinicsPage() {
            <div className="flex gap-2">
              <Button variant="outline" onClick={exportAll}>
                <Download className="mr-1.5 h-4 w-4" />Download
+             </Button>
+             <Button variant="outline" asChild>
+               <Link to="/app/clinics/bin"><Trash2 className="mr-1.5 h-4 w-4" /> Trash Bin</Link>
              </Button>
              <Button asChild>
                <Link to="/app/clinics/new"><Plus className="mr-1.5 h-4 w-4" /> Add Clinic</Link>
@@ -156,6 +175,15 @@ function ClinicsPage() {
                         >
                           <Pencil className="h-3.5 w-3.5" />
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:bg-destructive/10"
+                          onClick={() => setDeleteTarget(c)}
+                          title={`Delete ${c.name}`}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
                       </div>
                     </TableCell>
                   )}
@@ -184,6 +212,30 @@ function ClinicsPage() {
               disabled={isSuspending}
             >
               {isSuspending ? "Updating..." : "Confirm"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" /> Move to Trash Bin
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
+              The clinic will be moved to the Trash Bin where it will be kept for up to 30 days before being permanently deleted.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteTarget(null)} disabled={isDeleting}>Cancel</Button>
+            <Button
+              variant="destructive"
+              onClick={handleSoftDelete}
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Deleting..." : "Move to Trash"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -38,6 +38,7 @@ export type Clinic = {
   expires: string;
   price: number;
   access: "Allowed" | "Suspended";
+  deletedAt?: string;
 };
 export type Patient = {
   id: string;
@@ -317,7 +318,10 @@ type Command =
   | { type: "bill.updated"; value: Bill; actor: AuthUser }
   | { type: "staff.invited"; value: StaffMember; actor: AuthUser }
   | { type: "staff.deactivated"; userId: string; actor: AuthUser }
-  | { type: "facility.created"; value: Facility; actor: AuthUser };
+  | { type: "facility.created"; value: Facility; actor: AuthUser }
+  | { type: "clinic.soft_deleted"; id: string; actor: AuthUser }
+  | { type: "clinic.restored"; id: string; actor: AuthUser }
+  | { type: "clinic.permanently_deleted"; id: string; actor: AuthUser };
 
 function createId(prefix: string) {
   const suffix = globalThis.crypto?.randomUUID?.().slice(0, 8).toUpperCase()
@@ -478,6 +482,41 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         command.actor,
         `Created facility ${command.value.id}`,
       );
+    case "clinic.soft_deleted":
+      return appendAudit(
+        {
+          ...state,
+          clinics: state.clinics.map((c) =>
+            c.id === command.id
+              ? { ...c, access: "Suspended", deletedAt: new Date().toISOString() }
+              : c
+          ),
+        },
+        command.actor,
+        `Soft deleted clinic ${command.id}`,
+      );
+    case "clinic.restored":
+      return appendAudit(
+        {
+          ...state,
+          clinics: state.clinics.map((c) =>
+            c.id === command.id
+              ? { ...c, access: "Allowed", deletedAt: undefined }
+              : c
+          ),
+        },
+        command.actor,
+        `Restored clinic ${command.id}`,
+      );
+    case "clinic.permanently_deleted":
+      return appendAudit(
+        {
+          ...state,
+          clinics: state.clinics.filter((c) => c.id !== command.id),
+        },
+        command.actor,
+        `Permanently deleted clinic ${command.id}`,
+      );
   }
 }
 
@@ -486,6 +525,7 @@ interface WorkspaceData {
   error: string | null;
   syncStatus: "connecting" | "live" | "offline" | "error";
   clinics: Clinic[];
+  binClinics: Clinic[];
   patients: Patient[];
   doctors: Doctor[];
   receptionists: Receptionist[];
@@ -507,6 +547,9 @@ interface WorkspaceData {
   createClinic: (input: ClinicInput) => Promise<Clinic>;
   updateClinic: (input: ClinicInput) => Promise<void>;
   deleteClinic: (id: string) => Promise<void>;
+  softDeleteClinic: (id: string) => Promise<void>;
+  restoreClinic: (id: string) => Promise<void>;
+  permanentlyDeleteClinic: (id: string) => Promise<void>;
   setClinicAccess: (id: string, active: boolean) => Promise<void>;
   extendSubscription: (id: string, days: number, proofRef?: string) => Promise<void>;
   createDoctor: (input: DoctorInput) => Promise<Doctor>;
@@ -693,7 +736,12 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       error,
       syncStatus,
       refresh,
-      clinics: state.clinics,
+      clinics: state.clinics.filter((c) => !c.deletedAt),
+      binClinics: state.clinics.filter((c) => {
+        if (!c.deletedAt) return false;
+        const daysOld = (Date.now() - new Date(c.deletedAt).getTime()) / (1000 * 60 * 60 * 24);
+        return daysOld < 30;
+      }),
       patients,
       doctors: clinicScope(state.doctors),
       receptionists: clinicScope(state.receptionists),
@@ -877,7 +925,34 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           await refresh();
           return;
         }
-        throw new Error("Clinic deletion is only supported in production mode");
+        dispatch({ type: "clinic.soft_deleted", id, actor });
+      },
+      softDeleteClinic: async (id) => {
+        const actor = requireUser(user, "platform.clinics.manage");
+        if (repository) {
+          await repository.softDeleteClinic(id);
+          await refresh();
+          return;
+        }
+        dispatch({ type: "clinic.soft_deleted", id, actor });
+      },
+      restoreClinic: async (id) => {
+        const actor = requireUser(user, "platform.clinics.manage");
+        if (repository) {
+          await repository.restoreClinic(id);
+          await refresh();
+          return;
+        }
+        dispatch({ type: "clinic.restored", id, actor });
+      },
+      permanentlyDeleteClinic: async (id) => {
+        const actor = requireUser(user, "platform.clinics.manage");
+        if (repository) {
+          await repository.permanentlyDeleteClinic(id);
+          await refresh();
+          return;
+        }
+        dispatch({ type: "clinic.permanently_deleted", id, actor });
       },
       setClinicAccess: async (id, active) => {
         requireUser(user, "platform.clinics.manage");
