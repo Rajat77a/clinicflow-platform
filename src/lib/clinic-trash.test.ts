@@ -26,6 +26,18 @@ const repositorySource = await readFile(
   new URL("./supabase/workspace-repository.ts", import.meta.url),
   "utf8",
 );
+const newClinicSource = await readFile(
+  new URL("../routes/app.clinics.new.tsx", import.meta.url),
+  "utf8",
+);
+const setupSource = await readFile(
+  new URL("../routes/setup.tsx", import.meta.url),
+  "utf8",
+);
+const authSource = await readFile(
+  new URL("./auth.tsx", import.meta.url),
+  "utf8",
+);
 
 test("super admin portal contains clinic deletion moving to trash", () => {
   // Only super admins see the delete button and trash navigation
@@ -98,3 +110,19 @@ test("clinic edit pre-populates existing clinic and clinical admin details", () 
   assert.match(clinicEditSource, /clinic\?\.phone/);
   assert.match(clinicEditSource, /clinic\?\.address/);
 });
+
+test("new clinic creation offers direct email dispatch via mailto and webmail", () => {
+  assert.match(newClinicSource, /Send via Email Client/);
+  assert.match(newClinicSource, /Open in Gmail/);
+  assert.match(newClinicSource, /Copy Email Text/);
+  assert.match(newClinicSource, /generateMailtoUrl/);
+  assert.match(newClinicSource, /generateGmailComposeUrl/);
+});
+
+test("clinical admin password setup registers credentials and auth supports verified login", () => {
+  assert.match(setupSource, /saveRegisteredAccount/);
+  assert.match(setupSource, /markLocalInviteTokenUsed/);
+  assert.match(authSource, /verifyRegisteredAccount/);
+  assert.match(authSource, /login:\s*async\s*\(email,\s*password\)/);
+});
+

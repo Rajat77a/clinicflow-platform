@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import type { AuthChangeEvent, AuthError, Session, User } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient } from "./supabase/client";
 import { supabaseConfig } from "./supabase/config";
+import { verifyRegisteredAccount, updateRegisteredPassword, getRegisteredAccount } from "./account-store";
 
 export type Role = "super_admin" | "clinic_admin" | "doctor" | "receptionist";
 
@@ -121,14 +122,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
+    if (!supabaseConfig.configured) {
+      try {
+        const stored = localStorage.getItem("cf_user");
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          if (isAuthUser(parsed)) {
+            setUser(parsed);
+          }
+        }
+      } catch {
+        setUser(null);
+      } finally {
+        setIsReady(true);
+      }
+      return;
+    }
+
     const supabase = getSupabaseBrowserClient();
     void supabase.auth
       .getUser()
       .then(async ({ data, error }: { data: { user: User | null }; error: AuthError | null }) => {
         try {
           if (error) throw error;
-          await hydrateSupabaseUser(data.user);
+          if (data.user) {
+            await hydrateSupabaseUser(data.user);
+          } else {
+            const stored = localStorage.getItem("cf_user");
+            if (stored) {
+              const parsed = JSON.parse(stored);
+              if (isAuthUser(parsed)) {
+                setUser(parsed);
+                return;
+              }
+            }
+            setUser(null);
+          }
         } catch {
+          const stored = localStorage.getItem("cf_user");
+          if (stored) {
+            try {
+              const parsed = JSON.parse(stored);
+              if (isAuthUser(parsed)) {
+                setUser(parsed);
+                return;
+              }
+            } catch {
+              // ignore
+            }
+          }
           setUser(null);
         } finally {
           setIsReady(true);
@@ -140,7 +182,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (event === "PASSWORD_RECOVERY") setPasswordSetupRequired(true);
         if (event === "SIGNED_OUT") setPasswordSetupRequired(false);
         queueMicrotask(() => {
-          void hydrateSupabaseUser(session?.user ?? null).catch(() => setUser(null));
+          void hydrateSupabaseUser(session?.user ?? null).catch(() => {
+            const stored = localStorage.getItem("cf_user");
+            if (stored) {
+              try {
+                const parsed = JSON.parse(stored);
+                if (isAuthUser(parsed)) {
+                  setUser(parsed);
+                  return;
+                }
+              } catch {
+                // ignore
+              }
+            }
+            setUser(null);
+          });
         });
       },
     );
@@ -211,16 +267,73 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isDemoMode: supabaseConfig.demoMode,
         passwordSetupRequired,
         login: async (email, password) => {
-          const { data, error } = await getSupabaseBrowserClient().auth.signInWithPassword({
-            email: email.trim(),
-            password,
-          });
-          if (error) throw error;
-          await hydrateSupabaseUser(data.user);
+          const cleanEmail = email.trim();
+          if (supabaseConfig.configured) {
+            try {
+              const { data, error } = await getSupabaseBrowserClient().auth.signInWithPassword({
+                email: cleanEmail,
+                password,
+              });
+              if (!error && data?.user) {
+                await hydrateSupabaseUser(data.user);
+                return;
+              }
+            } catch {
+              // Fall back to registered account verification
+            }
+          }
+
+          // Verify against registered accounts (e.g. Clinical Admin who set their password on /setup)
+          const verified = verifyRegisteredAccount(cleanEmail, password);
+          if (verified) {
+            const authUser: AuthUser = {
+              userId: verified.userId,
+              name: verified.name,
+              email: verified.email,
+              role: verified.role,
+              clinicId: verified.clinicId,
+              facilityId: null,
+              departmentId: null,
+              clinic: verified.clinicName,
+              clinicLogo: verified.clinicName
+                .split(/\s+/)
+                .map((part) => part[0])
+                .join("")
+                .slice(0, 2)
+                .toUpperCase() || "CF",
+            };
+            persist(authUser);
+            return;
+          }
+
+          // In demo mode, allow fallback demo login
+          if (supabaseConfig.demoMode) {
+            const demoUser: AuthUser = {
+              userId: `usr-${cleanEmail.replace(/[^a-zA-Z0-9]/g, "-")}`,
+              name: cleanEmail.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "Clinical Admin",
+              email: cleanEmail,
+              role: cleanEmail.includes("super") ? "super_admin" : "clinic_admin",
+              clinicId: "demo-clinic-1",
+              facilityId: null,
+              departmentId: null,
+              clinic: "ClinicFlow Health",
+              clinicLogo: "CF",
+            };
+            persist(demoUser);
+            return;
+          }
+
+          throw new Error("Invalid email or password. Please verify your credentials or check your invitation link.");
         },
         logout: async () => {
-          const { error } = await getSupabaseBrowserClient().auth.signOut();
-          if (error) throw error;
+          if (supabaseConfig.configured) {
+            try {
+              const { error } = await getSupabaseBrowserClient().auth.signOut();
+              if (error) console.warn("Supabase signout warning:", error);
+            } catch {
+              // ignore
+            }
+          }
           persist(null);
         },
         requestPasswordReset: async (email) => {
@@ -231,36 +344,55 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (error) throw error;
         },
         updatePassword: async (password) => {
-          const client = getSupabaseBrowserClient();
-          const { error } = await client.auth.updateUser({ password });
-          if (error) throw error;
-          await client.rpc("record_security_event", {
-            p_action: "password.changed",
-          });
-          const { error: revokeError } = await client.auth.signOut({ scope: "others" });
-          if (revokeError) throw revokeError;
+          if (user?.email) {
+            updateRegisteredPassword(user.email, password);
+          }
+          if (supabaseConfig.configured) {
+            const client = getSupabaseBrowserClient();
+            const { error } = await client.auth.updateUser({ password });
+            if (error) throw error;
+            await client.rpc("record_security_event", {
+              p_action: "password.changed",
+            });
+            const { error: revokeError } = await client.auth.signOut({ scope: "others" });
+            if (revokeError) throw revokeError;
+          }
         },
         changePassword: async (currentPassword, newPassword) => {
           if (!user?.email) throw new Error("An authenticated account is required");
 
-          const client = getSupabaseBrowserClient();
-          const { error: verificationError } = await client.auth.signInWithPassword({
-            email: user.email,
-            password: currentPassword,
-          });
-          if (verificationError) throw new Error("Current password is incorrect");
+          let verified = false;
+          if (supabaseConfig.configured) {
+            try {
+              const client = getSupabaseBrowserClient();
+              const { error: verificationError } = await client.auth.signInWithPassword({
+                email: user.email,
+                password: currentPassword,
+              });
+              if (!verificationError) {
+                verified = true;
+                const { error: updateError } = await client.auth.updateUser({
+                  password: newPassword,
+                });
+                if (updateError) throw updateError;
+                await client.rpc("record_security_event", {
+                  p_action: "password.changed",
+                });
+                const { error: revokeError } = await client.auth.signOut({ scope: "others" });
+                if (revokeError) {
+                  throw new Error("Password changed, but other sessions could not be revoked");
+                }
+              }
+            } catch (sbErr) {
+              if (verified) throw sbErr;
+            }
+          }
 
-          const { error: updateError } = await client.auth.updateUser({
-            password: newPassword,
-          });
-          if (updateError) throw updateError;
-          await client.rpc("record_security_event", {
-            p_action: "password.changed",
-          });
-
-          const { error: revokeError } = await client.auth.signOut({ scope: "others" });
-          if (revokeError) {
-            throw new Error("Password changed, but other sessions could not be revoked");
+          if (!verified) {
+            const ok = updateRegisteredPassword(user.email, newPassword);
+            if (!ok && !supabaseConfig.demoMode) {
+              throw new Error("Current password is incorrect");
+            }
           }
         },
         completePasswordSetup: () => setPasswordSetupRequired(false),

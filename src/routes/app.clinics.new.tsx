@@ -9,7 +9,8 @@ import { FileUploader } from "@/components/forms/file-uploader";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useWorkspaceData } from "@/lib/workspace-data";
 import { toast } from "sonner";
-import { Copy, Check, Mail, ShieldCheck } from "lucide-react";
+import { Copy, Check, Mail, ShieldCheck, Send, ExternalLink } from "lucide-react";
+import { generateMailtoUrl, generateGmailComposeUrl, generateInvitationEmailText } from "@/lib/email-service";
 
 export const Route = createFileRoute("/app/clinics/new")({ component: AddClinic });
 
@@ -44,8 +45,12 @@ function AddClinic() {
     adminName: string;
     adminEmail: string;
     setupUrl: string;
+    mailtoUrl: string;
+    gmailUrl: string;
+    emailText: string;
   } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [copiedText, setCopiedText] = useState(false);
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -83,12 +88,28 @@ function AddClinic() {
       const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:5173";
       const setupUrl = clinic.setupUrl || `${origin}/setup?token=demo-${clinic.id}`;
 
+      const emailParams = {
+        recipientEmail: form.adminEmail.trim(),
+        recipientName: form.adminName.trim(),
+        clinicName: form.name.trim(),
+        setupUrl,
+        roleTitle: "Clinical Admin",
+        expiresInHours: 24,
+      };
+
+      const mailtoUrl = generateMailtoUrl(emailParams);
+      const gmailUrl = generateGmailComposeUrl(emailParams);
+      const emailText = generateInvitationEmailText(emailParams);
+
       setCreatedInfo({
         clinicId: clinic.id,
         clinicName: form.name.trim(),
         adminName: form.adminName.trim(),
         adminEmail: form.adminEmail.trim(),
         setupUrl,
+        mailtoUrl,
+        gmailUrl,
+        emailText,
       });
 
       toast.success(`Clinic ${clinic.id} created successfully!`);
@@ -105,6 +126,14 @@ function AddClinic() {
     setCopied(true);
     toast.success("Password setup link copied to clipboard!");
     setTimeout(() => setCopied(false), 3000);
+  };
+
+  const copyFullEmailText = () => {
+    if (!createdInfo?.emailText) return;
+    void navigator.clipboard.writeText(createdInfo.emailText);
+    setCopiedText(true);
+    toast.success("Full invitation email text copied to clipboard!");
+    setTimeout(() => setCopiedText(false), 3000);
   };
 
   const handleFinish = () => {
@@ -200,7 +229,7 @@ function AddClinic() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-3 py-2">
+          <div className="space-y-4 py-2">
             <div className="flex items-center justify-between">
               <Label className="text-xs font-semibold text-muted-foreground">24-Hour Password Generation Link</Label>
               <span className="text-[11px] font-semibold text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 rounded-full">
@@ -218,6 +247,54 @@ function AddClinic() {
                 {copied ? "Copied" : "Copy Link"}
               </Button>
             </div>
+
+            {/* Direct Email Dispatch Options */}
+            <div className="rounded-xl border bg-muted/30 p-3 space-y-2.5">
+              <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                <Send className="h-3.5 w-3.5 text-primary" /> Deliver Invitation Email Directly
+              </div>
+              <p className="text-[11px] text-muted-foreground">
+                Send the password setup email directly to <strong>{createdInfo?.adminEmail}</strong> using your email application or webmail:
+              </p>
+              <div className="flex flex-wrap gap-2 pt-1">
+                {createdInfo?.mailtoUrl && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="default"
+                    className="h-9 gap-1.5 text-xs rounded-lg"
+                    onClick={() => {
+                      window.location.href = createdInfo.mailtoUrl;
+                      toast.success("Opening default email client with invitation pre-filled!");
+                    }}
+                  >
+                    <Mail className="h-3.5 w-3.5" /> Send via Email Client
+                  </Button>
+                )}
+                {createdInfo?.gmailUrl && (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    className="h-9 gap-1.5 text-xs rounded-lg"
+                    onClick={() => window.open(createdInfo.gmailUrl, "_blank")}
+                  >
+                    <ExternalLink className="h-3.5 w-3.5" /> Open in Gmail
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  className="h-9 gap-1.5 text-xs rounded-lg"
+                  onClick={copyFullEmailText}
+                >
+                  {copiedText ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
+                  {copiedText ? "Email Copied" : "Copy Email Text"}
+                </Button>
+              </div>
+            </div>
+
             <p className="text-[11px] text-muted-foreground">
               ⏰ This link expires in 24 hours. The Clinical Admin will use this link to set an 8+ character password, after which they can sign in using their email and newly set password.
             </p>

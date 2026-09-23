@@ -124,6 +124,23 @@ If you were not expecting this invitation, please ignore this message.
 — ClinicFlow Healthcare OS`;
 }
 
+export function generateEmailSubject(params: Pick<InvitationEmailParams, "clinicName" | "roleTitle">): string {
+  const role = params.roleTitle || "Clinical Admin";
+  return `Invitation to manage ${params.clinicName} on ClinicFlow - Set Password (${role})`;
+}
+
+export function generateMailtoUrl(params: InvitationEmailParams): string {
+  const subject = generateEmailSubject(params);
+  const body = generateInvitationEmailText(params);
+  return `mailto:${encodeURIComponent(params.recipientEmail)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
+export function generateGmailComposeUrl(params: InvitationEmailParams): string {
+  const subject = generateEmailSubject(params);
+  const body = generateInvitationEmailText(params);
+  return `https://mail.google.com/mail/?view=cm&fs=1&to=${encodeURIComponent(params.recipientEmail)}&su=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
+}
+
 export function registerLocalInviteToken(tokenInfo: {
   token: string;
   email: string;
@@ -179,8 +196,17 @@ export async function sendInvitationEmail(params: InvitationEmailParams): Promis
   emailId: string;
   setupUrl: string;
   expiresInHours: number;
+  mailtoUrl: string;
+  gmailUrl: string;
+  subject: string;
+  textBody: string;
 }> {
   const expiresInHours = params.expiresInHours ?? 24;
+  const subject = generateEmailSubject(params);
+  const textBody = generateInvitationEmailText(params);
+  const mailtoUrl = generateMailtoUrl(params);
+  const gmailUrl = generateGmailComposeUrl(params);
+
   const record: DispatchedEmailRecord = {
     ...params,
     expiresInHours,
@@ -200,7 +226,7 @@ export async function sendInvitationEmail(params: InvitationEmailParams): Promis
     }
   }
 
-  console.log(`[Email Dispatch] Invitation email sent to ${params.recipientEmail} for clinic ${params.clinicName}.`);
+  console.log(`[Email Dispatch] Invitation email prepared for ${params.recipientEmail} (${params.clinicName}).`);
   console.log(`[Email Setup Link] Valid for ${expiresInHours} hours: ${params.setupUrl}`);
 
   return {
@@ -208,7 +234,11 @@ export async function sendInvitationEmail(params: InvitationEmailParams): Promis
     emailId: record.id,
     setupUrl: params.setupUrl,
     expiresInHours,
-    message: `Invitation email sent to ${params.recipientEmail}. Secure setup link valid for ${expiresInHours} hours.`,
+    mailtoUrl,
+    gmailUrl,
+    subject,
+    textBody,
+    message: `Invitation email prepared for ${params.recipientEmail}. Secure setup link valid for ${expiresInHours} hours.`,
   };
 }
 
