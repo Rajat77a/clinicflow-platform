@@ -997,7 +997,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         .select("configuration")
         .eq("id", id)
         .maybeSingle();
-      const config = {
+      const config: Record<string, unknown> = {
         ...((hospital?.configuration as Record<string, unknown>) ?? {}),
         deleted_at: new Date().toISOString(),
       };
@@ -1025,7 +1025,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         .select("configuration")
         .eq("id", id)
         .maybeSingle();
-      const config = { ...((hospital?.configuration as Record<string, unknown>) ?? {}) };
+      const config: Record<string, unknown> = { ...((hospital?.configuration as Record<string, unknown>) ?? {}) };
       delete config.deleted_at;
       delete config.purged;
       const { error: directError } = await this.client
@@ -1051,7 +1051,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         .select("configuration")
         .eq("id", id)
         .maybeSingle();
-      const config = {
+      const config: Record<string, unknown> = {
         ...((hospital?.configuration as Record<string, unknown>) ?? {}),
         purged: "true",
         deleted_at: new Date().toISOString(),
