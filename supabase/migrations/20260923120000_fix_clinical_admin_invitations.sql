@@ -130,6 +130,68 @@ as $$
     select 1 from public.staff_memberships
     where user_id = auth.uid() and role_code = 'super_admin' and active
   )
+$$;
+
+-- Update create_platform_clinic to safely handle actor user ID references and unique facility codes
+create or replace function public.create_platform_clinic(
+  p_name text, p_configuration jsonb default '{}'::jsonb, p_trial_days integer default 14
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  clinic_id uuid;
+  base_slug text;
+  clinic_slug text;
+  v_actor_id uuid;
+begin
+  if not private.is_platform_admin() then
+    raise exception 'Platform administrator permission is required' using errcode = '42501';
+  end if;
+  if nullif(trim(p_name), '') is null or char_length(trim(p_name)) not between 2 and 160
+    or jsonb_typeof(coalesce(p_configuration, '{}'::jsonb)) <> 'object'
+    or p_trial_days not between 1 and 365 then
+    raise exception 'Invalid clinic details' using errcode = '22023';
+  end if;
+
+  select id into v_actor_id from public.profiles where id = auth.uid();
+
+  base_slug := trim(both '-' from regexp_replace(lower(trim(p_name)), '[^a-z0-9]+', '-', 'g'));
+  if base_slug = '' then base_slug := 'clinic'; end if;
+  clinic_slug := base_slug;
+  while exists (select 1 from public.hospitals where slug = clinic_slug) loop
+    clinic_slug := base_slug || '-' || substr(replace(extensions.gen_random_uuid()::text, '-', ''), 1, 8);
+  end loop;
+
+  insert into public.hospitals (name, slug, configuration)
+  values (trim(p_name), clinic_slug, coalesce(p_configuration, '{}'::jsonb))
+  returning id into clinic_id;
+
+  insert into public.facilities (hospital_id, code, name, phone, email, address)
+  values (
+    clinic_id, 'MAIN_' || upper(substr(md5(random()::text), 1, 4)), trim(p_name) || ' Main Facility',
+    nullif(trim(p_configuration->>'phone'), ''), nullif(trim(p_configuration->>'email'), ''),
+    jsonb_build_object('line', coalesce(p_configuration->>'address', ''))
+  );
+
+  insert into public.hospital_subscriptions (hospital_id, expires_at, updated_by)
+  values (clinic_id, now() + make_interval(days => p_trial_days), v_actor_id);
+
+  insert into public.hospital_subscription_events
+    (hospital_id, actor_user_id, action, days, new_expires_at)
+  values (clinic_id, v_actor_id, 'created', p_trial_days, now() + make_interval(days => p_trial_days));
+
+  insert into public.audit_events
+    (hospital_id, actor_user_id, actor_role, action, entity_type, entity_id, metadata)
+  values (clinic_id, v_actor_id, 'super_admin', 'clinic.created', 'hospital', clinic_id::text,
+    jsonb_build_object('name', trim(p_name)));
+
+  return clinic_id;
+end;
+$$;
+
 -- Update create_staff_invite_token to automatically locate or create an active facility
 create or replace function public.create_staff_invite_token(
   p_email text,
