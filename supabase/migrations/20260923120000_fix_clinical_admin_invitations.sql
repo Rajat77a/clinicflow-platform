@@ -115,4 +115,22 @@ $$;
 
 grant execute on function public.consume_invite_token(text) to anon, authenticated, service_role;
 
+-- Ensure super_admin role in staff_memberships is recognized as platform admin even if not present in platform_admins table
+create or replace function private.is_platform_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select exists (
+    select 1 from public.platform_admins
+    where user_id = auth.uid() and active
+  ) or exists (
+    select 1 from public.staff_memberships
+    where user_id = auth.uid() and role_code = 'super_admin' and active
+  )
+$$;
+
 commit;
+

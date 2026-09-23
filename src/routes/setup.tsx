@@ -95,11 +95,11 @@ function SetupPage() {
           setError("This invitation link is invalid. Please check the link you received.");
         } else {
           setTokenInfo({
-            email: row.p_email,
-            full_name: row.p_full_name,
-            phone: row.p_phone,
-            role_code: row.p_role_code,
-            hospital_id: row.p_hospital_id,
+            email: row.p_email ?? "",
+            full_name: row.p_full_name ?? "",
+            phone: row.p_phone ?? "",
+            role_code: row.p_role_code ?? "",
+            hospital_id: row.p_hospital_id ?? "",
             facility_id: row.p_facility_id,
             department_id: row.p_department_id,
             clinic_name: row.p_clinic_name,
