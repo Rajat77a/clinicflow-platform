@@ -48,7 +48,7 @@ export interface WorkspaceRepository {
   listLabReports(input?: RecordPageInput): Promise<RecordPage<LabReport>>;
   listBills(input?: RecordPageInput): Promise<RecordPage<Bill>>;
   listAuditLogs(input?: RecordPageInput): Promise<RecordPage<AuditEntry>>;
-  createClinic(input: ClinicInput): Promise<{ id: string }>;
+  createClinic(input: ClinicInput): Promise<{ id: string; setupUrl?: string }>;
   updateClinic(input: ClinicInput): Promise<void>;
   deleteClinic(id: string): Promise<void>;
   softDeleteClinic(id: string): Promise<void>;
