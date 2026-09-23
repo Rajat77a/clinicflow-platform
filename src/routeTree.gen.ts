@@ -42,8 +42,8 @@ import { Route as AppAppointmentsNewRouteImport } from './routes/app.appointment
 import { Route as AppBillingIndexRouteImport } from './routes/app.billing.index'
 import { Route as AppBillingNewRouteImport } from './routes/app.billing.new'
 import { Route as AppClinicsIndexRouteImport } from './routes/app.clinics.index'
-import { Route as AppClinicsNewRouteImport } from './routes/app.clinics.new'
 import { Route as AppClinicsBinRouteImport } from './routes/app.clinics.bin'
+import { Route as AppClinicsNewRouteImport } from './routes/app.clinics.new'
 import { Route as AppDoctorsNewRouteImport } from './routes/app.doctors.new'
 import { Route as AppPatientsIndexRouteImport } from './routes/app.patients.index'
 import { Route as AppPatientsIdRouteImport } from './routes/app.patients.$id'
@@ -217,14 +217,14 @@ const AppClinicsIndexRoute = AppClinicsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AppClinicsRoute,
 } as any)
-const AppClinicsNewRoute = AppClinicsNewRouteImport.update({
-  id: '/new',
-  path: '/new',
-  getParentRoute: () => AppClinicsRoute,
-} as any)
 const AppClinicsBinRoute = AppClinicsBinRouteImport.update({
   id: '/bin',
   path: '/bin',
+  getParentRoute: () => AppClinicsRoute,
+} as any)
+const AppClinicsNewRoute = AppClinicsNewRouteImport.update({
+  id: '/new',
+  path: '/new',
   getParentRoute: () => AppClinicsRoute,
 } as any)
 const AppDoctorsNewRoute = AppDoctorsNewRouteImport.update({
@@ -763,18 +763,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppClinicsIndexRouteImport
       parentRoute: typeof AppClinicsRoute
     }
-    '/app/clinics/new': {
-      id: '/app/clinics/new'
-      path: '/new'
-      fullPath: '/app/clinics/new'
-      preLoaderRoute: typeof AppClinicsNewRouteImport
-      parentRoute: typeof AppClinicsRoute
-    }
     '/app/clinics/bin': {
       id: '/app/clinics/bin'
       path: '/bin'
       fullPath: '/app/clinics/bin'
       preLoaderRoute: typeof AppClinicsBinRouteImport
+      parentRoute: typeof AppClinicsRoute
+    }
+    '/app/clinics/new': {
+      id: '/app/clinics/new'
+      path: '/new'
+      fullPath: '/app/clinics/new'
+      preLoaderRoute: typeof AppClinicsNewRouteImport
       parentRoute: typeof AppClinicsRoute
     }
     '/app/doctors/new': {
@@ -858,16 +858,16 @@ const AppBillingRouteWithChildren = AppBillingRoute._addFileChildren(
 )
 
 interface AppClinicsRouteChildren {
+  AppClinicsBinRoute: typeof AppClinicsBinRoute
   AppClinicsNewRoute: typeof AppClinicsNewRoute
   AppClinicsIndexRoute: typeof AppClinicsIndexRoute
-  AppClinicsBinRoute: typeof AppClinicsBinRoute
   AppClinicsIdEditRoute: typeof AppClinicsIdEditRoute
 }
 
 const AppClinicsRouteChildren: AppClinicsRouteChildren = {
+  AppClinicsBinRoute: AppClinicsBinRoute,
   AppClinicsNewRoute: AppClinicsNewRoute,
   AppClinicsIndexRoute: AppClinicsIndexRoute,
-  AppClinicsBinRoute: AppClinicsBinRoute,
   AppClinicsIdEditRoute: AppClinicsIdEditRoute,
 }
 

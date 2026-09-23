@@ -21,7 +21,7 @@ const NAV: Record<Role, NavSection[]> = {
     { label: "Operations", items: [
       { to: "/app/clinics", label: "Clinics", icon: Building2 },
       { to: "/app/clinics/new", label: "Add Clinic", icon: Plus },
-      { to: "/app/clinics/bin", label: "Trash Bin", icon: Trash2 },
+      { to: "/app/clinics/bin", label: "Trash", icon: Trash2 },
       { to: "/app/subscriptions", label: "Subscriptions", icon: CreditCard },
       { to: "/app/payments", label: "Payments", icon: Wallet },
       { to: "/app/users", label: "Users", icon: Users },
