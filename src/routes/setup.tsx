@@ -73,7 +73,7 @@ function SetupPage() {
 
     const supabase = getSupabaseBrowserClient();
     supabase.rpc("validate_invite_token", { p_token: t })
-      .then(({ data, error: rpcError }: { data: any[] | null; error: any }) => {
+      .then(({ data, error: rpcError }: { data: Array<{ status: string; p_email: string | null; p_full_name: string | null; p_phone: string | null; p_role_code: string | null; p_hospital_id: string | null; p_facility_id: string | null; p_department_id: string | null; p_clinic_name: string | null; p_clinic_email: string | null; p_clinic_phone: string | null; p_clinic_address: string | null; p_specialty: string | null; p_shift: string | null; p_gender: string | null; p_qualification: string | null; p_medical_registration_number: string | null; p_experience_years: number | null; p_consultation_fee: number | null; p_working_hours: string | null; p_administrative_notes: string | null }> | null; error: { message: string } | null }) => {
         if (rpcError || !data || data.length === 0) {
           // Fallback if RPC not yet deployed: try direct consume_invite_token preview
           return supabase.rpc("consume_invite_token", { p_token: t })
