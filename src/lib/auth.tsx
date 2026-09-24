@@ -269,41 +269,43 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         login: async (email, password) => {
           const cleanEmail = email.trim();
           if (supabaseConfig.configured) {
-            try {
-              const { data, error } = await getSupabaseBrowserClient().auth.signInWithPassword({
-                email: cleanEmail,
-                password,
-              });
-              if (!error && data?.user) {
-                await hydrateSupabaseUser(data.user);
-                return;
+            const { data, error } = await getSupabaseBrowserClient().auth.signInWithPassword({
+              email: cleanEmail,
+              password,
+            });
+            if (error) {
+              if (!supabaseConfig.demoMode) {
+                throw new Error(error.message || "Invalid email or password.");
               }
-            } catch {
-              // Fall back to registered account verification
+            } else if (data?.user) {
+              await hydrateSupabaseUser(data.user);
+              return;
             }
           }
 
-          // Verify against registered accounts (e.g. Clinical Admin who set their password on /setup)
-          const verified = verifyRegisteredAccount(cleanEmail, password);
-          if (verified) {
-            const authUser: AuthUser = {
-              userId: verified.userId,
-              name: verified.name,
-              email: verified.email,
-              role: verified.role,
-              clinicId: verified.clinicId,
-              facilityId: null,
-              departmentId: null,
-              clinic: verified.clinicName,
-              clinicLogo: verified.clinicName
-                .split(/\s+/)
-                .map((part) => part[0])
-                .join("")
-                .slice(0, 2)
-                .toUpperCase() || "CF",
-            };
-            persist(authUser);
-            return;
+          // Verify against registered accounts in demo mode or when Supabase is unconfigured
+          if (!supabaseConfig.configured || supabaseConfig.demoMode) {
+            const verified = verifyRegisteredAccount(cleanEmail, password);
+            if (verified) {
+              const authUser: AuthUser = {
+                userId: verified.userId,
+                name: verified.name,
+                email: verified.email,
+                role: verified.role,
+                clinicId: verified.clinicId,
+                facilityId: null,
+                departmentId: null,
+                clinic: verified.clinicName,
+                clinicLogo: verified.clinicName
+                  .split(/\s+/)
+                  .map((part) => part[0])
+                  .join("")
+                  .slice(0, 2)
+                  .toUpperCase() || "CF",
+              };
+              persist(authUser);
+              return;
+            }
           }
 
           // In demo mode, allow fallback demo login

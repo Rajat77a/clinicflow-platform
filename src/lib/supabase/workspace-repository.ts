@@ -34,6 +34,7 @@ import { throwIfFunctionError } from "./function-error";
 import { toSafeBackendError } from "../backend/safe-error";
 import { sendInvitationEmail, getAppBaseUrl, registerLocalInviteToken } from "../email-service";
 import { deactivateClinicAccounts, reactivateClinicAccounts, deleteClinicAccounts } from "../account-store";
+import { supabaseConfig } from "./config";
 
 // Supabase query results are validated and normalized at this repository boundary.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -311,7 +312,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     const patientById = new Map(patients.map((patient) => [patient.id, patient]));
 
     const receptionists: Receptionist[] = ((membershipsResult.data ?? []) as Row[])
-      .filter((row) => row.role_code === "receptionist")
+      .filter((row) => row.role_code === "receptionist" && row.active !== false && !row.deleted_at)
       .map((row) => {
         return {
           id: row.user_id,
@@ -331,7 +332,8 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         email: row.email ?? "",
         phone: row.phone ?? "",
         role: row.role_code,
-        status: row.status || "Invited",
+        status: row.status || (row.active === false ? "Inactive" : "Invited"),
+        deletedAt: row.deleted_at || (row.active === false ? new Date().toISOString() : undefined),
       };
     });
 
@@ -751,74 +753,77 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       }
     }
 
-    // Try Edge Function first if available
+    // Call create_staff_invite_token RPC directly as primary mechanism
     try {
-      const requestId = randomKey();
-      const { data, error } = await this.client.functions.invoke("invite-staff", {
-        headers: {
-          "Idempotency-Key": randomKey(),
-          "X-Request-ID": requestId,
+      const { data: tokenResult, error: tokenError } = await this.client.rpc(
+        "create_staff_invite_token",
+        {
+          p_email: input.email.trim().toLowerCase(),
+          p_full_name: input.name.trim(),
+          p_phone: input.phone || "",
+          p_role_code: roleCode,
+          p_hospital_id: hospitalId,
+          p_specialty: "specialty" in input ? input.specialty : null,
+          p_shift: "shift" in input ? input.shift : null,
+          p_gender: "gender" in input ? input.gender : null,
+          p_qualification: "qualification" in input ? input.qualification : null,
+          p_medical_registration_number: "medicalRegistrationNumber" in input ? input.medicalRegistrationNumber : null,
+          p_experience_years: "experienceYears" in input ? input.experienceYears : null,
+          p_consultation_fee: "consultationFee" in input ? input.consultationFee : null,
+          p_working_hours: "workingHours" in input ? input.workingHours : null,
+          p_notes: "notes" in input ? input.notes : null,
         },
-        body: {
-          email: input.email,
-          fullName: input.name,
-          phone: input.phone,
-          roleCode,
-          targetHospitalId: hospitalId,
-          specialty: "specialty" in input ? input.specialty : undefined,
-          shift: "shift" in input ? input.shift : undefined,
-          gender: "gender" in input ? input.gender : undefined,
-          qualification: "qualification" in input ? input.qualification : undefined,
-          medicalRegistrationNumber: "medicalRegistrationNumber" in input ? input.medicalRegistrationNumber : undefined,
-          experienceYears: "experienceYears" in input ? input.experienceYears : undefined,
-          consultationFee: "consultationFee" in input ? input.consultationFee : undefined,
-          workingHours: "workingHours" in input ? input.workingHours : undefined,
-          notes: "notes" in input ? input.notes : undefined,
-        },
-      });
-      await throwIfFunctionError(error);
-      if (data && typeof data.setupUrl === "string") {
-        setupUrl = data.setupUrl;
+      );
+      if (!tokenError && tokenResult && typeof tokenResult.token === "string") {
+        const origin = getAppBaseUrl();
+        setupUrl = `${origin}/setup?token=${tokenResult.token}`;
+      } else if (tokenError) {
+        console.warn("[inviteStaff] create_staff_invite_token notice:", tokenError.message);
       }
-    } catch {
-      // Fallback to database RPC if Edge Function is unavailable or fails
+    } catch (rpcErr) {
+      console.warn("[inviteStaff] create_staff_invite_token RPC call failed:", rpcErr);
     }
 
-    // Fallback: Call create_staff_invite_token RPC directly
+    // Try Edge Function if available and setupUrl not yet produced
     if (!setupUrl) {
       try {
-        const { data: tokenResult, error: tokenError } = await this.client.rpc(
-          "create_staff_invite_token",
-          {
-            p_email: input.email,
-            p_full_name: input.name,
-            p_phone: input.phone || "",
-            p_role_code: roleCode,
-            p_hospital_id: hospitalId,
-            p_specialty: "specialty" in input ? input.specialty : null,
-            p_shift: "shift" in input ? input.shift : null,
-            p_gender: "gender" in input ? input.gender : null,
-            p_qualification: "qualification" in input ? input.qualification : null,
-            p_medical_registration_number: "medicalRegistrationNumber" in input ? input.medicalRegistrationNumber : null,
-            p_experience_years: "experienceYears" in input ? input.experienceYears : null,
-            p_consultation_fee: "consultationFee" in input ? input.consultationFee : null,
-            p_working_hours: "workingHours" in input ? input.workingHours : null,
-            p_notes: "notes" in input ? input.notes : null,
+        const requestId = randomKey();
+        const { data, error } = await this.client.functions.invoke("invite-staff", {
+          headers: {
+            "Idempotency-Key": randomKey(),
+            "X-Request-ID": requestId,
           },
-        );
-        if (!tokenError && tokenResult && typeof tokenResult.token === "string") {
-          const origin = getAppBaseUrl();
-          setupUrl = `${origin}/setup?token=${tokenResult.token}`;
-        } else if (tokenError) {
-          console.warn("[inviteStaff] Database RPC create_staff_invite_token warning:", tokenError.message);
+          body: {
+            email: input.email,
+            fullName: input.name,
+            phone: input.phone,
+            roleCode,
+            targetHospitalId: hospitalId,
+            specialty: "specialty" in input ? input.specialty : undefined,
+            shift: "shift" in input ? input.shift : undefined,
+            gender: "gender" in input ? input.gender : undefined,
+            qualification: "qualification" in input ? input.qualification : undefined,
+            medicalRegistrationNumber: "medicalRegistrationNumber" in input ? input.medicalRegistrationNumber : undefined,
+            experienceYears: "experienceYears" in input ? input.experienceYears : undefined,
+            consultationFee: "consultationFee" in input ? input.consultationFee : undefined,
+            workingHours: "workingHours" in input ? input.workingHours : undefined,
+            notes: "notes" in input ? input.notes : undefined,
+          },
+        });
+        await throwIfFunctionError(error);
+        if (data && typeof data.setupUrl === "string") {
+          setupUrl = data.setupUrl;
         }
-      } catch (rpcErr) {
-        console.warn("[inviteStaff] create_staff_invite_token RPC call failed:", rpcErr);
+      } catch {
+        // Edge Function unavailable
       }
     }
 
-    // Resilient fallback: Generate secure client-side invite token if database RPC is unavailable
+    // In production, an invitation must be persistently stored in Supabase
     if (!setupUrl) {
+      if (!supabaseConfig.demoMode) {
+        throw new Error("Unable to create invitation in Supabase. Please verify database connection and migrations.");
+      }
       const fallbackToken = (globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? Math.random().toString(36).slice(2)) +
         (globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? Math.random().toString(36).slice(2));
       const origin = getAppBaseUrl();
@@ -1125,7 +1130,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     try {
       await this.client
         .from("staff_memberships")
-        .update({ status: "Inactive" })
+        .update({ active: false, status: "Inactive" })
         .eq("hospital_id", id);
     } catch {
       // non-fatal
@@ -1169,7 +1174,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     try {
       await this.client
         .from("staff_memberships")
-        .update({ status: "Active" })
+        .update({ active: true, status: "Active" })
         .eq("hospital_id", id);
     } catch {
       // non-fatal
@@ -1391,4 +1396,44 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       active: data.active,
     };
   }
+
+  async softDeleteStaff(userId: string): Promise<void> {
+    const { error } = await this.client.rpc("soft_delete_staff_member", {
+      p_user_id: userId,
+    });
+    if (error) {
+      const { error: fallbackError } = await this.client
+        .from("staff_memberships")
+        .update({ active: false, status: "Inactive", updated_at: new Date().toISOString() })
+        .eq("user_id", userId);
+      if (fallbackError) {
+        throw toSafeBackendError(error, "Failed to delete user");
+      }
+    }
+  }
+
+  async restoreStaff(userId: string): Promise<void> {
+    const { error } = await this.client.rpc("restore_staff_member", {
+      p_user_id: userId,
+    });
+    if (error) {
+      const { error: fallbackError } = await this.client
+        .from("staff_memberships")
+        .update({ active: true, status: "Active", updated_at: new Date().toISOString() })
+        .eq("user_id", userId);
+      if (fallbackError) {
+        throw toSafeBackendError(error, "Failed to restore user");
+      }
+    }
+  }
+
+  async permanentlyDeleteStaff(userId: string): Promise<void> {
+    const { error } = await this.client.rpc("permanently_delete_staff_user", {
+      p_user_id: userId,
+    });
+    if (error) {
+      throw toSafeBackendError(error, "Failed to permanently delete user");
+    }
+  }
 }
+

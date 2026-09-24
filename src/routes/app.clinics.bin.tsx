@@ -17,8 +17,15 @@ const roleLabels: Record<string, string> = {
   super_admin: "Super Admin",
   clinic_admin: "Clinical Admin",
   doctor: "Doctor",
-  receptionist: "Receptionist",
 };
+
+function getDaysRemaining(deletedAt?: string): number {
+  if (!deletedAt) return 30;
+  const deletedDate = new Date(deletedAt).getTime();
+  const now = Date.now();
+  const daysOld = Math.floor((now - deletedDate) / (1000 * 60 * 60 * 24));
+  return Math.max(0, 30 - daysOld);
+}
 
 function TrashBinPage() {
   const { user } = useAuth();
@@ -193,14 +200,6 @@ function TrashBinPage() {
     } finally {
       setIsProcessing(false);
     }
-  };
-
-  const getDaysRemaining = (deletedAt?: string) => {
-    if (!deletedAt) return 30;
-    const deletedDate = new Date(deletedAt).getTime();
-    const now = Date.now();
-    const daysOld = Math.floor((now - deletedDate) / (1000 * 60 * 60 * 24));
-    return Math.max(0, 30 - daysOld);
   };
 
   return (

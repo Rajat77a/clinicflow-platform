@@ -71,5 +71,9 @@ export interface WorkspaceRepository {
   updateBill(bill: Bill): Promise<Bill>;
   inviteSuperAdmin(input: { name: string; email: string; phone: string; tempPassword: string }): Promise<StaffMember>;
   deactivateStaff(userId: string, reason: string): Promise<void>;
+  softDeleteStaff?(userId: string): Promise<void>;
+  restoreStaff?(userId: string): Promise<void>;
+  permanentlyDeleteStaff?(userId: string): Promise<void>;
   createFacility(input: FacilityInput): Promise<Facility>;
 }
+

@@ -237,10 +237,10 @@ Deno.serve(async (request) => {
       .eq("id", effectiveHospitalId)
       .maybeSingle();
 
-    const hospitalConfig = (hospital?.configuration as Record<string, any>) || {};
-    const hospitalEmail = hospitalConfig.email || null;
-    const hospitalPhone = hospitalConfig.phone || null;
-    const hospitalAddress = hospitalConfig.address || null;
+    const hospitalConfig = (hospital?.configuration as Record<string, unknown>) || {};
+    const hospitalEmail = typeof hospitalConfig.email === "string" ? hospitalConfig.email : null;
+    const hospitalPhone = typeof hospitalConfig.phone === "string" ? hospitalConfig.phone : null;
+    const hospitalAddress = typeof hospitalConfig.address === "string" ? hospitalConfig.address : null;
 
     const { error: insertError } = await adminClient.from("invite_tokens").insert({
       email,

@@ -128,9 +128,16 @@ function SetupPage() {
       const supabase = getSupabaseBrowserClient();
       supabase.rpc("validate_invite_token", { p_token: t })
         .then(({ data, error: rpcError }: { data: Array<{ status: string; p_email: string | null; p_full_name: string | null; p_phone: string | null; p_role_code: string | null; p_hospital_id: string | null; p_facility_id: string | null; p_department_id: string | null; p_clinic_name: string | null; p_clinic_email: string | null; p_clinic_phone: string | null; p_clinic_address: string | null; p_clinic_city?: string | null; p_specialty: string | null; p_shift: string | null; p_gender: string | null; p_qualification: string | null; p_medical_registration_number: string | null; p_experience_years: number | null; p_consultation_fee: number | null; p_working_hours: string | null; p_administrative_notes: string | null }> | null; error: { message: string } | null }) => {
-          if (rpcError || !data || data.length === 0) {
-            if (tryLocalToken()) return;
-            setError("This invitation link is invalid or expired (links are valid for 24 hours). Please contact the Super Admin to request a new invitation.");
+          if (rpcError) {
+            console.error("validate_invite_token RPC error:", rpcError);
+            if (supabaseConfig.demoMode && tryLocalToken()) return;
+            setError("Unable to validate this invitation right now. Please try again.");
+            return;
+          }
+
+          if (!data || data.length === 0) {
+            if (supabaseConfig.demoMode && tryLocalToken()) return;
+            setError("This invitation link is invalid. Please check the link you received.");
             return;
           }
 
@@ -140,11 +147,10 @@ function SetupPage() {
           } else if (row.status === "used") {
             setError("This invitation link has already been used. Please contact your administrator or sign in.");
           } else if (row.status === "clinic_deleted") {
-            setError("The clinic associated with this invitation has been moved to Trash or deleted. Please contact the Super Admin.");
+            setError("The clinic associated with this invitation is no longer active. Please contact the Super Admin.");
           } else if (row.status === "invalid" || !row.p_email) {
-            if (!tryLocalToken()) {
-              setError("This invitation link is invalid. Please check the link you received.");
-            }
+            if (supabaseConfig.demoMode && tryLocalToken()) return;
+            setError("This invitation link is invalid. Please check the link you received.");
           } else {
             setTokenInfo({
               email: row.p_email ?? "",
@@ -171,16 +177,16 @@ function SetupPage() {
             });
           }
         })
-        .catch(() => {
-          if (!tryLocalToken()) {
-            setError("Unable to validate the invite link. Please try again.");
-          }
+        .catch((err: unknown) => {
+          console.error("validate_invite_token failure:", err);
+          if (supabaseConfig.demoMode && tryLocalToken()) return;
+          setError("Unable to validate this invitation right now. Please try again.");
         })
         .finally(() => setLoading(false));
-    } catch {
-      if (!tryLocalToken()) {
-        setError("Unable to validate the invite link. Please try again.");
-      }
+    } catch (err: unknown) {
+      console.error("validate_invite_token initialization error:", err);
+      if (supabaseConfig.demoMode && tryLocalToken()) return;
+      setError("Unable to validate this invitation right now. Please try again.");
       setLoading(false);
     }
   }, []);
@@ -204,42 +210,44 @@ function SetupPage() {
       if (supabaseConfig.configured) {
         const supabase = getSupabaseBrowserClient();
 
-        // Consume the invite token first to enforce single-use
-        try {
-          await supabase.rpc("consume_invite_token", { p_token: token });
-        } catch (rpcErr) {
-          console.warn("consume_invite_token notice:", rpcErr);
+        // Atomically activate user in Supabase auth, profiles, and staff_memberships
+        const { data: activateResult, error: activateErr } = await supabase.rpc(
+          "activate_invited_user",
+          { p_token: token, p_password: pw },
+        );
+
+        if (activateErr) {
+          throw new Error(activateErr.message || "Failed to activate account");
         }
 
-        // Try standard browser client signup / sign in
+        const resultObj = activateResult as { success?: boolean; error?: string } | null;
+        if (resultObj && resultObj.success === false) {
+          throw new Error(resultObj.error || "Failed to activate account");
+        }
+
+        // Establish live authenticated session via Supabase Auth
         try {
-          await supabase.auth.signUp({
+          await supabase.auth.signInWithPassword({
             email: tokenInfo.email.trim(),
             password: pw,
-            options: {
-              data: {
-                full_name: tokenInfo.full_name,
-                phone: tokenInfo.phone,
-              },
-            },
           });
-        } catch (authErr) {
-          console.warn("Supabase auth registration notice:", authErr);
+        } catch (signInErr) {
+          console.warn("Supabase auto-signin notice:", signInErr);
         }
+      } else {
+        // Fallback exclusively for demo mode without Supabase
+        saveRegisteredAccount({
+          userId: tokenInfo.hospital_id ? `admin-${tokenInfo.hospital_id.slice(0, 8)}` : `user-${Date.now()}`,
+          email: tokenInfo.email.trim(),
+          password: pw,
+          name: tokenInfo.full_name,
+          role: (tokenInfo.role_code as Role) || "clinic_admin",
+          clinicId: tokenInfo.hospital_id,
+          clinicName: tokenInfo.clinic_name || "ClinicFlow Health",
+        });
+        markLocalInviteTokenUsed(token);
       }
 
-      // Always register account credentials in the account store for immediate login
-      saveRegisteredAccount({
-        userId: tokenInfo.hospital_id ? `admin-${tokenInfo.hospital_id.slice(0, 8)}` : `user-${Date.now()}`,
-        email: tokenInfo.email.trim(),
-        password: pw,
-        name: tokenInfo.full_name,
-        role: (tokenInfo.role_code as Role) || "clinic_admin",
-        clinicId: tokenInfo.hospital_id,
-        clinicName: tokenInfo.clinic_name || "ClinicFlow Health",
-      });
-
-      markLocalInviteTokenUsed(token);
       toast.success("Your account has been activated successfully.");
       setIsActivated(true);
     } catch (err) {
