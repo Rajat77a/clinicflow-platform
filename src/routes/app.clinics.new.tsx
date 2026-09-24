@@ -11,6 +11,7 @@ import { useWorkspaceData } from "@/lib/workspace-data";
 import { toast } from "sonner";
 import { Copy, Check, Mail, ShieldCheck, Send, ExternalLink, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { generateMailtoUrl, generateGmailComposeUrl, generateInvitationEmailText, getAppBaseUrl } from "@/lib/email-service";
+import { supabaseConfig } from "@/lib/supabase/config";
 
 export const Route = createFileRoute("/app/clinics/new")({ component: AddClinic });
 
@@ -89,7 +90,7 @@ function AddClinic() {
       });
 
       const origin = getAppBaseUrl();
-      const setupUrl = clinic.setupUrl || `${origin}/setup?token=demo-${clinic.id}`;
+      const setupUrl = clinic.setupUrl || (supabaseConfig.configured && !supabaseConfig.demoMode ? "" : `${origin}/setup?token=demo-${clinic.id}`);
 
       const emailParams = {
         recipientEmail: form.adminEmail.trim(),

@@ -1199,7 +1199,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         if (repository) {
           const { id, setupUrl, emailSent, emailId, emailError } = await repository.createClinic(input);
           await refresh().catch(() => undefined);
-          const finalSetupUrl = setupUrl || `${origin}/setup?token=TOK-${id}`;
+          const finalSetupUrl = setupUrl || (supabaseConfig.configured && !supabaseConfig.demoMode ? "" : `${origin}/setup?token=TOK-${id}`);
           const saved = state.clinics.find((clinic) => clinic.id === id);
           if (saved) return {
             ...saved,
