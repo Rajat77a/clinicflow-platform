@@ -33,6 +33,7 @@ import { normalizePageInput } from "../record-page";
 import { throwIfFunctionError } from "./function-error";
 import { toSafeBackendError } from "../backend/safe-error";
 import { sendInvitationEmail } from "../email-service";
+import { deactivateClinicAccounts, reactivateClinicAccounts, deleteClinicAccounts } from "../account-store";
 
 // Supabase query results are validated and normalized at this repository boundary.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -789,9 +790,23 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     }
 
     let clinicName = "ClinicFlow";
+    let clinicAddress: string | undefined;
+    let clinicCity: string | undefined;
+    let clinicPhone: string | undefined;
+    let clinicEmail: string | undefined;
+
     if (hospitalId) {
-      const { data: hospital } = await this.client.from("hospitals").select("name").eq("id", hospitalId).single();
+      const { data: hospital } = await this.client
+        .from("hospitals")
+        .select("name, configuration")
+        .eq("id", hospitalId)
+        .single();
       if (hospital?.name) clinicName = hospital.name;
+      const config = hospital?.configuration as Record<string, unknown> | undefined;
+      clinicAddress = (config?.address as string) || undefined;
+      clinicCity = (config?.city as string) || undefined;
+      clinicPhone = (config?.phone as string) || undefined;
+      clinicEmail = (config?.email as string) || undefined;
     }
 
     const roleTitles: Record<string, string> = {
@@ -805,6 +820,11 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       recipientEmail: input.email,
       recipientName: input.name,
       clinicName,
+      clinicId: hospitalId || undefined,
+      clinicAddress,
+      clinicCity,
+      clinicPhone,
+      clinicEmail,
       setupUrl,
       roleTitle: roleTitles[roleCode] ?? "Staff Member",
       expiresInHours: 24,
@@ -814,21 +834,17 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   }
 
   async createDoctor(input: DoctorInput) {
-    const { setupUrl } = await this.inviteStaff(input, "doctor");
+    const { setupUrl } = await this.inviteStaff(input, "doctor", input.hospitalId);
     let photoWarning: string | undefined;
     if (input.photo) {
       try {
         if (!["image/jpeg", "image/png"].includes(input.photo.type) || input.photo.size > 5 * 1024 * 1024) {
           throw new Error("Doctor photo must be a JPG or PNG up to 5 MB");
         }
-        const { data: hospital, error: hospitalError } = await this.client
-          .from("hospitals")
-          .select("id")
-          .single();
-        throwIfError(hospitalError);
-        if (!hospital) throw new Error("The active hospital could not be loaded");
+        const hospitalId = input.hospitalId || (await this.client.from("hospitals").select("id").single()).data?.id;
+        if (!hospitalId) throw new Error("The active hospital could not be loaded");
         const extension = input.photo.type === "image/png" ? "png" : "jpg";
-        const path = `${hospital.id}/pending/avatar.${extension}`;
+        const path = `${hospitalId}/pending/avatar.${extension}`;
         const { error: uploadError } = await this.client.storage
           .from("staff-avatars")
           .upload(path, input.photo, { contentType: input.photo.type, upsert: true });
@@ -837,9 +853,10 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         photoWarning = "The invitation was sent, but the doctor photo could not be saved";
       }
     }
+    const resolvedClinicId = input.hospitalId || ((await this.client.from("hospitals").select("id").single()).data?.id ?? "");
     const doctor: Doctor = {
       id: `pending-${randomKey().slice(0, 8)}`,
-      clinicId: (await this.client.from("hospitals").select("id").single()).data?.id ?? "",
+      clinicId: resolvedClinicId,
       name: input.name,
       specialty: input.specialty,
       email: input.email,
@@ -861,10 +878,11 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   }
 
   async createReceptionist(input: ReceptionistInput) {
-    const { setupUrl } = await this.inviteStaff(input, "receptionist");
+    const { setupUrl } = await this.inviteStaff(input, "receptionist", input.hospitalId);
+    const resolvedClinicId = input.hospitalId || ((await this.client.from("hospitals").select("id").single()).data?.id ?? "");
     const receptionist: Receptionist = {
       id: `pending-${randomKey().slice(0, 8)}`,
-      clinicId: (await this.client.from("hospitals").select("id").single()).data?.id ?? "",
+      clinicId: resolvedClinicId,
       name: input.name,
       email: input.email,
       phone: input.phone,
@@ -1052,6 +1070,16 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         p_active: false,
       });
     }
+
+    try {
+      await this.client
+        .from("staff_memberships")
+        .update({ status: "Inactive" })
+        .eq("hospital_id", id);
+    } catch {
+      // non-fatal
+    }
+    deactivateClinicAccounts(id);
   }
 
   async restoreClinic(id: string) {
@@ -1086,6 +1114,16 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         p_active: true,
       });
     }
+
+    try {
+      await this.client
+        .from("staff_memberships")
+        .update({ status: "Active" })
+        .eq("hospital_id", id);
+    } catch {
+      // non-fatal
+    }
+    reactivateClinicAccounts(id);
   }
 
   async permanentlyDeleteClinic(id: string) {
@@ -1122,6 +1160,16 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         p_active: false,
       });
     }
+
+    try {
+      await this.client
+        .from("staff_memberships")
+        .delete()
+        .eq("hospital_id", id);
+    } catch {
+      // non-fatal
+    }
+    deleteClinicAccounts(id);
   }
 
   async setClinicAccess(id: string, active: boolean) {

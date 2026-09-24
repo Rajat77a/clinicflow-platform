@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { FileUploader } from "@/components/forms/file-uploader";
 import { useWorkspaceData } from "@/lib/workspace-data";
+import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/doctors/new")({ component: NewDoctor });
@@ -23,7 +24,9 @@ function Field({ label, span = 6, children }: { label: string; span?: number; ch
 
 function NewDoctor() {
   const navigate = useNavigate();
-  const { createDoctor } = useWorkspaceData();
+  const { user } = useAuth();
+  const { createDoctor, clinics } = useWorkspaceData();
+  const [hospitalId, setHospitalId] = React.useState(clinics[0]?.id || "");
   const [name, setName] = React.useState("");
   const [specialty, setSpecialty] = React.useState("");
   const [gender, setGender] = React.useState<"female" | "male" | "other" | "">("");
@@ -44,6 +47,10 @@ function NewDoctor() {
       toast.error("Name, credentials, specialty, email and phone are required");
       return;
     }
+    if (user?.role === "super_admin" && !hospitalId) {
+      toast.error("Please select a clinic to assign the doctor to");
+      return;
+    }
     setSaving(true);
     try {
       const doctor = await createDoctor({
@@ -59,6 +66,7 @@ function NewDoctor() {
         workingHours: workingHours.trim(),
         notes: notes.trim(),
         photo,
+        hospitalId: user?.role === "super_admin" ? hospitalId : undefined,
       });
       toast.success(`${doctor.name} invited at ${email}`);
       if (doctor.photoWarning) toast.warning(doctor.photoWarning);
@@ -92,6 +100,22 @@ function NewDoctor() {
               <Field label="Qualification" span={3}><Input required value={qualification} onChange={event => setQualification(event.target.value)} className="h-11 rounded-xl" placeholder="MBBS, MD" /></Field>
               <Field label="Medical registration No." span={3}><Input required value={medicalRegistrationNumber} onChange={event => setMedicalRegistrationNumber(event.target.value)} className="h-11 rounded-xl" placeholder="MCI-123456" /></Field>
               <Field label="Experience (years)" span={3}><Input required min={0} max={80} type="number" value={experienceYears} onChange={event => setExperienceYears(Number(event.target.value))} className="h-11 rounded-xl" placeholder="8" /></Field>
+              {user?.role === "super_admin" && (
+                <Field label="Assign to Clinic / Hospital" span={6}>
+                  <Select value={hospitalId} onValueChange={setHospitalId}>
+                    <SelectTrigger className="h-11 rounded-xl">
+                      <SelectValue placeholder="Select Clinic" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clinics.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name} ({c.city || c.id})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </Field>
+              )}
             </div>
           </section>
 

@@ -9,7 +9,7 @@ import { FileUploader } from "@/components/forms/file-uploader";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth";
 import { useWorkspaceData } from "@/lib/workspace-data";
-import { Trash2 } from "lucide-react";
+import { Trash2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/clinics/$id/edit")({ component: EditClinic });
@@ -111,7 +111,7 @@ function EditClinic() {
     setIsDeleting(true);
     try {
       await softDeleteClinic(clinic.id);
-      toast.success(`${clinic.name} moved to Trash`);
+      toast.success(`${clinic.name} and all associated users deactivated and moved to Trash`);
       setShowDeleteDialog(false);
       navigate({ to: "/app/clinics" });
     } catch (error) {
@@ -216,11 +216,33 @@ function EditClinic() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
-              <Trash2 className="h-5 w-5" /> Move to Trash
+              <Trash2 className="h-5 w-5" /> Move to Trash & Deactivate Users
             </DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete <strong>{clinic.name}</strong>?
-              The clinic will be moved to the Trash where it will be kept for up to 30 days before being permanently deleted.
+            <DialogDescription className="space-y-3 pt-2 text-left">
+              <p>
+                Are you sure you want to delete <strong>{clinic.name}</strong>?
+              </p>
+              <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive space-y-1.5">
+                <div className="flex items-center gap-1.5 font-semibold text-sm text-destructive">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>Warning: All Associated Users Will Be Deactivated</span>
+                </div>
+                <p>
+                  Deleting this clinic will immediately deactivate all users associated with this clinic so they cannot log in:
+                </p>
+                <ul className="list-disc list-inside font-medium space-y-0.5 pl-1">
+                  <li>Clinical Admin</li>
+                  <li>Doctors</li>
+                  <li>Receptionists</li>
+                  <li>Any other users assigned to this clinic</li>
+                </ul>
+                <p className="font-semibold pt-1">
+                  Users cannot remain assigned to a clinic that no longer exists.
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                The clinic will be kept in the Trash for up to 30 days before being permanently purged.
+              </p>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -230,7 +252,7 @@ function EditClinic() {
               onClick={handleDelete}
               disabled={isDeleting}
             >
-              {isDeleting ? "Moving to Trash..." : "Move to Trash"}
+              {isDeleting ? "Moving to Trash..." : "Delete Clinic & Users"}
             </Button>
           </DialogFooter>
         </DialogContent>

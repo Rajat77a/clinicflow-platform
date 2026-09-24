@@ -11,17 +11,26 @@ import { useWorkspaceData } from "@/lib/workspace-data";
 import { UserPlus } from "lucide-react";
 import { toast } from "sonner";
 
+import { useAuth } from "@/lib/auth";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 export const Route = createFileRoute("/app/receptionists")({ component: ReceptionistsPage });
 
 function ReceptionistsPage() {
-  const { receptionists: rows, createReceptionist } = useWorkspaceData();
+  const { user } = useAuth();
+  const { receptionists: rows, clinics, createReceptionist } = useWorkspaceData();
   const [open, setOpen] = useState(false);
+  const [hospitalId, setHospitalId] = useState(clinics[0]?.id || "");
   const [form, setForm] = useState({ name: "", email: "", phone: "", shift: "Morning (9–5)" });
   const [saving, setSaving] = useState(false);
 
   const submit = async () => {
     if (!form.name.trim() || !form.email.trim() || !form.phone.trim()) {
       toast.error("Name, email and phone are required");
+      return;
+    }
+    if (user?.role === "super_admin" && !hospitalId) {
+      toast.error("Please select a clinic to assign the receptionist to");
       return;
     }
     setSaving(true);
@@ -31,6 +40,7 @@ function ReceptionistsPage() {
         email: form.email.trim(),
         phone: form.phone.trim(),
         shift: form.shift,
+        hospitalId: user?.role === "super_admin" ? hospitalId : undefined,
       });
       toast.success(`${receptionist.name} invited at ${form.email}`);
       setOpen(false);
@@ -56,6 +66,23 @@ function ReceptionistsPage() {
                 <div className="space-y-1.5"><Label>Email (login ID)</Label><Input type="email" value={form.email} onChange={e => setForm({ ...form, email: e.target.value })} className="h-11 rounded-xl" placeholder="sofia@clinic.com" /></div>
                 <div className="space-y-1.5"><Label>Phone</Label><Input value={form.phone} onChange={e => setForm({ ...form, phone: e.target.value })} className="h-11 rounded-xl" placeholder="+91 …" /></div>
                 <div className="space-y-1.5"><Label>Shift</Label><Input value={form.shift} onChange={e => setForm({ ...form, shift: e.target.value })} className="h-11 rounded-xl" /></div>
+                {user?.role === "super_admin" && (
+                  <div className="space-y-1.5">
+                    <Label>Assign to Clinic / Hospital</Label>
+                    <Select value={hospitalId} onValueChange={setHospitalId}>
+                      <SelectTrigger className="h-11 rounded-xl">
+                        <SelectValue placeholder="Select Clinic" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clinics.map((c) => (
+                          <SelectItem key={c.id} value={c.id}>
+                            {c.name} ({c.city || c.id})
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
               </div>
               <DialogFooter><Button onClick={submit} className="w-full" disabled={saving}>{saving ? "Inviting..." : "Invite receptionist"}</Button></DialogFooter>
             </DialogContent>

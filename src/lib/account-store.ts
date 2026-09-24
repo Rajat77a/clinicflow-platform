@@ -8,6 +8,7 @@ export interface RegisteredAccount {
   role: Role;
   clinicId: string | null;
   clinicName: string;
+  active?: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -62,6 +63,7 @@ export function saveRegisteredAccount(input: {
     role: input.role || existing?.role || "clinic_admin",
     clinicId: input.clinicId !== undefined ? input.clinicId : (existing?.clinicId ?? null),
     clinicName: input.clinicName || existing?.clinicName || "ClinicFlow Health",
+    active: existing?.active !== undefined ? existing.active : true,
     createdAt: existing?.createdAt || now,
     updatedAt: now,
   };
@@ -89,6 +91,9 @@ export function getRegisteredAccount(email: string): RegisteredAccount | null {
 export function verifyRegisteredAccount(email: string, password: string): RegisteredAccount | null {
   const account = getRegisteredAccount(email);
   if (!account) return null;
+  if (account.active === false) {
+    return null;
+  }
   if (account.password === password) {
     return account;
   }
@@ -102,4 +107,72 @@ export function updateRegisteredPassword(email: string, newPassword: string): bo
   account.updatedAt = new Date().toISOString();
   saveRegisteredAccount(account);
   return true;
+}
+
+export function deactivateClinicAccounts(clinicId: string): void {
+  const accounts = loadAccountsFromStorage();
+  let changed = false;
+  for (const [email, acc] of Object.entries(accounts)) {
+    if (acc.clinicId === clinicId) {
+      acc.active = false;
+      acc.updatedAt = new Date().toISOString();
+      memoryAccounts.set(email, acc);
+      changed = true;
+    }
+  }
+  for (const [email, acc] of memoryAccounts.entries()) {
+    if (acc.clinicId === clinicId) {
+      acc.active = false;
+      acc.updatedAt = new Date().toISOString();
+      accounts[email] = acc;
+      changed = true;
+    }
+  }
+  if (changed) {
+    saveAccountsToStorage(accounts);
+  }
+}
+
+export function reactivateClinicAccounts(clinicId: string): void {
+  const accounts = loadAccountsFromStorage();
+  let changed = false;
+  for (const [email, acc] of Object.entries(accounts)) {
+    if (acc.clinicId === clinicId) {
+      acc.active = true;
+      acc.updatedAt = new Date().toISOString();
+      memoryAccounts.set(email, acc);
+      changed = true;
+    }
+  }
+  for (const [email, acc] of memoryAccounts.entries()) {
+    if (acc.clinicId === clinicId) {
+      acc.active = true;
+      acc.updatedAt = new Date().toISOString();
+      accounts[email] = acc;
+      changed = true;
+    }
+  }
+  if (changed) {
+    saveAccountsToStorage(accounts);
+  }
+}
+
+export function deleteClinicAccounts(clinicId: string): void {
+  const accounts = loadAccountsFromStorage();
+  let changed = false;
+  for (const [email, acc] of Object.entries(accounts)) {
+    if (acc.clinicId === clinicId) {
+      delete accounts[email];
+      memoryAccounts.delete(email);
+      changed = true;
+    }
+  }
+  for (const [email, acc] of memoryAccounts.entries()) {
+    if (acc.clinicId === clinicId) {
+      memoryAccounts.delete(email);
+    }
+  }
+  if (changed) {
+    saveAccountsToStorage(accounts);
+  }
 }

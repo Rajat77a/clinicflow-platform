@@ -23,6 +23,7 @@ import type {
 } from "./backend/workspace-repository";
 import { localRecordPage } from "./record-page";
 import { sendInvitationEmail, registerLocalInviteToken } from "./email-service";
+import { deactivateClinicAccounts, reactivateClinicAccounts, deleteClinicAccounts } from "./account-store";
 
 const DEFAULT_CLINIC_ID = "CL-001";
 
@@ -266,6 +267,7 @@ export interface DoctorInput {
   workingHours: string;
   notes: string;
   photo?: File | null;
+  hospitalId?: string;
 }
 
 export interface ReceptionistInput {
@@ -273,6 +275,7 @@ export interface ReceptionistInput {
   email: string;
   phone: string;
   shift: string;
+  hospitalId?: string;
 }
 
 export interface ClinicAdminInput {
@@ -518,7 +521,8 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         command.actor,
         `Created facility ${command.value.id}`,
       );
-    case "clinic.soft_deleted":
+    case "clinic.soft_deleted": {
+      deactivateClinicAccounts(command.id);
       return appendAudit(
         {
           ...state,
@@ -527,11 +531,22 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
               ? { ...c, access: "Suspended", deletedAt: new Date().toISOString() }
               : c
           ),
+          staffMembers: state.staffMembers.map((m) =>
+            m.clinicId === command.id ? { ...m, status: "Inactive" } : m
+          ),
+          doctors: state.doctors.map((d) =>
+            d.clinicId === command.id ? { ...d, status: "Inactive" } : d
+          ),
+          receptionists: state.receptionists.map((r) =>
+            r.clinicId === command.id ? { ...r, status: "Inactive" } : r
+          ),
         },
         command.actor,
-        `Soft deleted clinic ${command.id}`,
+        `Soft deleted clinic ${command.id} and deactivated all associated users`,
       );
-    case "clinic.restored":
+    }
+    case "clinic.restored": {
+      reactivateClinicAccounts(command.id);
       return appendAudit(
         {
           ...state,
@@ -540,21 +555,41 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
               ? { ...c, access: "Allowed", deletedAt: undefined }
               : c
           ),
+          staffMembers: state.staffMembers.map((m) =>
+            m.clinicId === command.id ? { ...m, status: "Active" } : m
+          ),
+          doctors: state.doctors.map((d) =>
+            d.clinicId === command.id ? { ...d, status: "Active" } : d
+          ),
+          receptionists: state.receptionists.map((r) =>
+            r.clinicId === command.id ? { ...r, status: "Active" } : r
+          ),
         },
         command.actor,
-        `Restored clinic ${command.id}`,
+        `Restored clinic ${command.id} and reactivated associated users`,
       );
+    }
     case "clinic.permanently_deleted": {
+      deleteClinicAccounts(command.id);
       const nextPerm = new Set(state.permanentlyDeletedIds || []);
       nextPerm.add(command.id);
       return appendAudit(
         {
           ...state,
           clinics: state.clinics.filter((c) => c.id !== command.id),
+          staffMembers: state.staffMembers.filter((m) => m.clinicId !== command.id),
+          doctors: state.doctors.filter((d) => d.clinicId !== command.id),
+          receptionists: state.receptionists.filter((r) => r.clinicId !== command.id),
+          patients: state.patients.filter((p) => p.clinicId !== command.id),
+          appointments: state.appointments.filter((a) => a.clinicId !== command.id),
+          prescriptions: state.prescriptions.filter((pr) => pr.clinicId !== command.id),
+          labReports: state.labReports.filter((lr) => lr.clinicId !== command.id),
+          bills: state.bills.filter((b) => b.clinicId !== command.id),
+          facilities: state.facilities.filter((f) => f.clinicId !== command.id),
           permanentlyDeletedIds: nextPerm,
         },
         command.actor,
-        `Permanently deleted clinic ${command.id}`,
+        `Permanently deleted clinic ${command.id} and removed all associated users`,
       );
     }
     case "clinic.updated": {
@@ -595,6 +630,7 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
     }
     case "clinic.bulk_soft_deleted": {
       const idSet = new Set(command.ids);
+      command.ids.forEach((id) => deactivateClinicAccounts(id));
       const now = new Date().toISOString();
       return appendAudit(
         {
@@ -604,13 +640,23 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
               ? { ...c, access: "Suspended", deletedAt: now }
               : c
           ),
+          staffMembers: state.staffMembers.map((m) =>
+            m.clinicId && idSet.has(m.clinicId) ? { ...m, status: "Inactive" } : m
+          ),
+          doctors: state.doctors.map((d) =>
+            idSet.has(d.clinicId) ? { ...d, status: "Inactive" } : d
+          ),
+          receptionists: state.receptionists.map((r) =>
+            idSet.has(r.clinicId) ? { ...r, status: "Inactive" } : r
+          ),
         },
         command.actor,
-        `Soft deleted ${command.ids.length} clinics`,
+        `Soft deleted ${command.ids.length} clinics and deactivated associated users`,
       );
     }
     case "clinic.bulk_restored": {
       const idSet = new Set(command.ids);
+      command.ids.forEach((id) => reactivateClinicAccounts(id));
       return appendAudit(
         {
           ...state,
@@ -619,23 +665,42 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
               ? { ...c, access: "Allowed", deletedAt: undefined }
               : c
           ),
+          staffMembers: state.staffMembers.map((m) =>
+            m.clinicId && idSet.has(m.clinicId) ? { ...m, status: "Active" } : m
+          ),
+          doctors: state.doctors.map((d) =>
+            idSet.has(d.clinicId) ? { ...d, status: "Active" } : d
+          ),
+          receptionists: state.receptionists.map((r) =>
+            idSet.has(r.clinicId) ? { ...r, status: "Active" } : r
+          ),
         },
         command.actor,
-        `Restored ${command.ids.length} clinics`,
+        `Restored ${command.ids.length} clinics and reactivated associated users`,
       );
     }
     case "clinic.bulk_permanently_deleted": {
       const idSet = new Set(command.ids);
+      command.ids.forEach((id) => deleteClinicAccounts(id));
       const nextPerm = new Set(state.permanentlyDeletedIds || []);
       command.ids.forEach((id) => nextPerm.add(id));
       return appendAudit(
         {
           ...state,
           clinics: state.clinics.filter((c) => !idSet.has(c.id)),
+          staffMembers: state.staffMembers.filter((m) => !m.clinicId || !idSet.has(m.clinicId)),
+          doctors: state.doctors.filter((d) => !idSet.has(d.clinicId)),
+          receptionists: state.receptionists.filter((r) => !idSet.has(r.clinicId)),
+          patients: state.patients.filter((p) => !idSet.has(p.clinicId)),
+          appointments: state.appointments.filter((a) => !idSet.has(a.clinicId)),
+          prescriptions: state.prescriptions.filter((pr) => !idSet.has(pr.clinicId)),
+          labReports: state.labReports.filter((lr) => !idSet.has(lr.clinicId)),
+          bills: state.bills.filter((b) => !idSet.has(b.clinicId)),
+          facilities: state.facilities.filter((f) => !idSet.has(f.clinicId)),
           permanentlyDeletedIds: nextPerm,
         },
         command.actor,
-        `Permanently deleted ${command.ids.length} clinics`,
+        `Permanently deleted ${command.ids.length} clinics and removed all associated users`,
       );
     }
   }
@@ -998,6 +1063,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
               recipientEmail: input.adminEmail,
               recipientName: input.adminName || "Clinical Admin",
               clinicName: input.name,
+              clinicId: id,
+              clinicAddress: input.address,
+              clinicCity: input.city,
+              clinicPhone: input.adminPhone || input.phone,
+              clinicEmail: input.email,
               setupUrl: finalSetupUrl,
               roleTitle: "Clinical Admin",
               expiresInHours: 24,
@@ -1084,6 +1154,10 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             phone: input.adminPhone,
             clinicName: input.name,
             clinicId: clinic.id,
+            clinicAddress: input.address,
+            clinicCity: input.city,
+            clinicPhone: input.adminPhone || input.phone,
+            clinicEmail: input.email,
             roleCode: "clinic_admin",
             expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
           });
@@ -1091,6 +1165,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             recipientEmail: input.adminEmail,
             recipientName: input.adminName,
             clinicName: input.name,
+            clinicId: clinic.id,
+            clinicAddress: input.address,
+            clinicCity: input.city,
+            clinicPhone: input.adminPhone || input.phone,
+            clinicEmail: input.email,
             setupUrl,
             roleTitle: "Clinical Admin",
             expiresInHours: 24,
@@ -1206,16 +1285,17 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       },
       createDoctor: async (input) => {
         const actor = requireUser(user, "people.manage");
+        const targetHospitalId = input.hospitalId || actor.clinicId || state.clinics[0]?.id;
+        if (!targetHospitalId) throw new Error("A clinic workspace is required");
         if (repository) {
-          const doctor = await repository.createDoctor(input);
+          const doctor = await repository.createDoctor({ ...input, hospitalId: targetHospitalId });
           await refresh();
           return doctor;
         }
-        const tenantId = requireClinic(actor);
         const doctor: Doctor = {
           ...input,
           id: createId("DR"),
-          clinicId: tenantId,
+          clinicId: targetHospitalId,
           patients: 0,
           status: "Active",
           avatarPath: undefined,
@@ -1223,23 +1303,44 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           photoWarning: undefined,
         };
         dispatch({ type: "doctor.created", value: doctor, actor });
+        const staff: StaffMember = {
+          id: doctor.id,
+          clinicId: targetHospitalId,
+          name: doctor.name,
+          email: doctor.email,
+          phone: doctor.phone,
+          role: "doctor",
+          status: "Active",
+        };
+        dispatch({ type: "staff.invited", value: staff, actor });
         return doctor;
       },
       createReceptionist: async (input) => {
         const actor = requireUser(user, "people.manage");
+        const targetHospitalId = input.hospitalId || actor.clinicId || state.clinics[0]?.id;
+        if (!targetHospitalId) throw new Error("A clinic workspace is required");
         if (repository) {
-          const receptionist = await repository.createReceptionist(input);
+          const receptionist = await repository.createReceptionist({ ...input, hospitalId: targetHospitalId });
           await refresh();
           return receptionist;
         }
-        const tenantId = requireClinic(actor);
         const receptionist: Receptionist = {
           ...input,
           id: createId("RC"),
-          clinicId: tenantId,
+          clinicId: targetHospitalId,
           status: "Active",
         };
         dispatch({ type: "receptionist.created", value: receptionist, actor });
+        const staff: StaffMember = {
+          id: receptionist.id,
+          clinicId: targetHospitalId,
+          name: receptionist.name,
+          email: receptionist.email,
+          phone: receptionist.phone,
+          role: "receptionist",
+          status: "Active",
+        };
+        dispatch({ type: "staff.invited", value: staff, actor });
         return receptionist;
       },
       inviteSuperAdmin: async (input) => {

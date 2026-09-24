@@ -92,6 +92,11 @@ function AddClinic() {
         recipientEmail: form.adminEmail.trim(),
         recipientName: form.adminName.trim(),
         clinicName: form.name.trim(),
+        clinicId: clinic.id,
+        clinicAddress: form.address.trim(),
+        clinicCity: city,
+        clinicPhone: form.adminPhone.trim() || form.phone.trim(),
+        clinicEmail: form.email.trim(),
         setupUrl,
         roleTitle: "Clinical Admin",
         expiresInHours: 24,
@@ -112,7 +117,7 @@ function AddClinic() {
         emailText,
       });
 
-      toast.success(`Clinic ${clinic.id} created successfully!`);
+      toast.success(`Clinic ${clinic.id} created successfully! Invitation email automatically sent to ${form.adminEmail.trim()}.`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to create the clinic");
     } finally {
