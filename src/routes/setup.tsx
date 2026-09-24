@@ -69,8 +69,22 @@ function SetupPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const rawToken = params.get("token");
-    const t = rawToken?.trim() || "";
+    let rawToken = params.get("token") || params.get("t");
+    if (!rawToken && typeof window !== "undefined" && window.location.hash) {
+      const hashStr = window.location.hash;
+      const qIdx = hashStr.indexOf("?");
+      if (qIdx !== -1) {
+        const hashParams = new URLSearchParams(hashStr.slice(qIdx));
+        rawToken = hashParams.get("token") || hashParams.get("t");
+      }
+    }
+
+    let t = rawToken ? decodeURIComponent(rawToken).trim() : "";
+    // Clean accidental wrapping quotes, angle brackets, or trailing punctuation from email clients
+    t = t.replace(/^[<"']|[>"']$/g, "").replace(/[.,;]+$/, "").trim();
+    if (t.length === 64 && /^[0-9a-fA-F]{64}$/.test(t)) {
+      t = t.toLowerCase();
+    }
 
     // Safe development logging: log existence and token length only, NEVER the full token
     const tokenExists = Boolean(t);
@@ -172,31 +186,25 @@ function SetupPage() {
             return;
           }
 
-          const status = String(row.status ?? "invalid");
-          console.log(`[InviteSetup] validate_invite_token returned status = ${status}`);
+          const rawStatus = String(row.status ?? row.p_status ?? "invalid").trim().toLowerCase();
+          console.log(`[InviteSetup] validate_invite_token returned status = ${rawStatus}`);
 
-          if (row.status === "expired") {
+          if (row.status === "expired" || rawStatus === "expired") {
             setErrorInfo({
               title: "Invitation Expired",
               message: "This invitation link has expired.",
             });
-          } else if (row.status === "used") {
+          } else if (row.status === "used" || rawStatus === "used") {
             setErrorInfo({
               title: "Invitation Already Used",
               message: "This invitation link has already been used.",
             });
-          } else if (row.status === "clinic_deleted") {
+          } else if (row.status === "clinic_deleted" || rawStatus === "clinic_deleted") {
             setErrorInfo({
               title: "Clinic Inactive",
               message: "This clinic invitation is no longer active.",
             });
-          } else if (row.status === "invalid") {
-            if (supabaseConfig.demoMode && tryLocalToken()) return;
-            setErrorInfo({
-              title: "Link Invalid",
-              message: "This invitation link is invalid.",
-            });
-          } else if (row.status === "valid") {
+          } else if (row.status === "valid" || rawStatus === "valid") {
             const email = String(row.p_email ?? row.email ?? "").trim();
             if (!email) {
               if (supabaseConfig.demoMode && tryLocalToken()) return;
@@ -235,6 +243,7 @@ function SetupPage() {
               administrative_notes: (row.p_administrative_notes ?? row.administrative_notes ?? null) as string | null,
             });
           } else {
+            if (supabaseConfig.demoMode && tryLocalToken()) return;
             setErrorInfo({
               title: "Link Invalid",
               message: "This invitation link is invalid.",
@@ -433,11 +442,18 @@ function SetupPage() {
                 )}
               </div>
 
-              <Button asChild className="h-11 w-full rounded-xl text-sm font-semibold">
-                <Link to="/login" search={{ email: tokenInfo.email.trim() }}>
-                  Go to Login <ArrowRight className="ml-1.5 h-4 w-4" />
-                </Link>
-              </Button>
+              <div className="flex flex-col gap-2.5">
+                <Button asChild className="h-11 w-full rounded-xl text-sm font-semibold">
+                  <Link to="/app">
+                    Go to Dashboard <ArrowRight className="ml-1.5 h-4 w-4" />
+                  </Link>
+                </Button>
+                <Button asChild variant="outline" className="h-11 w-full rounded-xl text-sm font-semibold">
+                  <Link to="/login" search={{ email: tokenInfo.email.trim() }}>
+                    Go to Login
+                  </Link>
+                </Button>
+              </div>
             </div>
           ) : (
             <>

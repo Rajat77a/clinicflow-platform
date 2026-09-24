@@ -359,7 +359,10 @@ type Command =
   | { type: "staff.soft_deleted"; userId: string; actor: AuthUser }
   | { type: "staff.restored"; userId: string; actor: AuthUser }
   | { type: "staff.permanently_deleted"; userId: string; actor: AuthUser }
-  | { type: "staff.invitation_resent"; userId: string; actor: AuthUser };
+  | { type: "staff.invitation_resent"; userId: string; actor: AuthUser }
+  | { type: "staff.bulk_soft_deleted"; userIds: string[]; actor: AuthUser }
+  | { type: "staff.bulk_restored"; userIds: string[]; actor: AuthUser }
+  | { type: "staff.bulk_permanently_deleted"; userIds: string[]; actor: AuthUser };
 
 function createId(prefix: string) {
   const suffix = globalThis.crypto?.randomUUID?.().slice(0, 8).toUpperCase()
@@ -834,6 +837,70 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         `Resent invitation to staff user ${command.userId}`,
       );
     }
+    case "staff.bulk_soft_deleted": {
+      const idSet = new Set(command.userIds);
+      const now = new Date().toISOString();
+      const clinicMap = new Map(state.clinics.map((c) => [c.id, c.name]));
+      state.staffMembers.forEach((m) => {
+        if (idSet.has(m.id) && m.email) deactivateUserAccount(m.email);
+      });
+      return appendAudit(
+        {
+          ...state,
+          staffMembers: state.staffMembers.map((m) =>
+            idSet.has(m.id)
+              ? {
+                  ...m,
+                  status: "Inactive",
+                  deletedAt: now,
+                  deletedBy: command.actor.name,
+                  previousClinicId: m.clinicId,
+                  previousClinicName: m.clinicId ? (clinicMap.get(m.clinicId) || m.previousClinicName || null) : m.previousClinicName || null,
+                }
+              : m
+          ),
+        },
+        command.actor,
+        `Soft deleted ${command.userIds.length} staff members`,
+      );
+    }
+    case "staff.bulk_restored": {
+      const idSet = new Set(command.userIds);
+      state.staffMembers.forEach((m) => {
+        if (idSet.has(m.id) && m.email) reactivateUserAccount(m.email);
+      });
+      return appendAudit(
+        {
+          ...state,
+          staffMembers: state.staffMembers.map((m) =>
+            idSet.has(m.id)
+              ? {
+                  ...m,
+                  status: m.tempPassword ? "Invited" : "Active",
+                  deletedAt: undefined,
+                  deletedBy: undefined,
+                }
+              : m
+          ),
+        },
+        command.actor,
+        `Restored ${command.userIds.length} staff members`,
+      );
+    }
+    case "staff.bulk_permanently_deleted": {
+      const idSet = new Set(command.userIds);
+      state.staffMembers.forEach((m) => {
+        if (idSet.has(m.id) && m.email) deleteUserAccount(m.email);
+      });
+      return appendAudit(
+        {
+          ...state,
+          staffMembers: state.staffMembers.filter((m) => !idSet.has(m.id)),
+        },
+        command.actor,
+        `Permanently deleted ${command.userIds.length} staff members`,
+      );
+    }
   }
 }
 
@@ -880,8 +947,11 @@ interface WorkspaceData {
   inviteClinicAdmin: (input: ClinicAdminInput) => Promise<StaffMember>;
   deactivateStaff: (userId: string, reason: string) => Promise<void>;
   softDeleteStaff: (userId: string) => Promise<void>;
+  bulkSoftDeleteStaff: (userIds: string[]) => Promise<void>;
   restoreStaff: (userId: string) => Promise<void>;
+  bulkRestoreStaff: (userIds: string[]) => Promise<void>;
   permanentlyDeleteStaff: (userId: string) => Promise<void>;
+  bulkPermanentlyDeleteStaff: (userIds: string[]) => Promise<void>;
   resendStaffInvitation: (userId: string) => Promise<void>;
   createPatient: (input: PatientInput) => Promise<Patient>;
   createAppointment: (input: AppointmentInput) => Promise<Appointment>;
@@ -1666,6 +1736,76 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           deleteUserAccount(target.email);
         }
         dispatch({ type: "staff.permanently_deleted", userId, actor });
+      },
+      bulkSoftDeleteStaff: async (userIds: string[]) => {
+        const actor = requireUser(user, "people.manage");
+        if (actor.role !== "super_admin") {
+          throw new Error("Only super admin can delete users");
+        }
+        const filteredIds = userIds.filter((id) => id !== actor.userId);
+        if (!filteredIds.length) return;
+
+        if (repository?.bulkSoftDeleteStaff) {
+          await repository.bulkSoftDeleteStaff(filteredIds);
+          await refresh();
+          return;
+        } else if (repository?.softDeleteStaff) {
+          await Promise.all(filteredIds.map((id) => repository.softDeleteStaff!(id)));
+          await refresh();
+          return;
+        }
+
+        filteredIds.forEach((id) => {
+          const target = state.staffMembers.find((m) => m.id === id);
+          if (target?.email) deactivateUserAccount(target.email);
+        });
+        dispatch({ type: "staff.bulk_soft_deleted", userIds: filteredIds, actor });
+      },
+      bulkRestoreStaff: async (userIds: string[]) => {
+        const actor = requireUser(user, "people.manage");
+        if (actor.role !== "super_admin") {
+          throw new Error("Only super admin can restore users");
+        }
+        if (!userIds.length) return;
+
+        if (repository?.bulkRestoreStaff) {
+          await repository.bulkRestoreStaff(userIds);
+          await refresh();
+          return;
+        } else if (repository?.restoreStaff) {
+          await Promise.all(userIds.map((id) => repository.restoreStaff!(id)));
+          await refresh();
+          return;
+        }
+
+        userIds.forEach((id) => {
+          const target = state.staffMembers.find((m) => m.id === id);
+          if (target?.email) reactivateUserAccount(target.email);
+        });
+        dispatch({ type: "staff.bulk_restored", userIds, actor });
+      },
+      bulkPermanentlyDeleteStaff: async (userIds: string[]) => {
+        const actor = requireUser(user, "people.manage");
+        if (actor.role !== "super_admin") {
+          throw new Error("Only super admin can permanently delete users");
+        }
+        if (!userIds.length) return;
+
+        if (repository?.bulkPermanentlyDeleteStaff) {
+          await repository.bulkPermanentlyDeleteStaff(userIds);
+          await refresh();
+          return;
+        } else if (repository?.permanentlyDeleteStaff) {
+          await Promise.all(userIds.map((id) => repository.permanentlyDeleteStaff!(id)));
+          await refresh();
+          return;
+        }
+
+        userIds.forEach((id) => {
+          const target = state.staffMembers.find((m) => m.id === id);
+          if (target?.email) deleteUserAccount(target.email);
+        });
+        dispatch({ type: "staff.bulk_permanently_deleted", userIds, actor });
       },
       resendStaffInvitation: async (userId: string) => {
         const actor = requireUser(user, "people.manage");

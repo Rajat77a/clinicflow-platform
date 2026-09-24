@@ -788,12 +788,14 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
             extractedToken = tokenResult;
           }
         } else if (typeof tokenResult === "object" && tokenResult !== null) {
-          extractedToken = typeof (tokenResult as { token?: unknown }).token === "string"
-            ? (tokenResult as { token: string }).token
-            : null;
+          const rawObj = Array.isArray(tokenResult)
+            ? (tokenResult[0] as Record<string, unknown> | undefined)
+            : (tokenResult as Record<string, unknown>);
+          extractedToken = typeof rawObj?.token === "string" ? rawObj.token : null;
         }
 
         if (extractedToken) {
+          extractedToken = extractedToken.trim();
           console.log(`[inviteStaff] invite token generated, token length = ${extractedToken.length}`);
           const origin = getAppBaseUrl();
           setupUrl = `${origin}/setup?token=${extractedToken}`;
@@ -1453,6 +1455,18 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     if (error) {
       throw toSafeBackendError(error, "Failed to permanently delete user");
     }
+  }
+
+  async bulkSoftDeleteStaff(userIds: string[]): Promise<void> {
+    await Promise.all(userIds.map((id) => this.softDeleteStaff(id)));
+  }
+
+  async bulkRestoreStaff(userIds: string[]): Promise<void> {
+    await Promise.all(userIds.map((id) => this.restoreStaff(id)));
+  }
+
+  async bulkPermanentlyDeleteStaff(userIds: string[]): Promise<void> {
+    await Promise.all(userIds.map((id) => this.permanentlyDeleteStaff(id)));
   }
 }
 

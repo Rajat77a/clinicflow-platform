@@ -39,9 +39,12 @@ function TrashBinPage() {
     binStaffMembers,
     restoreStaff,
     permanentlyDeleteStaff,
+    bulkRestoreStaff,
+    bulkPermanentlyDeleteStaff,
   } = useWorkspaceData();
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
   const [restoreTarget, setRestoreTarget] = useState<Clinic | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Clinic | null>(null);
   const [restoreUserTarget, setRestoreUserTarget] = useState<StaffMember | null>(null);
@@ -49,6 +52,8 @@ function TrashBinPage() {
   const [showEmptyTrashDialog, setShowEmptyTrashDialog] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [showBulkRestoreDialog, setShowBulkRestoreDialog] = useState(false);
+  const [showBulkRestoreUsersDialog, setShowBulkRestoreUsersDialog] = useState(false);
+  const [showBulkDeleteUsersDialog, setShowBulkDeleteUsersDialog] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const isSuperAdmin = user?.role === "super_admin";
@@ -193,10 +198,70 @@ function TrashBinPage() {
     setIsProcessing(true);
     try {
       await permanentlyDeleteStaff(deleteUserTarget.id);
-      toast.success(`${deleteUserTarget.name} permanently deleted`);
+      setSelectedUserIds((prev) => {
+        const next = new Set(prev);
+        next.delete(deleteUserTarget.id);
+        return next;
+      });
+      toast.success(`${deleteUserTarget.name} has been permanently deleted`);
       setDeleteUserTarget(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to permanently delete user");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const allUsersSelected =
+    binStaffMembers.length > 0 && binStaffMembers.every((m) => selectedUserIds.has(m.id));
+  const someUsersSelected =
+    binStaffMembers.some((m) => selectedUserIds.has(m.id));
+
+  const toggleSelectAllUsers = () => {
+    if (allUsersSelected) {
+      setSelectedUserIds(new Set());
+    } else {
+      setSelectedUserIds(new Set(binStaffMembers.map((m) => m.id)));
+    }
+  };
+
+  const toggleSelectOneUser = (id: string) => {
+    const next = new Set(selectedUserIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    setSelectedUserIds(next);
+  };
+
+  const handleBulkRestoreUsers = async () => {
+    if (selectedUserIds.size === 0) return;
+    setIsProcessing(true);
+    try {
+      const ids = Array.from(selectedUserIds);
+      await bulkRestoreStaff(ids);
+      toast.success(`Restored ${ids.length} user${ids.length === 1 ? "" : "s"} successfully`);
+      setSelectedUserIds(new Set());
+      setShowBulkRestoreUsersDialog(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to restore selected users");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleBulkPermanentDeleteUsers = async () => {
+    if (selectedUserIds.size === 0) return;
+    setIsProcessing(true);
+    try {
+      const ids = Array.from(selectedUserIds);
+      await bulkPermanentlyDeleteStaff(ids);
+      toast.success(`Permanently deleted ${ids.length} user${ids.length === 1 ? "" : "s"}`);
+      setSelectedUserIds(new Set());
+      setShowBulkDeleteUsersDialog(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete selected users");
     } finally {
       setIsProcessing(false);
     }
@@ -427,10 +492,62 @@ function TrashBinPage() {
               </div>
             </div>
 
+            {/* Bulk Selection Toolbar for Users */}
+            {selectedUserIds.size > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-destructive/5 px-4 py-3 text-sm">
+                <div className="flex items-center gap-2 font-medium text-foreground">
+                  <CheckSquare className="h-4 w-4 text-destructive" />
+                  <span>{selectedUserIds.size} user{selectedUserIds.size === 1 ? "" : "s"} selected in Trash</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setSelectedUserIds(new Set())}
+                    disabled={isProcessing}
+                  >
+                    Clear selection
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowBulkRestoreUsersDialog(true)}
+                    disabled={isProcessing}
+                    className="gap-1.5 border-emerald-600/30 text-emerald-700 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950/40"
+                  >
+                    <RotateCcw className="h-3.5 w-3.5 text-emerald-600" />
+                    Restore Selected ({selectedUserIds.size})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => setShowBulkDeleteUsersDialog(true)}
+                    disabled={isProcessing}
+                    className="gap-1.5"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Permanently Delete Selected ({selectedUserIds.size})
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div className="overflow-x-auto">
               <Table>
                 <TableHeader>
                   <TableRow>
+                    <TableHead className="w-12 text-center">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all deleted users"
+                        checked={allUsersSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = !allUsersSelected && someUsersSelected;
+                        }}
+                        onChange={toggleSelectAllUsers}
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary"
+                      />
+                    </TableHead>
                     <TableHead>Name</TableHead>
                     <TableHead>Email</TableHead>
                     <TableHead>Role</TableHead>
@@ -443,7 +560,7 @@ function TrashBinPage() {
                 <TableBody>
                   {binStaffMembers.length === 0 ? (
                     <TableRow>
-                      <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                      <TableCell colSpan={8} className="h-32 text-center text-muted-foreground">
                         The Trash is empty. No deleted users found.
                       </TableCell>
                     </TableRow>
@@ -459,6 +576,15 @@ function TrashBinPage() {
 
                       return (
                         <TableRow key={member.id}>
+                          <TableCell className="w-12 text-center">
+                            <input
+                              type="checkbox"
+                              aria-label={`Select ${member.name}`}
+                              checked={selectedUserIds.has(member.id)}
+                              onChange={() => toggleSelectOneUser(member.id)}
+                              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary"
+                            />
+                          </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-3">
                               <div className="grid h-9 w-9 place-items-center rounded-full bg-muted text-muted-foreground text-xs font-bold">
@@ -765,6 +891,55 @@ function TrashBinPage() {
             </Button>
             <Button variant="destructive" onClick={handlePermanentDeleteUser} disabled={isProcessing}>
               {isProcessing ? "Deleting..." : "Delete Permanently"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Bulk Restore Users Dialog */}
+      <Dialog open={showBulkRestoreUsersDialog} onOpenChange={setShowBulkRestoreUsersDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-emerald-600" /> Restore Selected Users
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-left">
+              Are you sure you want to restore {selectedUserIds.size} user{selectedUserIds.size === 1 ? "" : "s"}?
+              Their accounts will be reactivated with their previous hospital assignments.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBulkRestoreUsersDialog(false)} disabled={isProcessing}>
+              Cancel
+            </Button>
+            <Button onClick={handleBulkRestoreUsers} disabled={isProcessing} className="bg-emerald-600 hover:bg-emerald-700">
+              {isProcessing ? "Restoring..." : `Restore ${selectedUserIds.size} Users`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Permanent Delete Users Dialog */}
+      <Dialog open={showBulkDeleteUsersDialog} onOpenChange={setShowBulkDeleteUsersDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5 text-destructive" /> Permanent Deletion Warning
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-left space-y-2">
+              <p>
+                This action cannot be undone. Permanently delete {selectedUserIds.size} selected user record{selectedUserIds.size === 1 ? "" : "s"}?
+              </p>
+              <p className="text-xs text-muted-foreground">
+                All associated credentials and profile records will be permanently removed.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBulkDeleteUsersDialog(false)} disabled={isProcessing}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleBulkPermanentDeleteUsers} disabled={isProcessing}>
+              {isProcessing ? "Deleting..." : `Permanently Delete ${selectedUserIds.size} Users`}
             </Button>
           </DialogFooter>
         </DialogContent>
