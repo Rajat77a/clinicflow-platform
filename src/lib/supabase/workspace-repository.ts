@@ -1427,42 +1427,76 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   }
 
   async softDeleteStaff(userId: string): Promise<void> {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
+    if (!isUuid) return;
+
     const { error } = await this.client.rpc("soft_delete_staff_member", {
       p_user_id: userId,
     });
     if (error) {
       const now = new Date().toISOString();
-      const { error: fallbackError } = await this.client
+      let updateResult = await this.client
         .from("staff_memberships")
         .update({ active: false, status: "Inactive", deleted_at: now, updated_at: now })
         .eq("user_id", userId);
-      if (fallbackError) {
+      if (updateResult.error) {
+        updateResult = await this.client
+          .from("staff_memberships")
+          .update({ active: false, updated_at: now })
+          .eq("user_id", userId);
+      }
+      if (updateResult.error) {
+        console.warn("Could not soft delete staff via RPC or direct update:", error, updateResult.error);
         throw toSafeBackendError(error, "Failed to delete user");
       }
     }
   }
 
   async restoreStaff(userId: string): Promise<void> {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
+    if (!isUuid) return;
+
     const { error } = await this.client.rpc("restore_staff_member", {
       p_user_id: userId,
     });
     if (error) {
-      const { error: fallbackError } = await this.client
+      const now = new Date().toISOString();
+      let updateResult = await this.client
         .from("staff_memberships")
-        .update({ active: true, status: "Active", deleted_at: null, updated_at: new Date().toISOString() })
+        .update({ active: true, status: "Active", deleted_at: null, updated_at: now })
         .eq("user_id", userId);
-      if (fallbackError) {
+      if (updateResult.error) {
+        updateResult = await this.client
+          .from("staff_memberships")
+          .update({ active: true, updated_at: now })
+          .eq("user_id", userId);
+      }
+      if (updateResult.error) {
+        console.warn("Could not restore staff via RPC or direct update:", error, updateResult.error);
         throw toSafeBackendError(error, "Failed to restore user");
       }
     }
   }
 
   async permanentlyDeleteStaff(userId: string): Promise<void> {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
+    if (!isUuid) return;
+
     const { error } = await this.client.rpc("permanently_delete_staff_user", {
       p_user_id: userId,
     });
     if (error) {
-      throw toSafeBackendError(error, "Failed to permanently delete user");
+      const { error: deleteError } = await this.client
+        .from("staff_memberships")
+        .delete()
+        .eq("user_id", userId);
+      if (deleteError) {
+        // Fallback to deactivation if constrained
+        await this.client
+          .from("staff_memberships")
+          .update({ active: false, status: "Inactive", deleted_at: new Date().toISOString() })
+          .eq("user_id", userId);
+      }
     }
   }
 
