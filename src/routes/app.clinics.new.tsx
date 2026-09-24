@@ -9,8 +9,8 @@ import { FileUploader } from "@/components/forms/file-uploader";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useWorkspaceData } from "@/lib/workspace-data";
 import { toast } from "sonner";
-import { Copy, Check, Mail, ShieldCheck, Send, ExternalLink } from "lucide-react";
-import { generateMailtoUrl, generateGmailComposeUrl, generateInvitationEmailText } from "@/lib/email-service";
+import { Copy, Check, Mail, ShieldCheck, Send, ExternalLink, AlertTriangle, CheckCircle2 } from "lucide-react";
+import { generateMailtoUrl, generateGmailComposeUrl, generateInvitationEmailText, getAppBaseUrl } from "@/lib/email-service";
 
 export const Route = createFileRoute("/app/clinics/new")({ component: AddClinic });
 
@@ -48,6 +48,9 @@ function AddClinic() {
     mailtoUrl: string;
     gmailUrl: string;
     emailText: string;
+    emailSent?: boolean;
+    emailId?: string;
+    emailError?: string;
   } | null>(null);
   const [copied, setCopied] = useState(false);
   const [copiedText, setCopiedText] = useState(false);
@@ -85,7 +88,7 @@ function AddClinic() {
         adminPhone: form.adminPhone.trim(),
       });
 
-      const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:5173";
+      const origin = getAppBaseUrl();
       const setupUrl = clinic.setupUrl || `${origin}/setup?token=demo-${clinic.id}`;
 
       const emailParams = {
@@ -115,9 +118,18 @@ function AddClinic() {
         mailtoUrl,
         gmailUrl,
         emailText,
+        emailSent: clinic.emailSent,
+        emailId: clinic.emailId,
+        emailError: clinic.emailError,
       });
 
-      toast.success(`Clinic ${clinic.id} created successfully! Invitation email automatically sent to ${form.adminEmail.trim()}.`);
+      if (clinic.emailSent) {
+        toast.success(`Clinic ${clinic.id} created successfully! Invitation email sent successfully to ${form.adminEmail.trim()}.`);
+      } else if (clinic.emailError) {
+        toast.error(`Clinic ${clinic.id} created, but invitation email failed: ${clinic.emailError}`);
+      } else {
+        toast.success(`Clinic ${clinic.id} created successfully!`);
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to create the clinic");
     } finally {
@@ -215,22 +227,42 @@ function AddClinic() {
       <Dialog open={Boolean(createdInfo)} onOpenChange={(open) => { if (!open) handleFinish(); }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-emerald-600">
-              <ShieldCheck className="h-5 w-5" /> Clinic Created & Invitation Email Dispatched
+            <DialogTitle className={`flex items-center gap-2 ${createdInfo?.emailError ? "text-amber-600" : "text-emerald-600"}`}>
+              {createdInfo?.emailError ? (
+                <>
+                  <AlertTriangle className="h-5 w-5 text-amber-600" /> Clinic Created (Email Delivery Action Required)
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="h-5 w-5" /> Clinic Created &amp; Invitation Email Delivered
+                </>
+              )}
             </DialogTitle>
             <DialogDescription className="space-y-2 pt-2">
               <p>
                 <strong>{createdInfo?.clinicName}</strong> ({createdInfo?.clinicId}) has been successfully created.
               </p>
-              <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/50 p-3 text-emerald-950 dark:bg-emerald-950/20 dark:text-emerald-200">
-                <div className="flex items-center gap-2 font-medium text-xs">
-                  <Mail className="h-4 w-4 text-emerald-600" />
-                  <span>Invitation email dispatched to: <strong>{createdInfo?.adminEmail}</strong></span>
+              {createdInfo?.emailError ? (
+                <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-destructive">
+                  <div className="flex items-center gap-2 font-medium text-xs">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>Email service alert: <strong>{createdInfo.emailError}</strong></span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    The automated email could not be delivered. Ensure RESEND_API_KEY and a verified EMAIL_FROM are configured in server settings. In the meantime, you can copy the setup link or deliver the invitation directly below.
+                  </p>
                 </div>
-                <p className="mt-1 text-[11px] text-muted-foreground">
-                  The Clinical Admin ({createdInfo?.adminName}) has been sent their 24-hour password generation link to activate their account and sign in.
-                </p>
-              </div>
+              ) : (
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/50 p-3 text-emerald-950 dark:bg-emerald-950/20 dark:text-emerald-200">
+                  <div className="flex items-center gap-2 font-medium text-xs">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <span>Invitation email sent successfully to: <strong>{createdInfo?.adminEmail}</strong></span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Confirmed by Resend{createdInfo?.emailId ? ` (ID: ${createdInfo.emailId})` : ""}. The Clinical Admin ({createdInfo?.adminName}) has been sent their 24-hour setup link to activate their account and sign in.
+                  </p>
+                </div>
+              )}
             </DialogDescription>
           </DialogHeader>
 

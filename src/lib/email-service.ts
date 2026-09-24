@@ -285,6 +285,26 @@ export function markLocalInviteTokenUsed(token: string) {
   }
 }
 
+export function getAppBaseUrl(): string {
+  if (typeof window !== "undefined" && window.location.origin) {
+    const hostname = window.location.hostname;
+    if (hostname !== "localhost" && hostname !== "127.0.0.1") {
+      return window.location.origin;
+    }
+  }
+  const envUrl = (
+    (typeof import.meta !== "undefined" && (import.meta as { env?: Record<string, string> }).env?.VITE_APP_URL) ||
+    (typeof process !== "undefined" ? process.env?.APP_URL : undefined)
+  )?.trim();
+  if (envUrl) {
+    return envUrl.startsWith("http") ? envUrl.replace(/\/$/, "") : `https://${envUrl.replace(/\/$/, "")}`;
+  }
+  if (typeof window !== "undefined" && window.location.origin) {
+    return window.location.origin;
+  }
+  return "https://clinicflow.app";
+}
+
 export async function sendInvitationEmail(params: InvitationEmailParams): Promise<{
   success: boolean;
   message: string;
@@ -345,47 +365,59 @@ export async function sendInvitationEmail(params: InvitationEmailParams): Promis
       // ignore storage error
     }
   }
-
   // Live server-side dispatch through /api/send-email
+  let remoteEmailId: string | undefined;
   if (typeof window !== "undefined") {
-    try {
-      await fetch("/api/send-email", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          recipientEmail: params.recipientEmail,
-          recipientName: params.recipientName,
-          clinicName: params.clinicName,
-          clinicId: params.clinicId,
-          clinicAddress: params.clinicAddress,
-          clinicCity: params.clinicCity,
-          clinicPhone: params.clinicPhone,
-          clinicEmail: params.clinicEmail,
-          setupUrl: params.setupUrl,
-          roleTitle: params.roleTitle,
-          expiresInHours,
-        }),
-      }).catch((fetchErr) => {
-        console.warn("[Email Service] Server dispatch notice:", fetchErr);
-      });
-    } catch (err) {
-      console.warn("[Email Service] Unable to trigger server email dispatch:", err);
+    const res = await fetch("/api/send-email", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        recipientEmail: params.recipientEmail,
+        recipientName: params.recipientName,
+        clinicName: params.clinicName,
+        clinicId: params.clinicId,
+        clinicAddress: params.clinicAddress,
+        clinicCity: params.clinicCity,
+        clinicPhone: params.clinicPhone,
+        clinicEmail: params.clinicEmail,
+        setupUrl: params.setupUrl,
+        roleTitle: params.roleTitle,
+        expiresInHours,
+      }),
+    });
+
+    const data = (await res.json().catch(() => null)) as {
+      success?: boolean;
+      emailId?: string;
+      error?: string;
+      details?: string;
+      message?: string;
+    } | null;
+
+    if (!res.ok || !data?.success || !data?.emailId) {
+      const errorMsg = data?.error || data?.details || `Failed to send email (status ${res.status})`;
+      throw new Error(errorMsg);
     }
+
+    remoteEmailId = data.emailId;
   }
 
-  console.log(`[Email Dispatch] Invitation email prepared for ${params.recipientEmail} (${params.clinicName}).`);
+  const finalEmailId = remoteEmailId || record.id;
+  record.id = finalEmailId;
+
+  console.log(`[Email Dispatch] Invitation email confirmed sent to ${params.recipientEmail} (${params.clinicName}). Resend ID: ${finalEmailId}`);
   console.log(`[Email Setup Link] Valid for ${expiresInHours} hours: ${params.setupUrl}`);
 
   return {
     success: true,
-    emailId: record.id,
+    emailId: finalEmailId,
     setupUrl: params.setupUrl,
     expiresInHours,
     mailtoUrl,
     gmailUrl,
     subject,
     textBody,
-    message: `Invitation email sent to ${params.recipientEmail}. Secure setup link valid for ${expiresInHours} hours.`,
+    message: `Invitation email sent successfully to ${params.recipientEmail}.`,
   };
 }
 

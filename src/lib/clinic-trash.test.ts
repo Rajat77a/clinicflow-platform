@@ -46,6 +46,10 @@ const emailServiceSource = await readFile(
   new URL("./email-service.ts", import.meta.url),
   "utf8",
 );
+const serverSource = await readFile(
+  new URL("../server.ts", import.meta.url),
+  "utf8",
+);
 
 import {
   saveRegisteredAccount,
@@ -323,5 +327,34 @@ test("invitation setup page provides branded welcome, password activation, and l
   assert.match(setupSource, /Go to Login/);
   assert.match(setupSource, /to="\/login"[\s\S]*?email:\s*tokenInfo\.email/);
 });
+
+test("server strictly rejects email dispatch when RESEND_API_KEY is not configured", () => {
+  assert.match(serverSource, /Email service is not configured\./);
+  assert.match(serverSource, /status:\s*503/);
+  assert.doesNotMatch(serverSource, /Live delivery simulated/);
+  assert.match(serverSource, /https:\/\/api\.resend\.com\/emails/);
+  assert.match(serverSource, /Authorization`?:\s*`?Bearer/);
+});
+
+test("server normalizes setup URL to prevent localhost links in emails", () => {
+  assert.match(serverSource, /isLocal/);
+  assert.match(serverSource, /APP_URL/);
+  assert.match(serverSource, /finalSetupUrl/);
+});
+
+test("frontend email service awaits real server response and surfaces delivery failures", () => {
+  assert.match(emailServiceSource, /fetch\("\/api\/send-email"/);
+  assert.match(emailServiceSource, /getAppBaseUrl/);
+  assert.match(emailServiceSource, /throw new Error/);
+});
+
+test("clinic creation only confirms delivery when Resend succeeds and alerts if delivery fails", () => {
+  assert.match(newClinicSource, /clinic\.emailSent/);
+  assert.match(newClinicSource, /clinic\.emailError/);
+  assert.match(newClinicSource, /Invitation email sent successfully/);
+  assert.match(newClinicSource, /Email service alert/);
+  assert.match(workspaceDataSource, /getAppBaseUrl/);
+});
+
 
 

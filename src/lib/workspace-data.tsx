@@ -22,7 +22,7 @@ import type {
   RecordPageInput,
 } from "./backend/workspace-repository";
 import { localRecordPage } from "./record-page";
-import { sendInvitationEmail, registerLocalInviteToken } from "./email-service";
+import { sendInvitationEmail, registerLocalInviteToken, getAppBaseUrl } from "./email-service";
 import {
   deactivateClinicAccounts,
   reactivateClinicAccounts,
@@ -56,6 +56,9 @@ export type Clinic = {
   adminName?: string;
   adminEmail?: string;
   adminPhone?: string;
+  emailSent?: boolean;
+  emailId?: string;
+  emailError?: string;
 };
 export type Patient = {
   id: string;
@@ -197,6 +200,9 @@ export type StaffMember = {
   deletedBy?: string;
   previousClinicId?: string | null;
   previousClinicName?: string | null;
+  emailSent?: boolean;
+  emailId?: string;
+  emailError?: string;
 };
 
 export interface WorkspaceSnapshot {
@@ -1186,26 +1192,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       },
       createClinic: async (input) => {
         const actor = requireUser(user, "platform.clinics.manage");
-        const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:5173";
+        const origin = getAppBaseUrl();
         if (repository) {
-          const { id, setupUrl } = await repository.createClinic(input);
+          const { id, setupUrl, emailSent, emailId, emailError } = await repository.createClinic(input);
           await refresh().catch(() => undefined);
           const finalSetupUrl = setupUrl || `${origin}/setup?token=TOK-${id}`;
-          if (input.adminEmail) {
-            void sendInvitationEmail({
-              recipientEmail: input.adminEmail,
-              recipientName: input.adminName || "Clinical Admin",
-              clinicName: input.name,
-              clinicId: id,
-              clinicAddress: input.address,
-              clinicCity: input.city,
-              clinicPhone: input.adminPhone || input.phone,
-              clinicEmail: input.email,
-              setupUrl: finalSetupUrl,
-              roleTitle: "Clinical Admin",
-              expiresInHours: 24,
-            });
-          }
           const saved = state.clinics.find((clinic) => clinic.id === id);
           if (saved) return {
             ...saved,
@@ -1217,6 +1208,9 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             adminName: input.adminName || saved.adminName,
             adminEmail: input.adminEmail || saved.adminEmail,
             adminPhone: input.adminPhone || saved.adminPhone,
+            emailSent,
+            emailId,
+            emailError,
           };
           const expires = new Date();
           expires.setDate(expires.getDate() + 14);
@@ -1240,12 +1234,58 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             adminName: input.adminName,
             adminEmail: input.adminEmail,
             adminPhone: input.adminPhone,
+            emailSent,
+            emailId,
+            emailError,
           };
         }
         const expires = new Date();
         expires.setDate(expires.getDate() + 14);
         const dummyToken = createId("TOK");
         const setupUrl = `${origin}/setup?token=${dummyToken}`;
+
+        let emailSent = false;
+        let emailId: string | undefined;
+        let emailError: string | undefined;
+
+        if (input.adminName && input.adminEmail) {
+          registerLocalInviteToken({
+            token: dummyToken,
+            email: input.adminEmail,
+            name: input.adminName,
+            phone: input.adminPhone,
+            clinicName: input.name,
+            clinicId: "",
+            clinicAddress: input.address,
+            clinicCity: input.city,
+            clinicPhone: input.adminPhone || input.phone,
+            clinicEmail: input.email,
+            roleCode: "clinic_admin",
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          });
+
+          try {
+            const sendResult = await sendInvitationEmail({
+              recipientEmail: input.adminEmail,
+              recipientName: input.adminName,
+              clinicName: input.name,
+              clinicId: "",
+              clinicAddress: input.address,
+              clinicCity: input.city,
+              clinicPhone: input.adminPhone || input.phone,
+              clinicEmail: input.email,
+              setupUrl,
+              roleTitle: "Clinical Admin",
+              expiresInHours: 24,
+            });
+            emailSent = sendResult.success;
+            emailId = sendResult.emailId;
+          } catch (err) {
+            emailError = err instanceof Error ? err.message : "Failed to deliver email";
+            console.error("[Clinic Creation] Failed to send invitation email:", emailError);
+          }
+        }
+
         const clinic: Clinic = {
           id: createId("CL"),
           name: input.name,
@@ -1266,6 +1306,9 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           adminName: input.adminName,
           adminEmail: input.adminEmail,
           adminPhone: input.adminPhone,
+          emailSent,
+          emailId,
+          emailError,
         };
         dispatch({ type: "clinic.created", value: clinic, actor });
         if (input.adminName && input.adminEmail) {
@@ -1278,35 +1321,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             role: "clinic_admin",
             status: "Invited",
             tempPassword: input.tempPassword,
+            emailSent,
+            emailId,
+            emailError,
           };
           dispatch({ type: "staff.invited", value: membership, actor });
-          registerLocalInviteToken({
-            token: dummyToken,
-            email: input.adminEmail,
-            name: input.adminName,
-            phone: input.adminPhone,
-            clinicName: input.name,
-            clinicId: clinic.id,
-            clinicAddress: input.address,
-            clinicCity: input.city,
-            clinicPhone: input.adminPhone || input.phone,
-            clinicEmail: input.email,
-            roleCode: "clinic_admin",
-            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-          });
-          void sendInvitationEmail({
-            recipientEmail: input.adminEmail,
-            recipientName: input.adminName,
-            clinicName: input.name,
-            clinicId: clinic.id,
-            clinicAddress: input.address,
-            clinicCity: input.city,
-            clinicPhone: input.adminPhone || input.phone,
-            clinicEmail: input.email,
-            setupUrl,
-            roleTitle: "Clinical Admin",
-            expiresInHours: 24,
-          });
         }
         return clinic;
       },
@@ -1511,25 +1530,36 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           await refresh();
           return membership;
         }
-        const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:5173";
+        const origin = getAppBaseUrl();
         const token = (globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? Math.random().toString(36).slice(2)) +
           (globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? Math.random().toString(36).slice(2));
         const setupUrl = `${origin}/setup?token=${token}`;
         const clinic = state.clinics.find((c) => c.id === targetHospitalId);
 
-        void sendInvitationEmail({
-          recipientEmail: input.email,
-          recipientName: input.name,
-          clinicName: clinic?.name || "ClinicFlow Health",
-          clinicId: targetHospitalId,
-          clinicAddress: clinic?.address,
-          clinicCity: clinic?.city,
-          clinicPhone: input.phone || clinic?.phone,
-          clinicEmail: clinic?.email,
-          setupUrl,
-          roleTitle: "Clinical Admin",
-          expiresInHours: 24,
-        });
+        let emailSent = false;
+        let emailId: string | undefined;
+        let emailError: string | undefined;
+
+        try {
+          const sendResult = await sendInvitationEmail({
+            recipientEmail: input.email,
+            recipientName: input.name,
+            clinicName: clinic?.name || "ClinicFlow Health",
+            clinicId: targetHospitalId,
+            clinicAddress: clinic?.address,
+            clinicCity: clinic?.city,
+            clinicPhone: input.phone || clinic?.phone,
+            clinicEmail: clinic?.email,
+            setupUrl,
+            roleTitle: "Clinical Admin",
+            expiresInHours: 24,
+          });
+          emailSent = sendResult.success;
+          emailId = sendResult.emailId;
+        } catch (err) {
+          emailError = err instanceof Error ? err.message : "Failed to deliver email";
+          console.error("[Invite Clinic Admin] Failed to send email:", emailError);
+        }
 
         const membership: StaffMember = {
           id: createId("AD"),
@@ -1540,6 +1570,9 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           role: "clinic_admin",
           status: "Invited",
           tempPassword: input.tempPassword,
+          emailSent,
+          emailId,
+          emailError,
         };
         dispatch({ type: "staff.invited", value: membership, actor });
         return membership;
@@ -1620,7 +1653,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         const target = state.staffMembers.find((member) => member.id === userId);
         if (!target) throw new Error("Staff member was not found");
 
-        const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:5173";
+        const origin = getAppBaseUrl();
         const token = (globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? Math.random().toString(36).slice(2)) +
           (globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? Math.random().toString(36).slice(2));
         const setupUrl = `${origin}/setup?token=${token}`;

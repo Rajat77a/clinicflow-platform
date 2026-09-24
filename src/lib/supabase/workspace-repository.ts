@@ -32,7 +32,7 @@ import { getSupabaseBrowserClient } from "./client";
 import { normalizePageInput } from "../record-page";
 import { throwIfFunctionError } from "./function-error";
 import { toSafeBackendError } from "../backend/safe-error";
-import { sendInvitationEmail } from "../email-service";
+import { sendInvitationEmail, getAppBaseUrl } from "../email-service";
 import { deactivateClinicAccounts, reactivateClinicAccounts, deleteClinicAccounts } from "../account-store";
 
 // Supabase query results are validated and normalized at this repository boundary.
@@ -718,7 +718,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     input: DoctorInput | ReceptionistInput | ClinicAdminInput,
     roleCode: "clinic_admin" | "doctor" | "receptionist" | "super_admin",
     targetHospitalId?: string,
-  ): Promise<{ setupUrl: string }> {
+  ): Promise<{ setupUrl: string; emailSent?: boolean; emailId?: string; emailError?: string }> {
     let hospitalId = targetHospitalId;
     if (!hospitalId) {
       const { data: hospital } = await this.client.from("hospitals").select("id").single();
@@ -785,7 +785,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       if (!tokenResult || typeof tokenResult.token !== "string") {
         throw new Error("Failed to generate staff invite token");
       }
-      const origin = typeof window !== "undefined" ? window.location.origin : "http://localhost:5173";
+      const origin = getAppBaseUrl();
       setupUrl = `${origin}/setup?token=${tokenResult.token}`;
     }
 
@@ -816,21 +816,32 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       receptionist: "Receptionist",
     };
 
-    void sendInvitationEmail({
-      recipientEmail: input.email,
-      recipientName: input.name,
-      clinicName,
-      clinicId: hospitalId || undefined,
-      clinicAddress,
-      clinicCity,
-      clinicPhone,
-      clinicEmail,
-      setupUrl,
-      roleTitle: roleTitles[roleCode] ?? "Staff Member",
-      expiresInHours: 24,
-    });
+    let emailSent = false;
+    let emailId: string | undefined;
+    let emailError: string | undefined;
 
-    return { setupUrl };
+    try {
+      const emailResult = await sendInvitationEmail({
+        recipientEmail: input.email,
+        recipientName: input.name,
+        clinicName,
+        clinicId: hospitalId || undefined,
+        clinicAddress,
+        clinicCity,
+        clinicPhone,
+        clinicEmail,
+        setupUrl,
+        roleTitle: roleTitles[roleCode] ?? "Staff Member",
+        expiresInHours: 24,
+      });
+      emailSent = emailResult.success;
+      emailId = emailResult.emailId;
+    } catch (err) {
+      emailError = err instanceof Error ? err.message : "Failed to deliver email";
+      console.error("[Staff Invite] Email delivery failed:", emailError);
+    }
+
+    return { setupUrl, emailSent, emailId, emailError };
   }
 
   async createDoctor(input: DoctorInput) {
@@ -980,6 +991,10 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     }
 
     let setupUrl: string | undefined;
+    let emailSent = false;
+    let emailId: string | undefined;
+    let emailError: string | undefined;
+
     if (input.adminName && input.adminEmail && hospitalId) {
       try {
         const inviteResult = await this.inviteStaff(
@@ -992,12 +1007,16 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
           hospitalId,
         );
         setupUrl = inviteResult.setupUrl;
+        emailSent = inviteResult.emailSent ?? false;
+        emailId = inviteResult.emailId;
+        emailError = inviteResult.emailError;
       } catch (inviteError) {
-        console.warn("Clinical admin invitation error:", inviteError);
+        emailError = inviteError instanceof Error ? inviteError.message : "Clinical admin invitation error";
+        console.error("Clinical admin invitation error:", inviteError);
       }
     }
 
-    return { id: hospitalId, setupUrl };
+    return { id: hospitalId, setupUrl, emailSent, emailId, emailError };
   }
 
   async updateClinic(input: ClinicInput) {
