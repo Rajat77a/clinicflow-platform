@@ -59,7 +59,7 @@ function SetupPage() {
   const [token, setToken] = useState<string | null>(null);
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [errorInfo, setErrorInfo] = useState<{ title: string; message: string } | null>(null);
   const [pw, setPw] = useState("");
   const [pw2, setPw2] = useState("");
   const [showPw, setShowPw] = useState(false);
@@ -69,9 +69,19 @@ function SetupPage() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const t = params.get("token");
+    const rawToken = params.get("token");
+    const t = rawToken?.trim() || "";
+
+    // Safe development logging: log existence and token length only, NEVER the full token
+    const tokenExists = Boolean(t);
+    const tokenLength = t.length;
+    console.log(`[InviteSetup] URL check: token exists = ${tokenExists}, token length = ${tokenLength}`);
+
     if (!t) {
-      setError("No invite token found. Please check the link you received.");
+      setErrorInfo({
+        title: "Link Invalid",
+        message: "No invitation token was provided.",
+      });
       setLoading(false);
       return;
     }
@@ -81,11 +91,17 @@ function SetupPage() {
       const local = getLocalInviteToken(t);
       if (local) {
         if (local.used) {
-          setError("This invitation link has already been used. Please contact your administrator or sign in.");
+          setErrorInfo({
+            title: "Invitation Already Used",
+            message: "This invitation link has already been used.",
+          });
           return true;
         }
         if (new Date(local.expiresAt) <= new Date()) {
-          setError("This invitation link has expired. Invitation links are valid for 24 hours. Please contact the Super Admin for a new invitation.");
+          setErrorInfo({
+            title: "Invitation Expired",
+            message: "This invitation link has expired.",
+          });
           return true;
         }
         setTokenInfo({
@@ -118,7 +134,10 @@ function SetupPage() {
 
     if (!supabaseConfig.configured) {
       if (!tryLocalToken()) {
-        setError("Unable to validate the invite link. Please contact the Super Admin to request a new invitation.");
+        setErrorInfo({
+          title: "Link Invalid",
+          message: "This invitation link is invalid.",
+        });
       }
       setLoading(false);
       return;
@@ -126,67 +145,120 @@ function SetupPage() {
 
     try {
       const supabase = getSupabaseBrowserClient();
+      console.log(`[InviteSetup] Calling validate_invite_token RPC (token length = ${t.length})`);
       supabase.rpc("validate_invite_token", { p_token: t })
-        .then(({ data, error: rpcError }: { data: Array<{ status: string; p_email: string | null; p_full_name: string | null; p_phone: string | null; p_role_code: string | null; p_hospital_id: string | null; p_facility_id: string | null; p_department_id: string | null; p_clinic_name: string | null; p_clinic_email: string | null; p_clinic_phone: string | null; p_clinic_address: string | null; p_clinic_city?: string | null; p_specialty: string | null; p_shift: string | null; p_gender: string | null; p_qualification: string | null; p_medical_registration_number: string | null; p_experience_years: number | null; p_consultation_fee: number | null; p_working_hours: string | null; p_administrative_notes: string | null }> | null; error: { message: string } | null }) => {
+        .then(({ data, error: rpcError }: { data: unknown; error: { message: string } | null }) => {
           if (rpcError) {
-            console.error("validate_invite_token RPC error:", rpcError);
+            console.error("[InviteSetup] validate_invite_token RPC error:", rpcError.message);
             if (supabaseConfig.demoMode && tryLocalToken()) return;
-            setError("Unable to validate this invitation right now. Please try again.");
+            setErrorInfo({
+              title: "Unable to Validate Invitation",
+              message: "Unable to validate this invitation. Please try again.",
+            });
             return;
           }
 
-          if (!data || data.length === 0) {
+          const row = Array.isArray(data)
+            ? (data[0] as Record<string, unknown> | undefined)
+            : (data && typeof data === "object" ? (data as Record<string, unknown>) : null);
+
+          if (!row) {
+            console.warn("[InviteSetup] validate_invite_token returned empty data");
             if (supabaseConfig.demoMode && tryLocalToken()) return;
-            setError("This invitation link is invalid. Please check the link you received.");
+            setErrorInfo({
+              title: "Link Invalid",
+              message: "This invitation link is invalid.",
+            });
             return;
           }
 
-          const row = data[0];
+          const status = String(row.status ?? "invalid");
+          console.log(`[InviteSetup] validate_invite_token returned status = ${status}`);
+
           if (row.status === "expired") {
-            setError("This invitation link has expired (links are valid for 24 hours). Please contact the Super Admin to request a new invitation.");
+            setErrorInfo({
+              title: "Invitation Expired",
+              message: "This invitation link has expired.",
+            });
           } else if (row.status === "used") {
-            setError("This invitation link has already been used. Please contact your administrator or sign in.");
+            setErrorInfo({
+              title: "Invitation Already Used",
+              message: "This invitation link has already been used.",
+            });
           } else if (row.status === "clinic_deleted") {
-            setError("The clinic associated with this invitation is no longer active. Please contact the Super Admin.");
-          } else if (row.status === "invalid" || !row.p_email) {
+            setErrorInfo({
+              title: "Clinic Inactive",
+              message: "This clinic invitation is no longer active.",
+            });
+          } else if (row.status === "invalid") {
             if (supabaseConfig.demoMode && tryLocalToken()) return;
-            setError("This invitation link is invalid. Please check the link you received.");
-          } else {
+            setErrorInfo({
+              title: "Link Invalid",
+              message: "This invitation link is invalid.",
+            });
+          } else if (row.status === "valid") {
+            const email = String(row.p_email ?? row.email ?? "").trim();
+            if (!email) {
+              if (supabaseConfig.demoMode && tryLocalToken()) return;
+              setErrorInfo({
+                title: "Link Invalid",
+                message: "This invitation link is invalid.",
+              });
+              return;
+            }
+
             setTokenInfo({
-              email: row.p_email ?? "",
-              full_name: row.p_full_name ?? "",
-              phone: row.p_phone ?? "",
-              role_code: row.p_role_code ?? "",
-              hospital_id: row.p_hospital_id ?? "",
-              facility_id: row.p_facility_id,
-              department_id: row.p_department_id,
-              clinic_name: row.p_clinic_name,
-              clinic_email: row.p_clinic_email,
-              clinic_phone: row.p_clinic_phone,
-              clinic_address: row.p_clinic_address,
-              clinic_city: row.p_clinic_city ?? null,
-              specialty: row.p_specialty,
-              shift: row.p_shift,
-              gender: row.p_gender,
-              qualification: row.p_qualification,
-              medical_registration_number: row.p_medical_registration_number,
-              experience_years: row.p_experience_years,
-              consultation_fee: row.p_consultation_fee,
-              working_hours: row.p_working_hours,
-              administrative_notes: row.p_administrative_notes,
+              email,
+              full_name: String(row.p_full_name ?? row.full_name ?? ""),
+              phone: String(row.p_phone ?? row.phone ?? ""),
+              role_code: String(row.p_role_code ?? row.role_code ?? "clinic_admin"),
+              hospital_id: String(row.p_hospital_id ?? row.hospital_id ?? ""),
+              facility_id: (row.p_facility_id ?? row.facility_id ?? null) as string | null,
+              department_id: (row.p_department_id ?? row.department_id ?? null) as string | null,
+              clinic_name: (row.p_clinic_name ?? row.clinic_name ?? null) as string | null,
+              clinic_email: (row.p_clinic_email ?? row.clinic_email ?? null) as string | null,
+              clinic_phone: (row.p_clinic_phone ?? row.clinic_phone ?? null) as string | null,
+              clinic_address: (row.p_clinic_address ?? row.clinic_address ?? null) as string | null,
+              clinic_city: (row.p_clinic_city ?? row.clinic_city ?? null) as string | null,
+              specialty: (row.p_specialty ?? row.specialty ?? null) as string | null,
+              shift: (row.p_shift ?? row.shift ?? null) as string | null,
+              gender: (row.p_gender ?? row.gender ?? null) as string | null,
+              qualification: (row.p_qualification ?? row.qualification ?? null) as string | null,
+              medical_registration_number: (row.p_medical_registration_number ?? row.medical_registration_number ?? null) as string | null,
+              experience_years: typeof (row.p_experience_years ?? row.experience_years) === "number"
+                ? Number(row.p_experience_years ?? row.experience_years)
+                : null,
+              consultation_fee: typeof (row.p_consultation_fee ?? row.consultation_fee) === "number"
+                ? Number(row.p_consultation_fee ?? row.consultation_fee)
+                : null,
+              working_hours: (row.p_working_hours ?? row.working_hours ?? null) as string | null,
+              administrative_notes: (row.p_administrative_notes ?? row.administrative_notes ?? null) as string | null,
+            });
+          } else {
+            setErrorInfo({
+              title: "Link Invalid",
+              message: "This invitation link is invalid.",
             });
           }
         })
         .catch((err: unknown) => {
-          console.error("validate_invite_token failure:", err);
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          console.error("[InviteSetup] validate_invite_token failure:", errorMsg);
           if (supabaseConfig.demoMode && tryLocalToken()) return;
-          setError("Unable to validate this invitation right now. Please try again.");
+          setErrorInfo({
+            title: "Unable to Validate Invitation",
+            message: "Unable to validate this invitation. Please try again.",
+          });
         })
         .finally(() => setLoading(false));
     } catch (err: unknown) {
-      console.error("validate_invite_token initialization error:", err);
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      console.error("[InviteSetup] validate_invite_token initialization error:", errorMsg);
       if (supabaseConfig.demoMode && tryLocalToken()) return;
-      setError("Unable to validate this invitation right now. Please try again.");
+      setErrorInfo({
+        title: "Unable to Validate Invitation",
+        message: "Unable to validate this invitation. Please try again.",
+      });
       setLoading(false);
     }
   }, []);
@@ -209,6 +281,7 @@ function SetupPage() {
     try {
       if (supabaseConfig.configured) {
         const supabase = getSupabaseBrowserClient();
+        console.log(`[InviteSetup] Calling activate_invited_user RPC (token length = ${token.length})`);
 
         // Atomically activate user in Supabase auth, profiles, and staff_memberships
         const { data: activateResult, error: activateErr } = await supabase.rpc(
@@ -217,6 +290,7 @@ function SetupPage() {
         );
 
         if (activateErr) {
+          console.error("[InviteSetup] activate_invited_user RPC error:", activateErr.message);
           throw new Error(activateErr.message || "Failed to activate account");
         }
 
@@ -225,6 +299,8 @@ function SetupPage() {
           throw new Error(resultObj.error || "Failed to activate account");
         }
 
+        console.log("[InviteSetup] Account activated successfully via Supabase");
+
         // Establish live authenticated session via Supabase Auth
         try {
           await supabase.auth.signInWithPassword({
@@ -232,7 +308,7 @@ function SetupPage() {
             password: pw,
           });
         } catch (signInErr) {
-          console.warn("Supabase auto-signin notice:", signInErr);
+          console.warn("[InviteSetup] Supabase auto-signin notice:", signInErr);
         }
       } else {
         // Fallback exclusively for demo mode without Supabase
@@ -268,13 +344,13 @@ function SetupPage() {
     );
   }
 
-  if (error) {
+  if (errorInfo) {
     return (
       <div className="grid min-h-screen place-items-center bg-background p-6">
         <div className="w-full max-w-md text-center">
           <Activity className="mx-auto h-10 w-10 text-destructive" />
-          <h1 className="mt-4 font-display text-2xl font-bold">Link invalid</h1>
-          <p className="mt-2 text-sm text-muted-foreground">{error}</p>
+          <h1 className="mt-4 font-display text-2xl font-bold">{errorInfo.title}</h1>
+          <p className="mt-2 text-sm text-muted-foreground">{errorInfo.message}</p>
           <Button asChild className="mt-6">
             <Link to="/login">Go to sign in</Link>
           </Button>
