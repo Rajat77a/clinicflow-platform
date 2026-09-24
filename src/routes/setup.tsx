@@ -13,6 +13,9 @@ import { saveRegisteredAccount } from "@/lib/account-store";
 import type { Role } from "@/lib/auth";
 
 export const Route = createFileRoute("/setup")({
+  validateSearch: (search: Record<string, unknown>) => ({
+    token: typeof search.token === "string" ? search.token : (typeof search.t === "string" ? search.t : ""),
+  }),
   component: SetupPage,
 });
 
@@ -56,6 +59,7 @@ const ROLE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = 
 
 function SetupPage() {
   const navigate = useNavigate();
+  const searchParams = Route.useSearch();
   const [token, setToken] = useState<string | null>(null);
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,14 +72,21 @@ function SetupPage() {
   const [isActivated, setIsActivated] = useState(false);
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    let rawToken = params.get("token") || params.get("t");
-    if (!rawToken && typeof window !== "undefined" && window.location.hash) {
-      const hashStr = window.location.hash;
-      const qIdx = hashStr.indexOf("?");
-      if (qIdx !== -1) {
-        const hashParams = new URLSearchParams(hashStr.slice(qIdx));
-        rawToken = hashParams.get("token") || hashParams.get("t");
+    let rawToken = searchParams.token || "";
+    if (!rawToken && typeof window !== "undefined") {
+      try {
+        const params = new URLSearchParams(window.location.search);
+        rawToken = params.get("token") || params.get("t") || "";
+        if (!rawToken && window.location.hash) {
+          const hashStr = window.location.hash;
+          const qIdx = hashStr.indexOf("?");
+          if (qIdx !== -1) {
+            const hashParams = new URLSearchParams(hashStr.slice(qIdx));
+            rawToken = hashParams.get("token") || hashParams.get("t") || "";
+          }
+        }
+      } catch {
+        // ignore
       }
     }
 
@@ -270,7 +281,7 @@ function SetupPage() {
       });
       setLoading(false);
     }
-  }, []);
+  }, [searchParams.token]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();

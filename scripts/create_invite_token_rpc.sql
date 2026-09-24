@@ -1,6 +1,8 @@
 -- Run this script in the Supabase SQL Editor to create or update the invite token RPCs.
 -- This bypasses the edge function entirely, creating and validating tokens directly in the database.
 
+alter table public.invite_tokens alter column hospital_id drop not null;
+
 create or replace function public.create_staff_invite_token(
   p_email text,
   p_full_name text,

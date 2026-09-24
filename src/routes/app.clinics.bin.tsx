@@ -490,6 +490,19 @@ function TrashBinPage() {
                 <Users className="h-4 w-4 text-destructive" />
                 <span>{binStaffMembers.length} deleted user{binStaffMembers.length === 1 ? "" : "s"} in Trash</span>
               </div>
+              {binStaffMembers.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+                  onClick={() => {
+                    setSelectedUserIds(new Set(binStaffMembers.map((m) => m.id)));
+                    setShowBulkDeleteUsersDialog(true);
+                  }}
+                >
+                  Delete All Users from Trash
+                </Button>
+              )}
             </div>
 
             {/* Bulk Selection Toolbar for Users */}

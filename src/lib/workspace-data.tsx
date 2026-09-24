@@ -787,6 +787,12 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
                 }
               : m
           ),
+          doctors: state.doctors.map((d) =>
+            d.id === command.userId ? { ...d, status: "Inactive" } : d
+          ),
+          receptionists: state.receptionists.map((r) =>
+            r.id === command.userId ? { ...r, status: "Inactive" } : r
+          ),
         },
         command.actor,
         `Soft deleted staff user ${command.userId}`,
@@ -808,6 +814,12 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
                 }
               : m
           ),
+          doctors: state.doctors.map((d) =>
+            d.id === command.userId ? { ...d, status: "Active" } : d
+          ),
+          receptionists: state.receptionists.map((r) =>
+            r.id === command.userId ? { ...r, status: "Active" } : r
+          ),
         },
         command.actor,
         `Restored staff user ${command.userId}`,
@@ -820,6 +832,8 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         {
           ...state,
           staffMembers: state.staffMembers.filter((m) => m.id !== command.userId),
+          doctors: state.doctors.filter((d) => d.id !== command.userId),
+          receptionists: state.receptionists.filter((r) => r.id !== command.userId),
         },
         command.actor,
         `Permanently deleted staff user ${command.userId}`,
@@ -859,6 +873,12 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
                 }
               : m
           ),
+          doctors: state.doctors.map((d) =>
+            idSet.has(d.id) ? { ...d, status: "Inactive" } : d
+          ),
+          receptionists: state.receptionists.map((r) =>
+            idSet.has(r.id) ? { ...r, status: "Inactive" } : r
+          ),
         },
         command.actor,
         `Soft deleted ${command.userIds.length} staff members`,
@@ -882,6 +902,12 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
                 }
               : m
           ),
+          doctors: state.doctors.map((d) =>
+            idSet.has(d.id) ? { ...d, status: "Active" } : d
+          ),
+          receptionists: state.receptionists.map((r) =>
+            idSet.has(r.id) ? { ...r, status: "Active" } : r
+          ),
         },
         command.actor,
         `Restored ${command.userIds.length} staff members`,
@@ -896,6 +922,8 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         {
           ...state,
           staffMembers: state.staffMembers.filter((m) => !idSet.has(m.id)),
+          doctors: state.doctors.filter((d) => !idSet.has(d.id)),
+          receptionists: state.receptionists.filter((r) => !idSet.has(r.id)),
         },
         command.actor,
         `Permanently deleted ${command.userIds.length} staff members`,
@@ -1149,8 +1177,8 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       clinics: state.clinics.filter((c) => !c.deletedAt),
       binClinics: state.clinics.filter((c) => isWithinRetentionPeriod(c.deletedAt)),
       patients,
-      doctors: clinicScope(state.doctors),
-      receptionists: clinicScope(state.receptionists),
+      doctors: clinicScope(state.doctors).filter((d) => d.status !== "Inactive"),
+      receptionists: clinicScope(state.receptionists).filter((r) => r.status !== "Inactive"),
       appointments,
       prescriptions,
       labReports: user && (hasPermission(user.role, "labs.write") || hasPermission(user.role, "prescriptions.read"))
@@ -1674,12 +1702,12 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       },
       softDeleteStaff: async (userId: string) => {
         const actor = requireUser(user, "people.manage");
-        if (actor.role !== "super_admin") {
-          throw new Error("Only super admin can delete users");
-        }
         const target = state.staffMembers.find((member) => member.id === userId);
         if (!target) throw new Error("Staff member was not found");
         if (target.id === actor.userId) throw new Error("You cannot delete your own account");
+        if (actor.role !== "super_admin" && target.clinicId !== actor.clinicId) {
+          throw new Error("You can only manage users within your clinic");
+        }
 
         if (repository?.softDeleteStaff) {
           await repository.softDeleteStaff(userId);
@@ -1694,11 +1722,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       },
       restoreStaff: async (userId: string) => {
         const actor = requireUser(user, "people.manage");
-        if (actor.role !== "super_admin") {
-          throw new Error("Only super admin can restore users");
-        }
         const target = state.staffMembers.find((member) => member.id === userId);
         if (!target) throw new Error("Staff member was not found");
+        if (actor.role !== "super_admin" && target.clinicId !== actor.clinicId && target.previousClinicId !== actor.clinicId) {
+          throw new Error("You can only manage users within your clinic");
+        }
 
         const targetClinicId = target.clinicId || target.previousClinicId;
         if (targetClinicId) {
@@ -1721,10 +1749,10 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       },
       permanentlyDeleteStaff: async (userId: string) => {
         const actor = requireUser(user, "people.manage");
-        if (actor.role !== "super_admin") {
-          throw new Error("Only super admin can permanently delete users");
-        }
         const target = state.staffMembers.find((member) => member.id === userId);
+        if (actor.role !== "super_admin" && target && target.clinicId !== actor.clinicId && target.previousClinicId !== actor.clinicId) {
+          throw new Error("You can only manage users within your clinic");
+        }
 
         if (repository?.permanentlyDeleteStaff) {
           await repository.permanentlyDeleteStaff(userId);
@@ -1739,10 +1767,12 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       },
       bulkSoftDeleteStaff: async (userIds: string[]) => {
         const actor = requireUser(user, "people.manage");
-        if (actor.role !== "super_admin") {
-          throw new Error("Only super admin can delete users");
-        }
-        const filteredIds = userIds.filter((id) => id !== actor.userId);
+        const filteredIds = userIds.filter((id) => {
+          if (id === actor.userId) return false;
+          if (actor.role === "super_admin") return true;
+          const target = state.staffMembers.find((m) => m.id === id);
+          return target && target.clinicId === actor.clinicId;
+        });
         if (!filteredIds.length) return;
 
         if (repository?.bulkSoftDeleteStaff) {
@@ -1750,7 +1780,9 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           await refresh();
           return;
         } else if (repository?.softDeleteStaff) {
-          await Promise.all(filteredIds.map((id) => repository.softDeleteStaff!(id)));
+          for (const id of filteredIds) {
+            await repository.softDeleteStaff(id);
+          }
           await refresh();
           return;
         }
@@ -1763,57 +1795,65 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       },
       bulkRestoreStaff: async (userIds: string[]) => {
         const actor = requireUser(user, "people.manage");
-        if (actor.role !== "super_admin") {
-          throw new Error("Only super admin can restore users");
-        }
-        if (!userIds.length) return;
+        const filteredIds = userIds.filter((id) => {
+          if (actor.role === "super_admin") return true;
+          const target = state.staffMembers.find((m) => m.id === id);
+          return target && (target.clinicId === actor.clinicId || target.previousClinicId === actor.clinicId);
+        });
+        if (!filteredIds.length) return;
 
         if (repository?.bulkRestoreStaff) {
-          await repository.bulkRestoreStaff(userIds);
+          await repository.bulkRestoreStaff(filteredIds);
           await refresh();
           return;
         } else if (repository?.restoreStaff) {
-          await Promise.all(userIds.map((id) => repository.restoreStaff!(id)));
+          for (const id of filteredIds) {
+            await repository.restoreStaff(id);
+          }
           await refresh();
           return;
         }
 
-        userIds.forEach((id) => {
+        filteredIds.forEach((id) => {
           const target = state.staffMembers.find((m) => m.id === id);
           if (target?.email) reactivateUserAccount(target.email);
         });
-        dispatch({ type: "staff.bulk_restored", userIds, actor });
+        dispatch({ type: "staff.bulk_restored", userIds: filteredIds, actor });
       },
       bulkPermanentlyDeleteStaff: async (userIds: string[]) => {
         const actor = requireUser(user, "people.manage");
-        if (actor.role !== "super_admin") {
-          throw new Error("Only super admin can permanently delete users");
-        }
-        if (!userIds.length) return;
+        const filteredIds = userIds.filter((id) => {
+          if (actor.role === "super_admin") return true;
+          const target = state.staffMembers.find((m) => m.id === id);
+          return target && (target.clinicId === actor.clinicId || target.previousClinicId === actor.clinicId);
+        });
+        if (!filteredIds.length) return;
 
         if (repository?.bulkPermanentlyDeleteStaff) {
-          await repository.bulkPermanentlyDeleteStaff(userIds);
+          await repository.bulkPermanentlyDeleteStaff(filteredIds);
           await refresh();
           return;
         } else if (repository?.permanentlyDeleteStaff) {
-          await Promise.all(userIds.map((id) => repository.permanentlyDeleteStaff!(id)));
+          for (const id of filteredIds) {
+            await repository.permanentlyDeleteStaff(id);
+          }
           await refresh();
           return;
         }
 
-        userIds.forEach((id) => {
+        filteredIds.forEach((id) => {
           const target = state.staffMembers.find((m) => m.id === id);
           if (target?.email) deleteUserAccount(target.email);
         });
-        dispatch({ type: "staff.bulk_permanently_deleted", userIds, actor });
+        dispatch({ type: "staff.bulk_permanently_deleted", userIds: filteredIds, actor });
       },
       resendStaffInvitation: async (userId: string) => {
         const actor = requireUser(user, "people.manage");
-        if (actor.role !== "super_admin") {
-          throw new Error("Only super admin can resend invitations");
-        }
         const target = state.staffMembers.find((member) => member.id === userId);
         if (!target) throw new Error("Staff member was not found");
+        if (actor.role !== "super_admin" && target.clinicId !== actor.clinicId) {
+          throw new Error("You can only manage users within your clinic");
+        }
 
         const origin = getAppBaseUrl();
         const token = (globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? Math.random().toString(36).slice(2)) +

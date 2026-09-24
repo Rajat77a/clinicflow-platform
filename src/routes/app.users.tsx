@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -262,9 +262,20 @@ function UsersPage() {
   };
 
   const isSuperAdmin = user?.role === "super_admin";
+  const canManageUsers = isSuperAdmin || user?.role === "clinic_admin";
+
+  const canDeleteMember = useCallback((member: StaffMember) => {
+    if (member.id === user?.userId) return false;
+    if (user?.role === "super_admin") return true;
+    if (user?.role === "clinic_admin") {
+      return member.role !== "super_admin" && (member.clinicId === user.clinicId || !member.clinicId);
+    }
+    return false;
+  }, [user]);
+
   const deletableStaff = useMemo(
-    () => staffMembers.filter((m) => m.id !== user?.userId),
-    [staffMembers, user?.userId],
+    () => staffMembers.filter(canDeleteMember),
+    [staffMembers, canDeleteMember],
   );
 
   const allSelected =
@@ -581,7 +592,7 @@ function UsersPage() {
       />
 
       {/* Bulk Selection Toolbar */}
-      {isSuperAdmin && selectedIds.size > 0 && (
+      {canManageUsers && selectedIds.size > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm shadow-soft">
           <div className="flex items-center gap-2 font-medium text-foreground">
             <CheckSquare className="h-4 w-4 text-destructive" />
@@ -602,7 +613,7 @@ function UsersPage() {
               className="gap-1.5"
             >
               <Trash2 className="h-4 w-4" />
-              Move Selected to Trash ({selectedIds.size})
+              Delete Selected ({selectedIds.size})
             </Button>
           </div>
         </div>
@@ -612,7 +623,7 @@ function UsersPage() {
         <Table>
           <TableHeader>
             <TableRow>
-              {isSuperAdmin && (
+              {canManageUsers && (
                 <TableHead className="w-12 text-center">
                   <input
                     type="checkbox"
@@ -639,13 +650,13 @@ function UsersPage() {
               const assignedClinic = member.clinicId ? clinicMap.get(member.clinicId) : null;
               return (
                 <TableRow key={member.id} className="hover:bg-muted/30">
-                  {isSuperAdmin && (
+                  {canManageUsers && (
                     <TableCell className="w-12 text-center">
                       <input
                         type="checkbox"
                         aria-label={`Select ${member.name}`}
                         checked={selectedIds.has(member.id)}
-                        disabled={member.id === user?.userId}
+                        disabled={!canDeleteMember(member)}
                         onChange={() => toggleSelectOne(member.id)}
                         className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary disabled:opacity-30 disabled:cursor-not-allowed"
                       />
@@ -737,7 +748,7 @@ function UsersPage() {
                           <UserMinus className="h-4 w-4 text-muted-foreground hover:text-destructive" />
                         </Button>
                       )}
-                      {user?.role === "super_admin" && member.id !== user?.userId && (
+                      {canDeleteMember(member) && (
                         <Button
                           type="button"
                           variant="ghost"
@@ -981,7 +992,7 @@ function UsersPage() {
             <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive mb-2">
               <AlertTriangle className="h-6 w-6" />
             </div>
-            <DialogTitle className="text-center">Move {selectedIds.size} Users to Trash?</DialogTitle>
+            <DialogTitle className="text-center">Delete Selected Users?</DialogTitle>
             <DialogDescription className="text-center text-sm pt-2">
               The selected users will be moved to the Trash Bin and their portal access will be suspended.
               You can restore them at any time from the Trash within 30 days.
@@ -1004,7 +1015,7 @@ function UsersPage() {
               className="gap-1.5"
             >
               <Trash2 className="h-4 w-4" />
-              {isBulkDeleting ? "Moving to Trash..." : `Move ${selectedIds.size} Users to Trash`}
+              {isBulkDeleting ? "Deleting..." : `Delete Selected (${selectedIds.size})`}
             </Button>
           </DialogFooter>
         </DialogContent>

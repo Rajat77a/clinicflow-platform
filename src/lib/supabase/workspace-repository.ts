@@ -262,7 +262,15 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     const hospital = clinicRows.find((row) => row.is_current) ?? clinicRows[0];
     if (!hospital) return EMPTY_SNAPSHOT;
 
-    const doctors: Doctor[] = ((doctorsResult.data ?? []) as Row[]).map((row) => ({
+    const deletedStaffIds = new Set(
+      ((membershipsResult.data ?? []) as Row[])
+        .filter((r) => r.active === false || Boolean(r.deleted_at) || r.status === "Inactive")
+        .map((r) => r.user_id),
+    );
+
+    const doctors: Doctor[] = ((doctorsResult.data ?? []) as Row[])
+      .filter((row) => row.status !== "Inactive" && !deletedStaffIds.has(row.user_id))
+      .map((row) => ({
       id: row.user_id,
       clinicId: hospital.id,
       name: row.display_name,
@@ -312,7 +320,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     const patientById = new Map(patients.map((patient) => [patient.id, patient]));
 
     const receptionists: Receptionist[] = ((membershipsResult.data ?? []) as Row[])
-      .filter((row) => row.role_code === "receptionist" && row.active !== false && !row.deleted_at)
+      .filter((row) => row.role_code === "receptionist" && row.active !== false && !row.deleted_at && row.status !== "Inactive")
       .map((row) => {
         return {
           id: row.user_id,
@@ -1423,9 +1431,10 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       p_user_id: userId,
     });
     if (error) {
+      const now = new Date().toISOString();
       const { error: fallbackError } = await this.client
         .from("staff_memberships")
-        .update({ active: false, status: "Inactive", updated_at: new Date().toISOString() })
+        .update({ active: false, status: "Inactive", deleted_at: now, updated_at: now })
         .eq("user_id", userId);
       if (fallbackError) {
         throw toSafeBackendError(error, "Failed to delete user");
@@ -1440,7 +1449,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     if (error) {
       const { error: fallbackError } = await this.client
         .from("staff_memberships")
-        .update({ active: true, status: "Active", updated_at: new Date().toISOString() })
+        .update({ active: true, status: "Active", deleted_at: null, updated_at: new Date().toISOString() })
         .eq("user_id", userId);
       if (fallbackError) {
         throw toSafeBackendError(error, "Failed to restore user");
@@ -1458,15 +1467,21 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   }
 
   async bulkSoftDeleteStaff(userIds: string[]): Promise<void> {
-    await Promise.all(userIds.map((id) => this.softDeleteStaff(id)));
+    for (const id of userIds) {
+      await this.softDeleteStaff(id);
+    }
   }
 
   async bulkRestoreStaff(userIds: string[]): Promise<void> {
-    await Promise.all(userIds.map((id) => this.restoreStaff(id)));
+    for (const id of userIds) {
+      await this.restoreStaff(id);
+    }
   }
 
   async bulkPermanentlyDeleteStaff(userIds: string[]): Promise<void> {
-    await Promise.all(userIds.map((id) => this.permanentlyDeleteStaff(id)));
+    for (const id of userIds) {
+      await this.permanentlyDeleteStaff(id);
+    }
   }
 }
 

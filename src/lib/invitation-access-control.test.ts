@@ -26,6 +26,14 @@ const authSource = await readFile(
   new URL("./auth.tsx", import.meta.url),
   "utf8",
 );
+const usersSource = await readFile(
+  new URL("../routes/app.users.tsx", import.meta.url),
+  "utf8",
+);
+const binSource = await readFile(
+  new URL("../routes/app.clinics.bin.tsx", import.meta.url),
+  "utf8",
+);
 
 test("migration creates 24-hour expiration token generation with previous token invalidation", () => {
   assert.match(migrationSource, /create or replace function public\.create_staff_invite_token/);
@@ -120,4 +128,33 @@ test("repository and workspace data support persistent staff deletion and global
 test("auth provider prioritizes Supabase authentication and restricts mock account store to demo mode", () => {
   assert.match(authSource, /signInWithPassword/);
   assert.match(authSource, /if \(!supabaseConfig\.demoMode\) {\s*throw new Error\(error\.message \|\| "Invalid email or password\."\);\s*}/);
+});
+
+test("setup route parses and validates token from URL search parameters", () => {
+  assert.match(setupSource, /validateSearch:\s*\(search[\s\S]*?token/);
+  assert.match(setupSource, /Route\.useSearch\(\)/);
+});
+
+test("user management supports bulk selection and Delete Selected action", () => {
+  assert.match(usersSource, /canManageUsers/);
+  assert.match(usersSource, /canDeleteMember/);
+  assert.match(usersSource, /toggleSelectAll/);
+  assert.match(usersSource, /toggleSelectOne/);
+  assert.match(usersSource, /Delete Selected/);
+  assert.match(usersSource, /bulkSoftDeleteStaff/);
+});
+
+test("trash provides bulk actions for deleted users", () => {
+  assert.match(binSource, /selectedUserIds/);
+  assert.match(binSource, /toggleSelectAllUsers/);
+  assert.match(binSource, /toggleSelectOneUser/);
+  assert.match(binSource, /bulkRestoreStaff/);
+  assert.match(binSource, /bulkPermanentlyDeleteStaff/);
+  assert.match(binSource, /Restore Selected/);
+  assert.match(binSource, /Permanently Delete Selected/);
+});
+
+test("auth provider rejects deactivated or deleted users upon live hydration", () => {
+  assert.match(authSource, /membership\.active === false \|\| membership\.deleted_at \|\| membership\.status === "Inactive"/);
+  assert.match(authSource, /This user account has been deactivated or deleted/);
 });
