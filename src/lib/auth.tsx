@@ -65,57 +65,100 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     const supabase = getSupabaseBrowserClient();
-    const [{ data: profile, error: profileError }, { data: membership, error: membershipError }] =
-      await Promise.all([
-        supabase.from("profiles").select("display_name, email").eq("id", authUser.id).maybeSingle(),
-        supabase
-          .from("staff_memberships")
-          .select("hospital_id, facility_id, department_id, role_code")
-          .eq("user_id", authUser.id)
-          .eq("active", true)
-          .maybeSingle(),
-      ]);
+    const [
+      { data: profile, error: profileError },
+      { data: membership, error: membershipError },
+      { data: platformAdmin },
+    ] = await Promise.all([
+      supabase.from("profiles").select("display_name, email").eq("id", authUser.id).maybeSingle(),
+      supabase
+        .from("staff_memberships")
+        .select("hospital_id, facility_id, department_id, role_code, active, deleted_at, status")
+        .eq("user_id", authUser.id)
+        .maybeSingle(),
+      supabase
+        .from("platform_admins")
+        .select("active")
+        .eq("user_id", authUser.id)
+        .maybeSingle(),
+    ]);
 
     if (profileError || membershipError) {
       throw profileError ?? membershipError;
     }
-    if (!membership) {
+
+    // Check if user is banned or deleted
+    const isBannedOrDeleted =
+      Boolean(authUser.app_metadata?.banned) ||
+      Boolean(authUser.app_metadata?.deleted) ||
+      Boolean(authUser.user_metadata?.deleted) ||
+      Boolean(authUser.app_metadata?.permanently_deleted) ||
+      (authUser.banned_until ? new Date(authUser.banned_until) > new Date() : false);
+
+    if (isBannedOrDeleted) {
       await supabase.auth.signOut();
+      setUser(null);
+      throw new Error("This user account has been deactivated or deleted");
+    }
+
+    const isSuperAdmin = Boolean(platformAdmin?.active) || membership?.role_code === "super_admin";
+
+    if (membership) {
+      if (membership.active === false || membership.deleted_at || membership.status === "Inactive") {
+        await supabase.auth.signOut();
+        setUser(null);
+        throw new Error("This user account has been deactivated or deleted");
+      }
+    } else if (!isSuperAdmin) {
+      await supabase.auth.signOut();
+      setUser(null);
       throw new Error("Your account is not assigned to this hospital");
     }
-    if (!ROLES.has(membership.role_code as Role)) {
+
+    const effectiveRole: Role = isSuperAdmin ? "super_admin" : (membership?.role_code as Role);
+    if (!ROLES.has(effectiveRole)) {
       await supabase.auth.signOut();
+      setUser(null);
       throw new Error("This role is not supported by the current portal");
     }
 
-    const { data: hospital, error: hospitalError } = await supabase
-      .from("hospitals")
-      .select("name")
-      .eq("id", membership.hospital_id)
-      .single();
-    if (hospitalError) throw hospitalError;
+    let clinic = "ClinicFlow Platform";
+    let clinicLogo = "CF";
+
+    if (membership?.hospital_id) {
+      const { data: hospital } = await supabase
+        .from("hospitals")
+        .select("name, active")
+        .eq("id", membership.hospital_id)
+        .maybeSingle();
+
+      if (hospital?.name) {
+        clinic = hospital.name;
+        clinicLogo = clinic
+          .split(/\s+/)
+          .map((part: string) => part[0])
+          .join("")
+          .slice(0, 2)
+          .toUpperCase() || "CF";
+      }
+    }
 
     const name =
       profile?.display_name ||
-      authUser.user_metadata.full_name ||
+      authUser.user_metadata?.full_name ||
       authUser.email ||
       "Hospital user";
-    const clinic = hospital.name;
+
     setUser({
       userId: authUser.id,
       name,
       email: profile?.email || authUser.email || "",
-      role: membership.role_code as Role,
-      clinicId: membership.hospital_id,
-      facilityId: membership.facility_id,
-      departmentId: membership.department_id,
+      role: effectiveRole,
+      clinicId: membership?.hospital_id ?? null,
+      facilityId: membership?.facility_id ?? null,
+      departmentId: membership?.department_id ?? null,
       clinic,
-      clinicLogo: clinic
-        .split(/\s+/)
-        .map((part: string) => part[0])
-        .join("")
-        .slice(0, 2)
-        .toUpperCase(),
+      clinicLogo,
     });
   }, []);
 
@@ -148,27 +191,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (data.user) {
             await hydrateSupabaseUser(data.user);
           } else {
-            const stored = localStorage.getItem("cf_user");
-            if (stored) {
-              const parsed = JSON.parse(stored);
-              if (isAuthUser(parsed)) {
-                setUser(parsed);
-                return;
+            if (!supabaseConfig.configured || supabaseConfig.demoMode) {
+              const stored = localStorage.getItem("cf_user");
+              if (stored) {
+                const parsed = JSON.parse(stored);
+                if (isAuthUser(parsed)) {
+                  setUser(parsed);
+                  return;
+                }
               }
             }
             setUser(null);
           }
         } catch {
-          const stored = localStorage.getItem("cf_user");
-          if (stored) {
-            try {
-              const parsed = JSON.parse(stored);
-              if (isAuthUser(parsed)) {
-                setUser(parsed);
-                return;
+          if (!supabaseConfig.configured || supabaseConfig.demoMode) {
+            const stored = localStorage.getItem("cf_user");
+            if (stored) {
+              try {
+                const parsed = JSON.parse(stored);
+                if (isAuthUser(parsed)) {
+                  setUser(parsed);
+                  return;
+                }
+              } catch {
+                // ignore
               }
-            } catch {
-              // ignore
             }
           }
           setUser(null);
@@ -183,16 +230,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (event === "SIGNED_OUT") setPasswordSetupRequired(false);
         queueMicrotask(() => {
           void hydrateSupabaseUser(session?.user ?? null).catch(() => {
-            const stored = localStorage.getItem("cf_user");
-            if (stored) {
-              try {
-                const parsed = JSON.parse(stored);
-                if (isAuthUser(parsed)) {
-                  setUser(parsed);
-                  return;
+            if (!supabaseConfig.configured || supabaseConfig.demoMode) {
+              const stored = localStorage.getItem("cf_user");
+              if (stored) {
+                try {
+                  const parsed = JSON.parse(stored);
+                  if (isAuthUser(parsed)) {
+                    setUser(parsed);
+                    return;
+                  }
+                } catch {
+                  // ignore
                 }
-              } catch {
-                // ignore
               }
             }
             setUser(null);
@@ -251,8 +300,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(u);
 
     if (typeof window !== "undefined") {
-      if (u) {
-        localStorage.setItem("cf_user", JSON.stringify(u));
+      if (!supabaseConfig.configured || supabaseConfig.demoMode) {
+        if (u) {
+          localStorage.setItem("cf_user", JSON.stringify(u));
+        } else {
+          localStorage.removeItem("cf_user");
+        }
       } else {
         localStorage.removeItem("cf_user");
       }

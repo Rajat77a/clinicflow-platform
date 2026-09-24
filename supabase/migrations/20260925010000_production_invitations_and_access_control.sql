@@ -9,9 +9,10 @@
 
 begin;
 
--- Step 1: Ensure columns on staff_memberships
+-- Step 1: Ensure columns on staff_memberships and invite_tokens
 alter table public.staff_memberships add column if not exists status text default 'Active';
 alter table public.staff_memberships add column if not exists deleted_at timestamptz default null;
+alter table public.invite_tokens alter column hospital_id drop not null;
 
 -- Step 2: create_staff_invite_token RPC
 create or replace function public.create_staff_invite_token(
@@ -163,7 +164,7 @@ begin
 
   select * into v_rec
   from public.invite_tokens
-  where token = v_clean_token;
+  where lower(trim(token)) = lower(v_clean_token);
 
   if not found then
     return query select
@@ -242,7 +243,7 @@ begin
   -- 1. Validate token
   select * into v_rec
   from public.invite_tokens
-  where token = v_clean_token
+  where lower(trim(token)) = lower(v_clean_token)
   for update;
 
   if not found then
@@ -310,17 +311,33 @@ begin
   -- 6. Insert identity for email if auth.identities exists
   begin
     insert into auth.identities (
-      id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at
+      id, provider_id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at
     ) values (
+      v_user_id::text,
       v_user_id::text,
       v_user_id,
       jsonb_build_object('sub', v_user_id::text, 'email', lower(trim(v_rec.email))),
       'email',
       now(), now(), now()
     )
-    on conflict do nothing;
+    on conflict (provider_id, provider) do update set
+      identity_data = jsonb_build_object('sub', v_user_id::text, 'email', lower(trim(v_rec.email))),
+      updated_at = now();
   exception when others then
-    null;
+    begin
+      insert into auth.identities (
+        id, user_id, identity_data, provider, last_sign_in_at, created_at, updated_at
+      ) values (
+        v_user_id::text,
+        v_user_id,
+        jsonb_build_object('sub', v_user_id::text, 'email', lower(trim(v_rec.email))),
+        'email',
+        now(), now(), now()
+      )
+      on conflict do nothing;
+    exception when others then
+      null;
+    end;
   end;
 
   -- 7. Create or update public.profiles
@@ -399,11 +416,8 @@ as $$
 declare
   v_hospital_id uuid;
   v_email text;
+  v_actor_role text := 'clinic_admin';
 begin
-  if not private.is_platform_admin() then
-    raise exception 'Platform administrator permission is required' using errcode = '42501';
-  end if;
-
   if p_user_id = auth.uid() then
     raise exception 'You cannot delete your own account' using errcode = '22023';
   end if;
@@ -411,6 +425,14 @@ begin
   select hospital_id into v_hospital_id
   from public.staff_memberships
   where user_id = p_user_id;
+
+  if private.is_platform_admin() then
+    v_actor_role := 'super_admin';
+  elsif v_hospital_id is not null and v_hospital_id = private.current_hospital_id() and private.has_permission('people.manage') then
+    v_actor_role := 'clinic_admin';
+  else
+    raise exception 'Access denied: insufficient permissions to manage staff' using errcode = '42501';
+  end if;
 
   select lower(email) into v_email
   from public.profiles
@@ -448,7 +470,7 @@ begin
     insert into public.audit_events (
       hospital_id, actor_user_id, actor_role, action, entity_type, entity_id
     ) values (
-      v_hospital_id, auth.uid(), 'super_admin', 'staff.soft_deleted', 'staff_membership', p_user_id::text
+      v_hospital_id, auth.uid(), v_actor_role, 'staff.soft_deleted', 'staff_membership', p_user_id::text
     );
   end if;
 end;
@@ -465,14 +487,19 @@ set search_path = 'public', 'private'
 as $$
 declare
   v_hospital_id uuid;
+  v_actor_role text := 'clinic_admin';
 begin
-  if not private.is_platform_admin() then
-    raise exception 'Platform administrator permission is required' using errcode = '42501';
-  end if;
-
   select hospital_id into v_hospital_id
   from public.staff_memberships
   where user_id = p_user_id;
+
+  if private.is_platform_admin() then
+    v_actor_role := 'super_admin';
+  elsif v_hospital_id is not null and v_hospital_id = private.current_hospital_id() and private.has_permission('people.manage') then
+    v_actor_role := 'clinic_admin';
+  else
+    raise exception 'Access denied: insufficient permissions to manage staff' using errcode = '42501';
+  end if;
 
   -- Reactivate membership
   update public.staff_memberships
@@ -494,7 +521,7 @@ begin
     insert into public.audit_events (
       hospital_id, actor_user_id, actor_role, action, entity_type, entity_id
     ) values (
-      v_hospital_id, auth.uid(), 'super_admin', 'staff.restored', 'staff_membership', p_user_id::text
+      v_hospital_id, auth.uid(), v_actor_role, 'staff.restored', 'staff_membership', p_user_id::text
     );
   end if;
 end;
@@ -512,11 +539,8 @@ as $$
 declare
   v_hospital_id uuid;
   v_email text;
+  v_actor_role text := 'clinic_admin';
 begin
-  if not private.is_platform_admin() then
-    raise exception 'Platform administrator permission is required' using errcode = '42501';
-  end if;
-
   if p_user_id = auth.uid() then
     raise exception 'You cannot delete your own account' using errcode = '22023';
   end if;
@@ -524,6 +548,14 @@ begin
   select hospital_id into v_hospital_id
   from public.staff_memberships
   where user_id = p_user_id;
+
+  if private.is_platform_admin() then
+    v_actor_role := 'super_admin';
+  elsif v_hospital_id is not null and v_hospital_id = private.current_hospital_id() and private.has_permission('people.manage') then
+    v_actor_role := 'clinic_admin';
+  else
+    raise exception 'Access denied: insufficient permissions to manage staff' using errcode = '42501';
+  end if;
 
   select lower(email) into v_email
   from public.profiles
@@ -575,7 +607,7 @@ begin
     insert into public.audit_events (
       hospital_id, actor_user_id, actor_role, action, entity_type, entity_id
     ) values (
-      v_hospital_id, auth.uid(), 'super_admin', 'staff.permanently_deleted', 'staff_membership', p_user_id::text
+      v_hospital_id, auth.uid(), v_actor_role, 'staff.permanently_deleted', 'staff_membership', p_user_id::text
     );
   end if;
 end;
@@ -708,8 +740,7 @@ $$;
 revoke all on function public.list_active_doctors_with_counts() from public, anon;
 grant execute on function public.list_active_doctors_with_counts() to authenticated;
 
--- Step 10: Harden RLS Policies
--- staff_memberships: Super Admin global select, Clinical Admin single-hospital select
+-- staff_memberships: Super Admin global access, Clinical Admin single-hospital access
 drop policy if exists memberships_select on public.staff_memberships;
 create policy memberships_select on public.staff_memberships
 for select to authenticated
@@ -717,6 +748,34 @@ using (
   user_id = auth.uid()
   or (hospital_id = private.current_hospital_id() and private.has_permission('people.read'))
   or private.is_platform_admin()
+);
+
+drop policy if exists memberships_insert on public.staff_memberships;
+create policy memberships_insert on public.staff_memberships
+for insert to authenticated
+with check (
+  private.is_platform_admin()
+  or (hospital_id = private.current_hospital_id() and private.has_permission('people.manage'))
+);
+
+drop policy if exists memberships_update on public.staff_memberships;
+create policy memberships_update on public.staff_memberships
+for update to authenticated
+using (
+  private.is_platform_admin()
+  or (hospital_id = private.current_hospital_id() and private.has_permission('people.manage'))
+)
+with check (
+  private.is_platform_admin()
+  or (hospital_id = private.current_hospital_id() and private.has_permission('people.manage'))
+);
+
+drop policy if exists memberships_delete on public.staff_memberships;
+create policy memberships_delete on public.staff_memberships
+for delete to authenticated
+using (
+  (private.is_platform_admin() and user_id <> auth.uid())
+  or (hospital_id = private.current_hospital_id() and private.has_permission('people.manage') and user_id <> auth.uid())
 );
 
 -- profiles: Super Admin global select, Clinical Admin single-hospital select
