@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Activity, ArrowRight, Building2, Clock, Eye, EyeOff, Mail, MapPin, Phone, ShieldCheck, Stethoscope, UserCog } from "lucide-react";
+import { Activity, ArrowRight, Building2, CheckCircle2, Clock, Eye, EyeOff, Mail, MapPin, Phone, ShieldCheck, Stethoscope, UserCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,7 +42,7 @@ interface TokenInfo {
 
 const ROLE_LABELS: Record<string, string> = {
   super_admin: "Super Admin",
-  clinic_admin: "Clinic Admin",
+  clinic_admin: "Clinical Admin",
   doctor: "Doctor",
   receptionist: "Receptionist",
 };
@@ -65,6 +65,7 @@ function SetupPage() {
   const [showPw, setShowPw] = useState(false);
   const [showPw2, setShowPw2] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [isActivated, setIsActivated] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -126,24 +127,20 @@ function SetupPage() {
     try {
       const supabase = getSupabaseBrowserClient();
       supabase.rpc("validate_invite_token", { p_token: t })
-        .then(({ data, error: rpcError }: { data: Array<{ status: string; p_email: string | null; p_full_name: string | null; p_phone: string | null; p_role_code: string | null; p_hospital_id: string | null; p_facility_id: string | null; p_department_id: string | null; p_clinic_name: string | null; p_clinic_email: string | null; p_clinic_phone: string | null; p_clinic_address: string | null; p_specialty: string | null; p_shift: string | null; p_gender: string | null; p_qualification: string | null; p_medical_registration_number: string | null; p_experience_years: number | null; p_consultation_fee: number | null; p_working_hours: string | null; p_administrative_notes: string | null }> | null; error: { message: string } | null }) => {
+        .then(({ data, error: rpcError }: { data: Array<{ status: string; p_email: string | null; p_full_name: string | null; p_phone: string | null; p_role_code: string | null; p_hospital_id: string | null; p_facility_id: string | null; p_department_id: string | null; p_clinic_name: string | null; p_clinic_email: string | null; p_clinic_phone: string | null; p_clinic_address: string | null; p_clinic_city?: string | null; p_specialty: string | null; p_shift: string | null; p_gender: string | null; p_qualification: string | null; p_medical_registration_number: string | null; p_experience_years: number | null; p_consultation_fee: number | null; p_working_hours: string | null; p_administrative_notes: string | null }> | null; error: { message: string } | null }) => {
           if (rpcError || !data || data.length === 0) {
             if (tryLocalToken()) return;
-            return supabase.rpc("consume_invite_token", { p_token: t })
-              .then(({ data: consumeData }: { data: TokenInfo[] | null }) => {
-                if (!consumeData || consumeData.length === 0) {
-                  setError("This invitation link has expired (links are valid for 24 hours). Please contact the Super Admin to request a new invitation.");
-                } else {
-                  setTokenInfo(consumeData[0] as TokenInfo);
-                }
-              });
+            setError("This invitation link is invalid or expired (links are valid for 24 hours). Please contact the Super Admin to request a new invitation.");
+            return;
           }
 
           const row = data[0];
           if (row.status === "expired") {
-            setError("This invitation link has expired. Invitation links are valid for 24 hours. Please contact the Super Admin to request a new invitation.");
+            setError("This invitation link has expired (links are valid for 24 hours). Please contact the Super Admin to request a new invitation.");
           } else if (row.status === "used") {
             setError("This invitation link has already been used. Please contact your administrator or sign in.");
+          } else if (row.status === "clinic_deleted") {
+            setError("The clinic associated with this invitation has been moved to Trash or deleted. Please contact the Super Admin.");
           } else if (row.status === "invalid" || !row.p_email) {
             if (!tryLocalToken()) {
               setError("This invitation link is invalid. Please check the link you received.");
@@ -161,6 +158,7 @@ function SetupPage() {
               clinic_email: row.p_clinic_email,
               clinic_phone: row.p_clinic_phone,
               clinic_address: row.p_clinic_address,
+              clinic_city: row.p_clinic_city ?? null,
               specialty: row.p_specialty,
               shift: row.p_shift,
               gender: row.p_gender,
@@ -208,10 +206,7 @@ function SetupPage() {
 
         // Consume the invite token first to enforce single-use
         try {
-          const { data: consumedData } = await supabase.rpc("consume_invite_token", { p_token: token });
-          if (!consumedData || consumedData.length === 0) {
-            console.warn("Token may have already been consumed or handled locally");
-          }
+          await supabase.rpc("consume_invite_token", { p_token: token });
         } catch (rpcErr) {
           console.warn("consume_invite_token notice:", rpcErr);
         }
@@ -245,8 +240,8 @@ function SetupPage() {
       });
 
       markLocalInviteTokenUsed(token);
-      toast.success("Password set successfully! You can now sign in with your email and password.");
-      navigate({ to: "/login", search: { email: tokenInfo.email.trim() } });
+      toast.success("Your account has been activated successfully.");
+      setIsActivated(true);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Unable to set password");
     } finally {
@@ -321,151 +316,197 @@ function SetupPage() {
             <div className="font-display text-lg font-bold">ClinicFlow</div>
           </div>
 
-          <div className="flex items-center gap-3 mb-2">
-            <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary">
-              <RoleIcon className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="font-display text-2xl font-bold tracking-tight">
-                Set up your account
-              </h2>
-              <p className="text-sm text-muted-foreground">
-                {ROLE_LABELS[tokenInfo.role_code] ?? tokenInfo.role_code}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4 rounded-xl border bg-card/60 backdrop-blur-sm p-4 text-sm shadow-sm space-y-3">
-            <div className="flex items-start justify-between gap-2 border-b pb-3">
+          {isActivated ? (
+            <div className="text-center py-6 space-y-5">
+              <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="h-8 w-8" />
+              </div>
               <div>
-                <div className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">
-                  Invited User
-                </div>
-                <div className="font-semibold text-foreground text-base mt-0.5">{tokenInfo.full_name}</div>
-                <div className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                  <Mail className="h-3.5 w-3.5" />
-                  <span>{tokenInfo.email}</span>
-                </div>
+                <h2 className="font-display text-2xl font-bold tracking-tight text-foreground">
+                  Your account has been activated successfully.
+                </h2>
+                <p className="mt-2 text-sm text-muted-foreground">
+                  Use your invited email address and newly created password to sign in.
+                </p>
               </div>
-              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
-                {ROLE_LABELS[tokenInfo.role_code] ?? tokenInfo.role_code}
-              </span>
+
+              <div className="rounded-xl border bg-card/60 backdrop-blur-sm p-4 text-left text-xs space-y-2 shadow-sm">
+                <div>
+                  <span className="font-medium text-muted-foreground">Email: </span>
+                  <span className="font-semibold text-foreground">{tokenInfo.email}</span>
+                </div>
+                {tokenInfo.clinic_name && (
+                  <div>
+                    <span className="font-medium text-muted-foreground">Clinic: </span>
+                    <span className="font-semibold text-foreground">{tokenInfo.clinic_name}</span>
+                  </div>
+                )}
+                {tokenInfo.hospital_id && (
+                  <div>
+                    <span className="font-medium text-muted-foreground">Clinic ID: </span>
+                    <span className="font-mono text-primary font-medium">{tokenInfo.hospital_id}</span>
+                  </div>
+                )}
+              </div>
+
+              <Button asChild className="h-11 w-full rounded-xl text-sm font-semibold">
+                <Link to="/login" search={{ email: tokenInfo.email.trim() }}>
+                  Go to Login <ArrowRight className="ml-1.5 h-4 w-4" />
+                </Link>
+              </Button>
             </div>
-
-            {tokenInfo.clinic_name && (
-              <div className="space-y-2 rounded-lg bg-muted/50 p-3 text-xs">
-                <div className="font-semibold text-foreground flex items-center gap-1.5 text-sm">
-                  <Building2 className="h-4 w-4 text-primary" />
-                  <span>{tokenInfo.clinic_name}</span>
+          ) : (
+            <>
+              <div className="flex items-center gap-3 mb-2">
+                <div className="grid h-10 w-10 place-items-center rounded-xl bg-primary/10 text-primary">
+                  <RoleIcon className="h-5 w-5" />
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-muted-foreground pt-1">
-                  {tokenInfo.hospital_id && (
-                    <div>
-                      <span className="font-medium text-foreground">Clinic ID: </span>
-                      <span className="font-mono text-[11px]">{tokenInfo.hospital_id}</span>
-                    </div>
-                  )}
-                  {tokenInfo.clinic_city && (
-                    <div className="flex items-center gap-1">
-                      <MapPin className="h-3 w-3 shrink-0 text-muted-foreground" />
-                      <span>{tokenInfo.clinic_city}</span>
-                    </div>
-                  )}
-                  {tokenInfo.clinic_address && (
-                    <div className="sm:col-span-2 flex items-center gap-1">
-                      <MapPin className="h-3 w-3 shrink-0 text-muted-foreground" />
-                      <span>{tokenInfo.clinic_address}</span>
-                    </div>
-                  )}
-                  {tokenInfo.clinic_phone && (
-                    <div className="flex items-center gap-1">
-                      <Phone className="h-3 w-3 shrink-0 text-muted-foreground" />
-                      <span>{tokenInfo.clinic_phone}</span>
-                    </div>
-                  )}
+                <div>
+                  <h2 className="font-display text-2xl font-bold tracking-tight">
+                    You're invited to ClinicFlow
+                  </h2>
+                  <p className="text-sm text-muted-foreground">
+                    {ROLE_LABELS[tokenInfo.role_code] ?? tokenInfo.role_code} Account Setup
+                  </p>
                 </div>
               </div>
-            )}
 
-            {tokenInfo.specialty && (
-              <div className="text-xs text-muted-foreground">
-                <span className="font-medium text-foreground">Specialty: </span>
-                <span>{tokenInfo.specialty}</span>
+              <div className="mt-4 rounded-xl border bg-card/60 backdrop-blur-sm p-4 text-sm shadow-sm space-y-3">
+                <div className="flex items-start justify-between gap-2 border-b pb-3">
+                  <div>
+                    <div className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">
+                      Clinical Admin Email
+                    </div>
+                    <div className="font-semibold text-foreground text-sm mt-0.5 flex items-center gap-1.5">
+                      <Mail className="h-3.5 w-3.5 text-primary" />
+                      <span>{tokenInfo.email}</span>
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">
+                      {tokenInfo.full_name}
+                    </div>
+                  </div>
+                  <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                    {ROLE_LABELS[tokenInfo.role_code] ?? tokenInfo.role_code}
+                  </span>
+                </div>
+
+                {tokenInfo.clinic_name && (
+                  <div className="space-y-2 rounded-lg bg-muted/50 p-3 text-xs">
+                    <div className="font-semibold text-foreground flex items-center gap-1.5 text-sm">
+                      <Building2 className="h-4 w-4 text-primary" />
+                      <span>{tokenInfo.clinic_name}</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-muted-foreground pt-1">
+                      {tokenInfo.hospital_id && (
+                        <div>
+                          <span className="font-medium text-foreground">Clinic ID: </span>
+                          <span className="font-mono text-[11px] text-primary">{tokenInfo.hospital_id}</span>
+                        </div>
+                      )}
+                      {tokenInfo.clinic_city && (
+                        <div className="flex items-center gap-1">
+                          <MapPin className="h-3 w-3 shrink-0 text-muted-foreground" />
+                          <span>City: {tokenInfo.clinic_city}</span>
+                        </div>
+                      )}
+                      {tokenInfo.clinic_address && (
+                        <div className="sm:col-span-2 flex items-center gap-1">
+                          <MapPin className="h-3 w-3 shrink-0 text-muted-foreground" />
+                          <span>Address: {tokenInfo.clinic_address}</span>
+                        </div>
+                      )}
+                      {tokenInfo.clinic_phone && (
+                        <div className="flex items-center gap-1">
+                          <Phone className="h-3 w-3 shrink-0 text-muted-foreground" />
+                          <span>Contact Number: {tokenInfo.clinic_phone}</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {tokenInfo.specialty && (
+                  <div className="text-xs text-muted-foreground">
+                    <span className="font-medium text-foreground">Specialty: </span>
+                    <span>{tokenInfo.specialty}</span>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-1.5 text-[11px] font-medium text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300 px-2.5 py-1.5 rounded-md border border-amber-200/60 dark:border-amber-900/60">
+                  <Clock className="h-3.5 w-3.5 shrink-0" />
+                  <span>This invitation link is valid for 24 hours.</span>
+                </div>
               </div>
-            )}
 
-            <div className="flex items-center gap-1.5 text-[11px] font-medium text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300 px-2.5 py-1.5 rounded-md border border-amber-200/60 dark:border-amber-900/60">
-              <Clock className="h-3.5 w-3.5 shrink-0" />
-              <span>This invitation link will expire in 24 hours. Create your password below.</span>
-            </div>
-          </div>
+              <form onSubmit={submit} className="mt-6 space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="pw">Create Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="pw"
+                      type={showPw ? "text" : "password"}
+                      value={pw}
+                      onChange={(e) => setPw(e.target.value)}
+                      placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+                      className="h-11 rounded-xl pr-11"
+                      autoComplete="new-password"
+                      autoFocus
+                      required
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-1 top-1 h-9 w-9"
+                      onClick={() => setShowPw((v) => !v)}
+                      aria-label={showPw ? "Hide password" : "Show password"}
+                    >
+                      {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
 
-          <form onSubmit={submit} className="mt-6 space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="pw">New password</Label>
-              <div className="relative">
-                <Input
-                  id="pw"
-                  type={showPw ? "text" : "password"}
-                  value={pw}
-                  onChange={(e) => setPw(e.target.value)}
-                  placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
-                  className="h-11 rounded-xl pr-11"
-                  autoComplete="new-password"
-                  autoFocus
-                  required
-                />
+                <div className="space-y-2">
+                  <Label htmlFor="pw2">Confirm Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="pw2"
+                      type={showPw2 ? "text" : "password"}
+                      value={pw2}
+                      onChange={(e) => setPw2(e.target.value)}
+                      placeholder="Re-enter password"
+                      className="h-11 rounded-xl pr-11"
+                      autoComplete="new-password"
+                      required
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-1 top-1 h-9 w-9"
+                      onClick={() => setShowPw2((v) => !v)}
+                      aria-label={showPw2 ? "Hide password" : "Show password"}
+                    >
+                      {showPw2 ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </Button>
+                  </div>
+                </div>
+
                 <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1 h-9 w-9"
-                  onClick={() => setShowPw((v) => !v)}
-                  aria-label={showPw ? "Hide password" : "Show password"}
+                  type="submit"
+                  disabled={submitting}
+                  className="h-11 w-full rounded-xl text-sm font-semibold"
                 >
-                  {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                  {submitting ? "Activating account..." : "Create Password & Activate Account"}{" "}
+                  <ArrowRight className="ml-1.5 h-4 w-4" />
                 </Button>
-              </div>
-            </div>
+              </form>
 
-            <div className="space-y-2">
-              <Label htmlFor="pw2">Confirm password</Label>
-              <div className="relative">
-                <Input
-                  id="pw2"
-                  type={showPw2 ? "text" : "password"}
-                  value={pw2}
-                  onChange={(e) => setPw2(e.target.value)}
-                  placeholder="Re-enter password"
-                  className="h-11 rounded-xl pr-11"
-                  autoComplete="new-password"
-                  required
-                />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="absolute right-1 top-1 h-9 w-9"
-                  onClick={() => setShowPw2((v) => !v)}
-                  aria-label={showPw2 ? "Hide password" : "Show password"}
-                >
-                  {showPw2 ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </Button>
-              </div>
-            </div>
-
-            <Button
-              type="submit"
-              disabled={submitting}
-              className="h-11 w-full rounded-xl text-sm font-semibold"
-            >
-              {submitting ? "Activating account..." : "Create Password & Activate Account"} <ArrowRight className="ml-1.5 h-4 w-4" />
-            </Button>
-          </form>
-
-          <p className="mt-6 text-center text-xs text-muted-foreground">
-            This invite link expires in 24 hours. Set your password before it expires.
-          </p>
+              <p className="mt-6 text-center text-xs text-muted-foreground">
+                This invitation link is valid for 24 hours. Set your password to activate your account.
+              </p>
+            </>
+          )}
         </div>
       </div>
     </div>

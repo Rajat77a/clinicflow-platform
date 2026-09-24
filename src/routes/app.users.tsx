@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth, type Role } from "@/lib/auth";
 import { useWorkspaceData, type StaffMember } from "@/lib/workspace-data";
-import { UserMinus, UserPlus, Eye, Building2, ShieldCheck, Stethoscope, UserCog, Mail, Phone } from "lucide-react";
+import { UserMinus, UserPlus, Eye, Building2, ShieldCheck, Stethoscope, UserCog, Mail, Phone, Trash2, RotateCw, Send } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -49,12 +49,16 @@ function UsersPage() {
     createDoctor,
     createReceptionist,
     deactivateStaff,
+    softDeleteStaff,
+    resendStaffInvitation,
   } = useWorkspaceData();
 
   const [superAdminDialogOpen, setSuperAdminDialogOpen] = useState(false);
   const [clinicAdminDialogOpen, setClinicAdminDialogOpen] = useState(false);
   const [inviteStaffDialogOpen, setInviteStaffDialogOpen] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<StaffMember | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<StaffMember | null>(null);
+  const [resendingId, setResendingId] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
 
   const [superAdminForm, setSuperAdminForm] = useState({ name: "", email: "", phone: "" });
@@ -237,6 +241,29 @@ function UsersPage() {
       toast.error(error instanceof Error ? error.message : "Unable to deactivate staff member");
     } finally {
       setIsDeactivating(false);
+    }
+  };
+
+  const handleResendInvitation = async (member: StaffMember) => {
+    setResendingId(member.id);
+    try {
+      await resendStaffInvitation(member.id);
+      toast.success(`Invitation sent successfully to ${member.email}.`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to resend invitation");
+    } finally {
+      setResendingId(null);
+    }
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    try {
+      await softDeleteStaff(deleteTarget.id);
+      toast.success(`${deleteTarget.name} has been moved to Trash.`);
+      setDeleteTarget(null);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to move user to Trash");
     }
   };
 
@@ -540,6 +567,11 @@ function UsersPage() {
                         <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
                         <span>{assignedClinic.name}</span>
                       </div>
+                    ) : member.previousClinicName ? (
+                      <div className="flex items-center gap-1.5 text-muted-foreground">
+                        <Building2 className="h-3.5 w-3.5 shrink-0" />
+                        <span>{member.previousClinicName}</span>
+                      </div>
                     ) : (
                       <span className="italic text-muted-foreground text-xs">Not Assigned</span>
                     )}
@@ -558,7 +590,22 @@ function UsersPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
+                    <div className="flex items-center justify-end gap-1.5">
+                      {member.status === "Invited" && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-1.5 text-xs font-medium text-primary hover:text-primary hover:bg-primary/10 border-primary/20"
+                          disabled={resendingId === member.id}
+                          title={`Resend Invitation to ${member.email}`}
+                          aria-label={`Resend Invitation to ${member.email}`}
+                          onClick={() => handleResendInvitation(member)}
+                        >
+                          <Send className={`h-3.5 w-3.5 ${resendingId === member.id ? "animate-pulse" : ""}`} />
+                          <span>Resend Invitation</span>
+                        </Button>
+                      )}
                       <Button
                         type="button"
                         variant="ghost"
@@ -578,7 +625,19 @@ function UsersPage() {
                           aria-label={`Deactivate ${member.name}`}
                           onClick={() => setDeactivationTarget(member)}
                         >
-                          <UserMinus className="h-4 w-4 text-destructive" />
+                          <UserMinus className="h-4 w-4 text-muted-foreground hover:text-destructive" />
+                        </Button>
+                      )}
+                      {user?.role === "super_admin" && member.id !== user?.userId && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          title={`Delete ${member.name}`}
+                          aria-label={`Delete ${member.name}`}
+                          onClick={() => setDeleteTarget(member)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
                       )}
                     </div>
@@ -759,6 +818,48 @@ function UsersPage() {
               disabled={isDeactivating || deactivationReason.trim().length < 8}
             >
               {isDeactivating ? "Deactivating..." : "Deactivate access"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete User Confirmation Dialog */}
+      <Dialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(open) => {
+          if (!open) setDeleteTarget(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete User?</DialogTitle>
+            <DialogDescription>
+              This user will be moved to Trash and will no longer be active.
+            </DialogDescription>
+          </DialogHeader>
+          {deleteTarget && (
+            <div className="rounded-xl border bg-muted/40 p-3 text-xs space-y-1.5 my-2">
+              <div className="font-semibold text-foreground text-sm">{deleteTarget.name}</div>
+              <div className="text-muted-foreground">{deleteTarget.email}</div>
+              <div className="text-muted-foreground">
+                Role: <span className="font-medium text-foreground">{roleLabels[deleteTarget.role] || deleteTarget.role}</span>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleConfirmDelete}
+            >
+              Move to Trash
             </Button>
           </DialogFooter>
         </DialogContent>

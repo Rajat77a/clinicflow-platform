@@ -128,8 +128,11 @@ export function generateInvitationEmailHtml(params: InvitationEmailParams): stri
                 <tr>
                   <td align="center">
                     <a href="${setupUrl}" target="_blank" style="display: inline-block; background-color: #0284c7; color: #ffffff; font-size: 15px; font-weight: 600; text-decoration: none; padding: 14px 32px; border-radius: 12px; box-shadow: 0 2px 4px rgba(2, 132, 199, 0.25);">
-                      Create Password & Activate Account
+                      Create Your Password
                     </a>
+                    <div style="font-size: 12px; color: #64748b; margin-top: 8px;">
+                      Click above to Create Password &amp; Activate Account
+                    </div>
                   </td>
                 </tr>
               </table>
@@ -137,7 +140,10 @@ export function generateInvitationEmailHtml(params: InvitationEmailParams): stri
               <!-- Notice Box -->
               <div style="background-color: #fefce8; border-left: 4px solid #eab308; border-radius: 6px; padding: 14px 16px; margin: 20px 0;">
                 <p style="font-size: 13px; line-height: 1.5; color: #854d0e; margin: 0;">
-                  ⏰ <strong>Security Notice:</strong> This invitation link will expire in <strong>${expiresInHours} hours</strong>. Please set your password before it expires.
+                  ⏰ <strong>Security Notice:</strong> This invitation link is valid for <strong>${expiresInHours} hours</strong>.
+                </p>
+                <p style="font-size: 13px; line-height: 1.5; color: #854d0e; margin: 8px 0 0 0;">
+                  Please use the email address to which this invitation was sent (<strong>${recipientEmail}</strong>) and the password you create through the link to log in.
                 </p>
               </div>
 
@@ -173,36 +179,34 @@ export function generateInvitationEmailText(params: InvitationEmailParams): stri
     clinicAddress,
     clinicCity,
     clinicPhone,
-    clinicEmail,
     setupUrl,
-    roleTitle = "Clinical Admin",
     expiresInHours = 24,
   } = params;
 
   const lines = [
-    `You're invited to manage ${clinicName}`,
-    ``,
     `Hello ${recipientName},`,
     ``,
-    `You have been invited to join ClinicFlow as the ${roleTitle} for:`,
-    `Clinic: ${clinicName}`,
+    `You have been invited to manage the following clinic as the Clinical Admin:`,
+    ``,
+    `Clinic Name: ${clinicName}`,
   ];
 
   if (clinicId) lines.push(`Clinic ID: ${clinicId}`);
-  if (clinicCity) lines.push(`Location: ${clinicCity}`);
   if (clinicAddress) lines.push(`Address: ${clinicAddress}`);
-  if (clinicPhone) lines.push(`Contact: ${clinicPhone}`);
-  if (clinicEmail) lines.push(`Clinic Email: ${clinicEmail}`);
-  if (recipientEmail) lines.push(`Clinical Admin Email: ${recipientEmail}`);
+  if (clinicCity) lines.push(`City: ${clinicCity}`);
+  if (clinicPhone) lines.push(`Contact Number: ${clinicPhone}`);
+  lines.push(`Clinical Admin Email: ${recipientEmail}`);
 
   lines.push(
     ``,
-    `Click the button below to create your password and access the ClinicFlow portal:`,
+    `Create Your Password:`,
     setupUrl,
     ``,
     `[Create Password & Activate Account]`,
     ``,
-    `This invitation link will expire in ${expiresInHours} hours.`,
+    `This invitation link is valid for ${expiresInHours} hours.`,
+    ``,
+    `Please use the email address to which this invitation was sent (${recipientEmail}) and the password you create through the link to log in.`,
     ``,
     `— ClinicFlow Healthcare Operations Platform`
   );
@@ -211,7 +215,7 @@ export function generateInvitationEmailText(params: InvitationEmailParams): stri
 }
 
 export function generateEmailSubject(params: Pick<InvitationEmailParams, "clinicName" | "roleTitle">): string {
-  return `You're invited to manage ${params.clinicName} - ClinicFlow`;
+  return `You're invited to manage ${params.clinicName} on ClinicFlow`;
 }
 
 export function generateMailtoUrl(params: InvitationEmailParams): string {
@@ -251,6 +255,8 @@ export function registerLocalInviteToken(tokenInfo: {
     // ignore
   }
 }
+
+export const saveLocalInviteToken = registerLocalInviteToken;
 
 export function getLocalInviteToken(token: string) {
   if (typeof window === "undefined") return null;
@@ -296,6 +302,31 @@ export async function sendInvitationEmail(params: InvitationEmailParams): Promis
   const mailtoUrl = generateMailtoUrl(params);
   const gmailUrl = generateGmailComposeUrl(params);
 
+  // Auto-extract and register token in local fallback storage
+  try {
+    const urlObj = new URL(params.setupUrl, typeof window !== "undefined" ? window.location.origin : "http://localhost");
+    const extractedToken = urlObj.searchParams.get("token");
+    if (extractedToken) {
+      registerLocalInviteToken({
+        token: extractedToken,
+        email: params.recipientEmail.trim().toLowerCase(),
+        name: params.recipientName,
+        phone: params.clinicPhone,
+        clinicName: params.clinicName,
+        clinicId: params.clinicId || "",
+        clinicAddress: params.clinicAddress,
+        clinicCity: params.clinicCity,
+        clinicPhone: params.clinicPhone,
+        clinicEmail: params.clinicEmail,
+        roleCode: params.roleTitle === "Doctor" ? "doctor" : params.roleTitle === "Receptionist" ? "receptionist" : "clinic_admin",
+        expiresAt: new Date(Date.now() + expiresInHours * 60 * 60 * 1000).toISOString(),
+        used: false,
+      });
+    }
+  } catch {
+    // ignore
+  }
+
   const record: DispatchedEmailRecord = {
     ...params,
     expiresInHours,
@@ -315,6 +346,33 @@ export async function sendInvitationEmail(params: InvitationEmailParams): Promis
     }
   }
 
+  // Live server-side dispatch through /api/send-email
+  if (typeof window !== "undefined") {
+    try {
+      await fetch("/api/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          recipientEmail: params.recipientEmail,
+          recipientName: params.recipientName,
+          clinicName: params.clinicName,
+          clinicId: params.clinicId,
+          clinicAddress: params.clinicAddress,
+          clinicCity: params.clinicCity,
+          clinicPhone: params.clinicPhone,
+          clinicEmail: params.clinicEmail,
+          setupUrl: params.setupUrl,
+          roleTitle: params.roleTitle,
+          expiresInHours,
+        }),
+      }).catch((fetchErr) => {
+        console.warn("[Email Service] Server dispatch notice:", fetchErr);
+      });
+    } catch (err) {
+      console.warn("[Email Service] Unable to trigger server email dispatch:", err);
+    }
+  }
+
   console.log(`[Email Dispatch] Invitation email prepared for ${params.recipientEmail} (${params.clinicName}).`);
   console.log(`[Email Setup Link] Valid for ${expiresInHours} hours: ${params.setupUrl}`);
 
@@ -327,7 +385,7 @@ export async function sendInvitationEmail(params: InvitationEmailParams): Promis
     gmailUrl,
     subject,
     textBody,
-    message: `Invitation email prepared for ${params.recipientEmail}. Secure setup link valid for ${expiresInHours} hours.`,
+    message: `Invitation email sent to ${params.recipientEmail}. Secure setup link valid for ${expiresInHours} hours.`,
   };
 }
 

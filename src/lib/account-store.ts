@@ -176,3 +176,37 @@ export function deleteClinicAccounts(clinicId: string): void {
     saveAccountsToStorage(accounts);
   }
 }
+
+export function deactivateUserAccount(email: string): void {
+  const normEmail = normalizeEmail(email);
+  const accounts = loadAccountsFromStorage();
+  const acc = accounts[normEmail] || memoryAccounts.get(normEmail);
+  if (acc) {
+    acc.active = false;
+    acc.updatedAt = new Date().toISOString();
+    accounts[normEmail] = acc;
+    memoryAccounts.set(normEmail, acc);
+    saveAccountsToStorage(accounts);
+  }
+}
+
+export function reactivateUserAccount(email: string): void {
+  const normEmail = normalizeEmail(email);
+  const accounts = loadAccountsFromStorage();
+  const acc = accounts[normEmail] || memoryAccounts.get(normEmail);
+  if (acc) {
+    acc.active = true;
+    acc.updatedAt = new Date().toISOString();
+    accounts[normEmail] = acc;
+    memoryAccounts.set(normEmail, acc);
+    saveAccountsToStorage(accounts);
+  }
+}
+
+export function deleteUserAccount(email: string): void {
+  const normEmail = normalizeEmail(email);
+  const accounts = loadAccountsFromStorage();
+  delete accounts[normEmail];
+  memoryAccounts.delete(normEmail);
+  saveAccountsToStorage(accounts);
+}
