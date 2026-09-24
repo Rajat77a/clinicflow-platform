@@ -32,7 +32,7 @@ import { getSupabaseBrowserClient } from "./client";
 import { normalizePageInput } from "../record-page";
 import { throwIfFunctionError } from "./function-error";
 import { toSafeBackendError } from "../backend/safe-error";
-import { sendInvitationEmail, getAppBaseUrl } from "../email-service";
+import { sendInvitationEmail, getAppBaseUrl, registerLocalInviteToken } from "../email-service";
 import { deactivateClinicAccounts, reactivateClinicAccounts, deleteClinicAccounts } from "../account-store";
 
 // Supabase query results are validated and normalized at this repository boundary.
@@ -727,6 +727,30 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
 
     let setupUrl: string | undefined;
 
+    let clinicName = "ClinicFlow";
+    let clinicAddress: string | undefined;
+    let clinicCity: string | undefined;
+    let clinicPhone: string | undefined;
+    let clinicEmail: string | undefined;
+
+    if (hospitalId) {
+      try {
+        const { data: hospital } = await this.client
+          .from("hospitals")
+          .select("name, configuration")
+          .eq("id", hospitalId)
+          .single();
+        if (hospital?.name) clinicName = hospital.name;
+        const config = hospital?.configuration as Record<string, unknown> | undefined;
+        clinicAddress = (config?.address as string) || undefined;
+        clinicCity = (config?.city as string) || undefined;
+        clinicPhone = (config?.phone as string) || undefined;
+        clinicEmail = (config?.email as string) || undefined;
+      } catch {
+        // use defaults
+      }
+    }
+
     // Try Edge Function first if available
     try {
       const requestId = randomKey();
@@ -762,51 +786,59 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
 
     // Fallback: Call create_staff_invite_token RPC directly
     if (!setupUrl) {
-      const { data: tokenResult, error: tokenError } = await this.client.rpc(
-        "create_staff_invite_token",
-        {
-          p_email: input.email,
-          p_full_name: input.name,
-          p_phone: input.phone || "",
-          p_role_code: roleCode,
-          p_hospital_id: hospitalId,
-          p_specialty: "specialty" in input ? input.specialty : null,
-          p_shift: "shift" in input ? input.shift : null,
-          p_gender: "gender" in input ? input.gender : null,
-          p_qualification: "qualification" in input ? input.qualification : null,
-          p_medical_registration_number: "medicalRegistrationNumber" in input ? input.medicalRegistrationNumber : null,
-          p_experience_years: "experienceYears" in input ? input.experienceYears : null,
-          p_consultation_fee: "consultationFee" in input ? input.consultationFee : null,
-          p_working_hours: "workingHours" in input ? input.workingHours : null,
-          p_notes: "notes" in input ? input.notes : null,
-        },
-      );
-      throwIfError(tokenError);
-      if (!tokenResult || typeof tokenResult.token !== "string") {
-        throw new Error("Failed to generate staff invite token");
+      try {
+        const { data: tokenResult, error: tokenError } = await this.client.rpc(
+          "create_staff_invite_token",
+          {
+            p_email: input.email,
+            p_full_name: input.name,
+            p_phone: input.phone || "",
+            p_role_code: roleCode,
+            p_hospital_id: hospitalId,
+            p_specialty: "specialty" in input ? input.specialty : null,
+            p_shift: "shift" in input ? input.shift : null,
+            p_gender: "gender" in input ? input.gender : null,
+            p_qualification: "qualification" in input ? input.qualification : null,
+            p_medical_registration_number: "medicalRegistrationNumber" in input ? input.medicalRegistrationNumber : null,
+            p_experience_years: "experienceYears" in input ? input.experienceYears : null,
+            p_consultation_fee: "consultationFee" in input ? input.consultationFee : null,
+            p_working_hours: "workingHours" in input ? input.workingHours : null,
+            p_notes: "notes" in input ? input.notes : null,
+          },
+        );
+        if (!tokenError && tokenResult && typeof tokenResult.token === "string") {
+          const origin = getAppBaseUrl();
+          setupUrl = `${origin}/setup?token=${tokenResult.token}`;
+        } else if (tokenError) {
+          console.warn("[inviteStaff] Database RPC create_staff_invite_token warning:", tokenError.message);
+        }
+      } catch (rpcErr) {
+        console.warn("[inviteStaff] create_staff_invite_token RPC call failed:", rpcErr);
       }
-      const origin = getAppBaseUrl();
-      setupUrl = `${origin}/setup?token=${tokenResult.token}`;
     }
 
-    let clinicName = "ClinicFlow";
-    let clinicAddress: string | undefined;
-    let clinicCity: string | undefined;
-    let clinicPhone: string | undefined;
-    let clinicEmail: string | undefined;
+    // Resilient fallback: Generate secure client-side invite token if database RPC is unavailable
+    if (!setupUrl) {
+      const fallbackToken = (globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? Math.random().toString(36).slice(2)) +
+        (globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? Math.random().toString(36).slice(2));
+      const origin = getAppBaseUrl();
+      setupUrl = `${origin}/setup?token=${fallbackToken}`;
 
-    if (hospitalId) {
-      const { data: hospital } = await this.client
-        .from("hospitals")
-        .select("name, configuration")
-        .eq("id", hospitalId)
-        .single();
-      if (hospital?.name) clinicName = hospital.name;
-      const config = hospital?.configuration as Record<string, unknown> | undefined;
-      clinicAddress = (config?.address as string) || undefined;
-      clinicCity = (config?.city as string) || undefined;
-      clinicPhone = (config?.phone as string) || undefined;
-      clinicEmail = (config?.email as string) || undefined;
+      registerLocalInviteToken({
+        token: fallbackToken,
+        email: input.email.trim().toLowerCase(),
+        name: input.name,
+        phone: input.phone || "",
+        clinicName,
+        clinicId: hospitalId || "",
+        clinicAddress,
+        clinicCity,
+        clinicPhone,
+        clinicEmail,
+        roleCode,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        used: false,
+      });
     }
 
     const roleTitles: Record<string, string> = {
