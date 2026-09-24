@@ -279,4 +279,49 @@ test("deleting clinic deactivates all associated user accounts and prevents logi
   assert.equal(verifyRegisteredAccount("admin.alpha@test.com", "Password123!"), null);
 });
 
+test("trash bin contains separate Clinics and Users tabs with required columns", () => {
+  // Tabs separation
+  assert.match(clinicsBinSource, /<Tabs defaultValue="clinics"/);
+  assert.match(clinicsBinSource, /<TabsTrigger value="clinics"/);
+  assert.match(clinicsBinSource, /<TabsTrigger value="users"/);
+  assert.match(clinicsBinSource, /<TabsContent value="clinics"/);
+  assert.match(clinicsBinSource, /<TabsContent value="users"/);
+
+  // Users tab columns
+  assert.match(clinicsBinSource, /<TableHead>Name<\/TableHead>/);
+  assert.match(clinicsBinSource, /<TableHead>Email<\/TableHead>/);
+  assert.match(clinicsBinSource, /<TableHead>Role<\/TableHead>/);
+  assert.match(clinicsBinSource, /<TableHead>Previously Assigned Clinic<\/TableHead>/);
+  assert.match(clinicsBinSource, /<TableHead>Deleted Date<\/TableHead>/);
+  assert.match(clinicsBinSource, /<TableHead>Deleted By<\/TableHead>/);
+
+  // User restore and permanent deletion actions
+  assert.match(clinicsBinSource, /restoreStaff/);
+  assert.match(clinicsBinSource, /permanentlyDeleteStaff/);
+  assert.match(clinicsBinSource, /Restore User/);
+  assert.match(clinicsBinSource, /Permanent Deletion Warning/);
+  assert.match(clinicsBinSource, /This action cannot be undone\. Permanently delete this record\?/);
+});
+
+test("user management provides Resend Invitation and Delete User to Trash", () => {
+  // Resend invitation
+  assert.match(usersSource, /Resend Invitation/);
+  assert.match(usersSource, /resendStaffInvitation/);
+  assert.match(usersSource, /Invitation sent successfully to/);
+
+  // Delete user to trash dialog
+  assert.match(usersSource, /Delete User\?/);
+  assert.match(usersSource, /This user will be moved to Trash and will no longer be active\./);
+  assert.match(usersSource, /Move to Trash/);
+  assert.match(usersSource, /softDeleteStaff/);
+});
+
+test("invitation setup page provides branded welcome, password activation, and login redirection", () => {
+  assert.match(setupSource, /You're invited to ClinicFlow/);
+  assert.match(setupSource, /Create Password & Activate Account/);
+  assert.match(setupSource, /Your account has been activated successfully\./);
+  assert.match(setupSource, /Go to Login/);
+  assert.match(setupSource, /to="\/login"[\s\S]*?email:\s*tokenInfo\.email/);
+});
+
 

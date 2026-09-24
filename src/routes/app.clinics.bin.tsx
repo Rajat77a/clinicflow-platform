@@ -5,12 +5,20 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
-import { useWorkspaceData, type Clinic } from "@/lib/workspace-data";
-import { Trash2, RotateCcw, ArrowLeft, MapPin, AlertTriangle, ShieldAlert, CheckSquare } from "lucide-react";
+import { useWorkspaceData, type Clinic, type StaffMember } from "@/lib/workspace-data";
+import { Trash2, RotateCcw, ArrowLeft, AlertTriangle, ShieldAlert, CheckSquare, Building2, Users } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/clinics/bin")({ component: TrashBinPage });
+
+const roleLabels: Record<string, string> = {
+  super_admin: "Super Admin",
+  clinic_admin: "Clinical Admin",
+  doctor: "Doctor",
+  receptionist: "Receptionist",
+};
 
 function TrashBinPage() {
   const { user } = useAuth();
@@ -21,11 +29,16 @@ function TrashBinPage() {
     bulkRestoreClinics,
     bulkPermanentlyDeleteClinics,
     emptyTrash,
+    binStaffMembers,
+    restoreStaff,
+    permanentlyDeleteStaff,
   } = useWorkspaceData();
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [restoreTarget, setRestoreTarget] = useState<Clinic | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Clinic | null>(null);
+  const [restoreUserTarget, setRestoreUserTarget] = useState<StaffMember | null>(null);
+  const [deleteUserTarget, setDeleteUserTarget] = useState<StaffMember | null>(null);
   const [showEmptyTrashDialog, setShowEmptyTrashDialog] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [showBulkRestoreDialog, setShowBulkRestoreDialog] = useState(false);
@@ -154,6 +167,34 @@ function TrashBinPage() {
     }
   };
 
+  const handleRestoreUser = async () => {
+    if (!restoreUserTarget) return;
+    setIsProcessing(true);
+    try {
+      await restoreStaff(restoreUserTarget.id);
+      toast.success(`${restoreUserTarget.name} has been restored successfully`);
+      setRestoreUserTarget(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to restore user");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handlePermanentDeleteUser = async () => {
+    if (!deleteUserTarget) return;
+    setIsProcessing(true);
+    try {
+      await permanentlyDeleteStaff(deleteUserTarget.id);
+      toast.success(`${deleteUserTarget.name} permanently deleted`);
+      setDeleteUserTarget(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to permanently delete user");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   const getDaysRemaining = (deletedAt?: string) => {
     if (!deletedAt) return 30;
     const deletedDate = new Date(deletedAt).getTime();
@@ -165,8 +206,8 @@ function TrashBinPage() {
   return (
     <>
       <PageHeader
-        title="Clinic Trash"
-        description="Soft-deleted clinics are stored here for up to 30 days before being automatically purged."
+        title="Trash"
+        description="Manage soft-deleted clinics and users. Items can be restored or permanently removed."
         actions={
           <div className="flex items-center gap-2">
             <Button variant="outline" asChild>
@@ -188,174 +229,302 @@ function TrashBinPage() {
         }
       />
 
-      <div className="rounded-2xl border bg-card shadow-soft">
-        <div className="flex items-center justify-between border-b p-4 text-sm font-medium text-muted-foreground">
-          <div className="flex items-center gap-2">
-            <Trash2 className="h-4 w-4 text-destructive" />
-            <span>{binClinics.length} deleted clinic{binClinics.length === 1 ? "" : "s"} in Trash</span>
-          </div>
-          {binClinics.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
-              onClick={() => setShowEmptyTrashDialog(true)}
-            >
-              Delete All from Trash
-            </Button>
-          )}
-        </div>
+      <Tabs defaultValue="clinics" className="w-full space-y-6">
+        <TabsList className="grid w-full max-w-xs grid-cols-2">
+          <TabsTrigger value="clinics" className="gap-2">
+            <Building2 className="h-4 w-4" />
+            <span>Clinics</span>
+            <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+              {binClinics.length}
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger value="users" className="gap-2">
+            <Users className="h-4 w-4" />
+            <span>Users</span>
+            <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+              {binStaffMembers.length}
+            </Badge>
+          </TabsTrigger>
+        </TabsList>
 
-        {/* Bulk Selection Actions Toolbar */}
-        {selectedIds.size > 0 && (
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-destructive/5 px-4 py-3 text-sm">
-            <div className="flex items-center gap-2 font-medium text-foreground">
-              <CheckSquare className="h-4 w-4 text-destructive" />
-              <span>{selectedIds.size} clinic{selectedIds.size === 1 ? "" : "s"} selected</span>
+        {/* CLINICS TAB */}
+        <TabsContent value="clinics" className="space-y-4">
+          <div className="rounded-2xl border bg-card shadow-soft">
+            <div className="flex items-center justify-between border-b p-4 text-sm font-medium text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <Trash2 className="h-4 w-4 text-destructive" />
+                <span>{binClinics.length} deleted clinic{binClinics.length === 1 ? "" : "s"} in Trash</span>
+              </div>
+              {binClinics.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+                  onClick={() => setShowEmptyTrashDialog(true)}
+                >
+                  Delete All from Trash
+                </Button>
+              )}
             </div>
-            <div className="flex items-center gap-2">
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setSelectedIds(new Set())}
-              >
-                Clear selection
-              </Button>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={() => setShowBulkRestoreDialog(true)}
-                className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 border-emerald-300"
-              >
-                <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
-                Restore Selected ({selectedIds.size})
-              </Button>
-              <Button
-                size="sm"
-                variant="destructive"
-                onClick={() => setShowBulkDeleteDialog(true)}
-                className="gap-1.5"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                Delete Selected Permanently ({selectedIds.size})
-              </Button>
-            </div>
-          </div>
-        )}
 
-        <div className="overflow-x-auto">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-12 text-center">
-                  <input
-                    type="checkbox"
-                    aria-label="Select all clinics in trash"
-                    checked={allSelected}
-                    ref={(el) => {
-                      if (el) el.indeterminate = !allSelected && someSelected;
-                    }}
-                    onChange={toggleSelectAll}
-                    disabled={binClinics.length === 0}
-                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary"
-                  />
-                </TableHead>
-                <TableHead>Clinic</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Deleted Date</TableHead>
-                <TableHead>Auto-Purge In</TableHead>
-                <TableHead className="text-right">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {binClinics.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={6} className="h-32 text-center text-muted-foreground">
-                    The Trash is empty. No deleted clinics found.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                binClinics.map((c) => {
-                  const daysRemaining = getDaysRemaining(c.deletedAt);
-                  const deletedFormatted = c.deletedAt
-                    ? new Date(c.deletedAt).toLocaleDateString(undefined, {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      })
-                    : "Recently";
+            {/* Bulk Selection Actions Toolbar */}
+            {selectedIds.size > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-destructive/5 px-4 py-3 text-sm">
+                <div className="flex items-center gap-2 font-medium text-foreground">
+                  <CheckSquare className="h-4 w-4 text-destructive" />
+                  <span>{selectedIds.size} clinic{selectedIds.size === 1 ? "" : "s"} selected</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setSelectedIds(new Set())}
+                  >
+                    Clear selection
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setShowBulkRestoreDialog(true)}
+                    className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 border-emerald-300"
+                  >
+                    <RotateCcw className="mr-1.5 h-3.5 w-3.5" />
+                    Restore Selected ({selectedIds.size})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => setShowBulkDeleteDialog(true)}
+                    className="gap-1.5"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    Delete Selected Permanently ({selectedIds.size})
+                  </Button>
+                </div>
+              </div>
+            )}
 
-                  return (
-                    <TableRow key={c.id} className={selectedIds.has(c.id) ? "bg-muted/40" : undefined}>
-                      <TableCell className="w-12 text-center">
-                        <input
-                          type="checkbox"
-                          aria-label={`Select ${c.name}`}
-                          checked={selectedIds.has(c.id)}
-                          onChange={() => toggleSelectOne(c.id)}
-                          className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary"
-                        />
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
-                          <div className="grid h-9 w-9 place-items-center rounded-xl bg-muted text-muted-foreground text-xs font-bold">
-                            {c.name.split(" ").map((n) => n[0]).slice(0, 2).join("")}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="font-semibold line-through text-muted-foreground">{c.name}</div>
-                            <div className="text-xs text-muted-foreground">{c.id}</div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground">
-                        <div className="flex items-center gap-1.5">
-                          <MapPin className="h-3.5 w-3.5" />
-                          {c.city}
-                        </div>
-                      </TableCell>
-                      <TableCell className="text-muted-foreground tabular-nums">
-                        {deletedFormatted}
-                      </TableCell>
-                      <TableCell>
-                        <Badge
-                          variant={daysRemaining <= 5 ? "destructive" : "outline"}
-                          className="tabular-nums"
-                        >
-                          {daysRemaining} day{daysRemaining === 1 ? "" : "s"} left
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-1.5">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => setRestoreTarget(c)}
-                            title={`Restore ${c.name}`}
-                          >
-                            <RotateCcw className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
-                            Restore
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            onClick={() => setDeleteTarget(c)}
-                            title={`Permanently Delete ${c.name}`}
-                          >
-                            <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                            Delete Permanently
-                          </Button>
-                        </div>
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12 text-center">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all clinics in trash"
+                        checked={allSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = !allSelected && someSelected;
+                        }}
+                        onChange={toggleSelectAll}
+                        disabled={binClinics.length === 0}
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary"
+                      />
+                    </TableHead>
+                    <TableHead>Clinic Name</TableHead>
+                    <TableHead>Clinic ID</TableHead>
+                    <TableHead>Deleted Date</TableHead>
+                    <TableHead>Deleted By</TableHead>
+                    <TableHead>Auto-Purge In</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {binClinics.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                        The Trash is empty. No deleted clinics found.
                       </TableCell>
                     </TableRow>
-                  );
-                })
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </div>
+                  ) : (
+                    binClinics.map((c) => {
+                      const daysRemaining = getDaysRemaining(c.deletedAt);
+                      const deletedFormatted = c.deletedAt
+                        ? new Date(c.deletedAt).toLocaleDateString(undefined, {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          })
+                        : "Recently";
 
-      {/* Restore Confirmation Dialog */}
+                      return (
+                        <TableRow key={c.id} className={selectedIds.has(c.id) ? "bg-muted/40" : undefined}>
+                          <TableCell className="w-12 text-center">
+                            <input
+                              type="checkbox"
+                              aria-label={`Select ${c.name}`}
+                              checked={selectedIds.has(c.id)}
+                              onChange={() => toggleSelectOne(c.id)}
+                              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary"
+                            />
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <div className="grid h-9 w-9 place-items-center rounded-xl bg-muted text-muted-foreground text-xs font-bold">
+                                {c.name.split(" ").map((n) => n[0]).slice(0, 2).join("")}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-semibold line-through text-muted-foreground">{c.name}</div>
+                                <div className="text-xs text-muted-foreground">{c.city}</div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="font-mono text-xs text-muted-foreground">
+                            {c.id}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground tabular-nums text-sm">
+                            {deletedFormatted}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-sm">
+                            {c.deletedBy || "Super Admin"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant={daysRemaining <= 5 ? "destructive" : "outline"}
+                              className="tabular-nums"
+                            >
+                              {daysRemaining} day{daysRemaining === 1 ? "" : "s"} left
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setRestoreTarget(c)}
+                                title={`Restore ${c.name}`}
+                              >
+                                <RotateCcw className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
+                                Restore
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => setDeleteTarget(c)}
+                                title={`Permanently Delete ${c.name}`}
+                              >
+                                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                                Delete Permanently
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </TabsContent>
+
+        {/* USERS TAB */}
+        <TabsContent value="users" className="space-y-4">
+          <div className="rounded-2xl border bg-card shadow-soft">
+            <div className="flex items-center justify-between border-b p-4 text-sm font-medium text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <Users className="h-4 w-4 text-destructive" />
+                <span>{binStaffMembers.length} deleted user{binStaffMembers.length === 1 ? "" : "s"} in Trash</span>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Name</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Previously Assigned Clinic</TableHead>
+                    <TableHead>Deleted Date</TableHead>
+                    <TableHead>Deleted By</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {binStaffMembers.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={7} className="h-32 text-center text-muted-foreground">
+                        The Trash is empty. No deleted users found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    binStaffMembers.map((member) => {
+                      const deletedFormatted = member.deletedAt
+                        ? new Date(member.deletedAt).toLocaleDateString(undefined, {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          })
+                        : "Recently";
+
+                      return (
+                        <TableRow key={member.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              <div className="grid h-9 w-9 place-items-center rounded-full bg-muted text-muted-foreground text-xs font-bold">
+                                {member.name.split(" ").map((n) => n[0]).slice(0, 2).join("")}
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-semibold line-through text-muted-foreground">{member.name}</div>
+                                <div className="font-mono text-xs text-muted-foreground">{member.id}</div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-sm">
+                            {member.email}
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="font-medium text-muted-foreground">
+                              {roleLabels[member.role] || member.role}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-sm">
+                            <div className="flex items-center gap-1.5">
+                              <Building2 className="h-3.5 w-3.5" />
+                              <span>{member.previousClinicName || "None"}</span>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-muted-foreground tabular-nums text-sm">
+                            {deletedFormatted}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-sm">
+                            {member.deletedBy || "Super Admin"}
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setRestoreUserTarget(member)}
+                                title={`Restore ${member.name}`}
+                              >
+                                <RotateCcw className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
+                                Restore
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => setDeleteUserTarget(member)}
+                                title={`Permanently Delete ${member.name}`}
+                              >
+                                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                                Delete Permanently
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </TabsContent>
+      </Tabs>
+
+      {/* Restore Clinic Confirmation Dialog */}
       <Dialog open={Boolean(restoreTarget)} onOpenChange={(open) => { if (!open) setRestoreTarget(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -401,7 +570,7 @@ function TrashBinPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Single Permanent Delete Confirmation Dialog */}
+      {/* Single Permanent Delete Clinic Confirmation Dialog */}
       <Dialog open={Boolean(deleteTarget)} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
@@ -410,7 +579,7 @@ function TrashBinPage() {
             </DialogTitle>
             <DialogDescription className="space-y-3 pt-2 text-left">
               <p>
-                This action <strong>CANNOT be undone</strong>. Are you sure you want to permanently delete <strong>{deleteTarget?.name}</strong>?
+                This action <strong>cannot be undone</strong>. Permanently delete this record? Are you sure you want to permanently delete <strong>{deleteTarget?.name}</strong>?
               </p>
               <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive space-y-1.5">
                 <div className="flex items-center gap-1.5 font-semibold text-sm text-destructive">
@@ -455,7 +624,7 @@ function TrashBinPage() {
             </DialogTitle>
             <DialogDescription className="space-y-3 pt-2 text-left">
               <p>
-                This action <strong>CANNOT be undone</strong>. Are you sure you want to permanently delete the <strong>{selectedIds.size}</strong> selected clinic{selectedIds.size === 1 ? "" : "s"}?
+                This action <strong>cannot be undone</strong>. Permanently delete this record? Are you sure you want to permanently delete the <strong>{selectedIds.size}</strong> selected clinic{selectedIds.size === 1 ? "" : "s"}?
               </p>
               <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive space-y-1.5">
                 <div className="flex items-center gap-1.5 font-semibold text-sm text-destructive">
@@ -500,7 +669,7 @@ function TrashBinPage() {
             </DialogTitle>
             <DialogDescription className="space-y-3 pt-2 text-left">
               <p>
-                This action <strong>CANNOT be undone</strong>. Are you sure you want to permanently delete <strong>all {binClinics.length} clinics</strong> currently in the Trash?
+                This action <strong>cannot be undone</strong>. Permanently delete this record? Are you sure you want to permanently delete <strong>all {binClinics.length} clinics</strong> currently in the Trash?
               </p>
               <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive space-y-1.5">
                 <div className="flex items-center gap-1.5 font-semibold text-sm text-destructive">
@@ -531,6 +700,72 @@ function TrashBinPage() {
             </Button>
             <Button variant="destructive" onClick={handleEmptyTrash} disabled={isProcessing}>
               {isProcessing ? "Emptying Trash..." : "Empty Trash & Erase All Users"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Restore User Confirmation Dialog */}
+      <Dialog open={Boolean(restoreUserTarget)} onOpenChange={(open) => { if (!open) setRestoreUserTarget(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-emerald-600" /> Restore User
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to restore <strong>{restoreUserTarget?.name}</strong>?
+              The user will be reactivated and returned to User Management.
+            </DialogDescription>
+          </DialogHeader>
+          {restoreUserTarget?.previousClinicName && (
+            <div className="rounded-xl border bg-muted/40 p-3 text-xs space-y-1">
+              <div className="text-muted-foreground">Previously Assigned Clinic:</div>
+              <div className="font-semibold text-foreground flex items-center gap-1.5">
+                <Building2 className="h-3.5 w-3.5 text-primary" />
+                {restoreUserTarget.previousClinicName}
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRestoreUserTarget(null)} disabled={isProcessing}>
+              Cancel
+            </Button>
+            <Button onClick={handleRestoreUser} disabled={isProcessing} className="bg-emerald-600 hover:bg-emerald-700">
+              {isProcessing ? "Restoring..." : "Confirm Restore"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Single Permanent Delete User Confirmation Dialog */}
+      <Dialog open={Boolean(deleteUserTarget)} onOpenChange={(open) => { if (!open) setDeleteUserTarget(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5 text-destructive" /> Permanent Deletion Warning
+            </DialogTitle>
+            <DialogDescription className="space-y-3 pt-2 text-left">
+              <p>
+                This action cannot be undone. Permanently delete this record?
+              </p>
+              {deleteUserTarget && (
+                <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive space-y-1">
+                  <div className="font-semibold text-sm">{deleteUserTarget.name}</div>
+                  <div>{deleteUserTarget.email}</div>
+                  <div>Role: {roleLabels[deleteUserTarget.role] || deleteUserTarget.role}</div>
+                  {deleteUserTarget.previousClinicName && (
+                    <div>Previously assigned to: {deleteUserTarget.previousClinicName}</div>
+                  )}
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteUserTarget(null)} disabled={isProcessing}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handlePermanentDeleteUser} disabled={isProcessing}>
+              {isProcessing ? "Deleting..." : "Delete Permanently"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -233,9 +233,14 @@ Deno.serve(async (request) => {
     // Look up hospital details for the email
     const { data: hospital } = await adminClient
       .from("hospitals")
-      .select("name, email, phone, address")
+      .select("name, configuration")
       .eq("id", effectiveHospitalId)
       .maybeSingle();
+
+    const hospitalConfig = (hospital?.configuration as Record<string, any>) || {};
+    const hospitalEmail = hospitalConfig.email || null;
+    const hospitalPhone = hospitalConfig.phone || null;
+    const hospitalAddress = hospitalConfig.address || null;
 
     const { error: insertError } = await adminClient.from("invite_tokens").insert({
       email,
@@ -248,9 +253,9 @@ Deno.serve(async (request) => {
       token,
       expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       clinic_name: hospital?.name ?? null,
-      clinic_email: hospital?.email ?? null,
-      clinic_phone: hospital?.phone ?? null,
-      clinic_address: typeof hospital?.address === "object" ? JSON.stringify(hospital.address) : (hospital?.address ?? null),
+      clinic_email: hospitalEmail,
+      clinic_phone: hospitalPhone,
+      clinic_address: typeof hospitalAddress === "object" ? JSON.stringify(hospitalAddress) : (hospitalAddress ?? null),
       specialty,
       shift,
       gender,
