@@ -906,6 +906,12 @@ function requireClinic(user: AuthUser) {
   return user.clinicId;
 }
 
+function isWithinRetentionPeriod(deletedAt?: string, retentionDays = 30): boolean {
+  if (!deletedAt) return false;
+  const daysOld = (Date.now() - new Date(deletedAt).getTime()) / (1000 * 60 * 60 * 24);
+  return daysOld < retentionDays;
+}
+
 export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth();
   const [state, dispatch] = useReducer(
@@ -1042,8 +1048,9 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<WorkspaceData>(() => {
     const clinicId = user?.clinicId;
+    const isSuperAdmin = user?.role === "super_admin";
     const clinicScope = <T extends { clinicId: string | null }>(items: T[]) =>
-      clinicId ? items.filter(item => item.clinicId === clinicId) : items;
+      isSuperAdmin ? items : (clinicId ? items.filter(item => item.clinicId === clinicId) : items);
     const clinicPatients = user && hasPermission(user.role, "patients.read")
       ? clinicScope(state.patients)
       : [];
@@ -1070,11 +1077,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       syncStatus,
       refresh,
       clinics: state.clinics.filter((c) => !c.deletedAt),
-      binClinics: state.clinics.filter((c) => {
-        if (!c.deletedAt) return false;
-        const daysOld = (Date.now() - new Date(c.deletedAt).getTime()) / (1000 * 60 * 60 * 24);
-        return daysOld < 30;
-      }),
+      binClinics: state.clinics.filter((c) => isWithinRetentionPeriod(c.deletedAt)),
       patients,
       doctors: clinicScope(state.doctors),
       receptionists: clinicScope(state.receptionists),
@@ -1086,14 +1089,14 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           )
         : [],
       bills: user && hasPermission(user.role, "billing.read") ? clinicScope(state.bills) : [],
-      auditLogs: user?.role === "super_admin"
+      auditLogs: isSuperAdmin
         ? state.auditLogs
         : state.auditLogs.filter(entry => entry.clinicId === clinicId),
       staffMembers: user && hasPermission(user.role, "people.manage")
-        ? clinicScope(state.staffMembers).filter((m) => !m.deletedAt)
+        ? clinicScope(state.staffMembers).filter((m) => !m.deletedAt && m.status !== "Inactive")
         : [],
       binStaffMembers: user && hasPermission(user.role, "people.manage")
-        ? state.staffMembers.filter((m) => Boolean(m.deletedAt))
+        ? (isSuperAdmin ? state.staffMembers : clinicScope(state.staffMembers)).filter((m) => Boolean(m.deletedAt) || m.status === "Inactive")
         : [],
       facilities: user && hasPermission(user.role, "facilities.manage")
         ? clinicScope(state.facilities)
@@ -1608,6 +1611,12 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         if (!target) throw new Error("Staff member was not found");
         if (target.id === actor.userId) throw new Error("You cannot delete your own account");
 
+        if (repository?.softDeleteStaff) {
+          await repository.softDeleteStaff(userId);
+          await refresh();
+          return;
+        }
+
         if (target.email) {
           deactivateUserAccount(target.email);
         }
@@ -1629,6 +1638,12 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           }
         }
 
+        if (repository?.restoreStaff) {
+          await repository.restoreStaff(userId);
+          await refresh();
+          return;
+        }
+
         if (target.email) {
           reactivateUserAccount(target.email);
         }
@@ -1640,6 +1655,13 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           throw new Error("Only super admin can permanently delete users");
         }
         const target = state.staffMembers.find((member) => member.id === userId);
+
+        if (repository?.permanentlyDeleteStaff) {
+          await repository.permanentlyDeleteStaff(userId);
+          await refresh();
+          return;
+        }
+
         if (target?.email) {
           deleteUserAccount(target.email);
         }
