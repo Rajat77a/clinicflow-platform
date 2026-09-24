@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth, type Role } from "@/lib/auth";
 import { useWorkspaceData, type StaffMember } from "@/lib/workspace-data";
-import { UserMinus, UserPlus, Eye, Building2, ShieldCheck, Stethoscope, UserCog, Mail, Phone, Trash2, RotateCw, Send } from "lucide-react";
+import { UserMinus, UserPlus, Eye, Building2, ShieldCheck, Stethoscope, UserCog, Mail, Phone, Trash2, RotateCw, Send, CheckSquare, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -50,8 +50,13 @@ function UsersPage() {
     createReceptionist,
     deactivateStaff,
     softDeleteStaff,
+    bulkSoftDeleteStaff,
     resendStaffInvitation,
   } = useWorkspaceData();
+
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
 
   const [superAdminDialogOpen, setSuperAdminDialogOpen] = useState(false);
   const [clinicAdminDialogOpen, setClinicAdminDialogOpen] = useState(false);
@@ -256,10 +261,60 @@ function UsersPage() {
     }
   };
 
+  const isSuperAdmin = user?.role === "super_admin";
+  const deletableStaff = useMemo(
+    () => staffMembers.filter((m) => m.id !== user?.userId),
+    [staffMembers, user?.userId],
+  );
+
+  const allSelected =
+    deletableStaff.length > 0 && deletableStaff.every((m) => selectedIds.has(m.id));
+  const someSelected =
+    deletableStaff.some((m) => selectedIds.has(m.id));
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(deletableStaff.map((m) => m.id)));
+    }
+  };
+
+  const toggleSelectOne = (id: string) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    setSelectedIds(next);
+  };
+
+  const handleBulkSoftDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setIsBulkDeleting(true);
+    try {
+      const ids = Array.from(selectedIds);
+      await bulkSoftDeleteStaff(ids);
+      toast.success(`${ids.length} user${ids.length === 1 ? "" : "s"} moved to Trash`);
+      setSelectedIds(new Set());
+      setShowBulkDeleteDialog(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to move users to Trash");
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
+
   const handleConfirmDelete = async () => {
     if (!deleteTarget) return;
     try {
       await softDeleteStaff(deleteTarget.id);
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        next.delete(deleteTarget.id);
+        return next;
+      });
       toast.success(`${deleteTarget.name} has been moved to Trash.`);
       setDeleteTarget(null);
     } catch (err) {
@@ -525,10 +580,52 @@ function UsersPage() {
         ) : undefined}
       />
 
+      {/* Bulk Selection Toolbar */}
+      {isSuperAdmin && selectedIds.size > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm shadow-soft">
+          <div className="flex items-center gap-2 font-medium text-foreground">
+            <CheckSquare className="h-4 w-4 text-destructive" />
+            <span>{selectedIds.size} user{selectedIds.size === 1 ? "" : "s"} selected</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => setSelectedIds(new Set())}
+            >
+              Clear selection
+            </Button>
+            <Button
+              size="sm"
+              variant="destructive"
+              onClick={() => setShowBulkDeleteDialog(true)}
+              className="gap-1.5"
+            >
+              <Trash2 className="h-4 w-4" />
+              Move Selected to Trash ({selectedIds.size})
+            </Button>
+          </div>
+        </div>
+      )}
+
       <div className="overflow-x-auto rounded-2xl border bg-card shadow-soft">
         <Table>
           <TableHeader>
             <TableRow>
+              {isSuperAdmin && (
+                <TableHead className="w-12 text-center">
+                  <input
+                    type="checkbox"
+                    aria-label="Select all users"
+                    checked={allSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = !allSelected && someSelected;
+                    }}
+                    onChange={toggleSelectAll}
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary"
+                  />
+                </TableHead>
+              )}
               <TableHead>User</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Email</TableHead>
@@ -542,6 +639,18 @@ function UsersPage() {
               const assignedClinic = member.clinicId ? clinicMap.get(member.clinicId) : null;
               return (
                 <TableRow key={member.id} className="hover:bg-muted/30">
+                  {isSuperAdmin && (
+                    <TableCell className="w-12 text-center">
+                      <input
+                        type="checkbox"
+                        aria-label={`Select ${member.name}`}
+                        checked={selectedIds.has(member.id)}
+                        disabled={member.id === user?.userId}
+                        onChange={() => toggleSelectOne(member.id)}
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary disabled:opacity-30 disabled:cursor-not-allowed"
+                      />
+                    </TableCell>
+                  )}
                   <TableCell>
                     <div className="flex items-center gap-3">
                       <div className="grid h-9 w-9 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground shrink-0">
@@ -860,6 +969,42 @@ function UsersPage() {
               onClick={handleConfirmDelete}
             >
               Move to Trash
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Delete Users Confirmation Dialog */}
+      <Dialog open={showBulkDeleteDialog} onOpenChange={setShowBulkDeleteDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-destructive/10 text-destructive mb-2">
+              <AlertTriangle className="h-6 w-6" />
+            </div>
+            <DialogTitle className="text-center">Move {selectedIds.size} Users to Trash?</DialogTitle>
+            <DialogDescription className="text-center text-sm pt-2">
+              The selected users will be moved to the Trash Bin and their portal access will be suspended.
+              You can restore them at any time from the Trash within 30 days.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0 mt-4">
+            <Button
+              variant="outline"
+              type="button"
+              onClick={() => setShowBulkDeleteDialog(false)}
+              disabled={isBulkDeleting}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              type="button"
+              onClick={handleBulkSoftDelete}
+              disabled={isBulkDeleting}
+              className="gap-1.5"
+            >
+              <Trash2 className="h-4 w-4" />
+              {isBulkDeleting ? "Moving to Trash..." : `Move ${selectedIds.size} Users to Trash`}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -62,8 +62,9 @@ export default {
     if (pathname === "/readyz") {
       const configured = Boolean(
         runtimeValue(env, "VITE_SUPABASE_URL"),
-      ) && Boolean(
-        runtimeValue(env, "VITE_SUPABASE_PUBLISHABLE_KEY"),
+      ) && (
+        Boolean(runtimeValue(env, "VITE_SUPABASE_PUBLISHABLE_KEY")) ||
+        Boolean(runtimeValue(env, "VITE_SUPABASE_ANON_KEY"))
       );
       return readinessResponse(requestId, configured);
     }
