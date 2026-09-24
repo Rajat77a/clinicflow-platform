@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth, type Role } from "@/lib/auth";
 import { useWorkspaceData, type StaffMember } from "@/lib/workspace-data";
-import { UserMinus, UserPlus } from "lucide-react";
+import { UserMinus, UserPlus, Eye, Building2, ShieldCheck, Stethoscope, UserCog, Mail, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -18,9 +18,16 @@ export const Route = createFileRoute("/app/users")({ component: UsersPage });
 
 const roleLabels: Record<Role, string> = {
   super_admin: "Super Admin",
-  clinic_admin: "Clinic Admin",
+  clinic_admin: "Clinical Admin",
   doctor: "Doctor",
   receptionist: "Receptionist",
+};
+
+const roleIcons: Record<Role, React.ComponentType<{ className?: string }>> = {
+  super_admin: ShieldCheck,
+  clinic_admin: Building2,
+  doctor: Stethoscope,
+  receptionist: UserCog,
 };
 
 function generateTempPassword() {
@@ -34,15 +41,47 @@ function generateTempPassword() {
 
 function UsersPage() {
   const { user } = useAuth();
-  const { staffMembers, clinics, inviteSuperAdmin, inviteClinicAdmin, deactivateStaff } = useWorkspaceData();
+  const {
+    staffMembers,
+    clinics,
+    inviteSuperAdmin,
+    inviteClinicAdmin,
+    createDoctor,
+    createReceptionist,
+    deactivateStaff,
+  } = useWorkspaceData();
+
   const [superAdminDialogOpen, setSuperAdminDialogOpen] = useState(false);
   const [clinicAdminDialogOpen, setClinicAdminDialogOpen] = useState(false);
+  const [inviteStaffDialogOpen, setInviteStaffDialogOpen] = useState(false);
+  const [selectedProfile, setSelectedProfile] = useState<StaffMember | null>(null);
   const [isSending, setIsSending] = useState(false);
+
   const [superAdminForm, setSuperAdminForm] = useState({ name: "", email: "", phone: "" });
   const [clinicAdminForm, setClinicAdminForm] = useState({ name: "", email: "", phone: "", hospitalId: "" });
+  const [inviteStaffForm, setInviteStaffForm] = useState<{
+    role: Role;
+    name: string;
+    email: string;
+    phone: string;
+    hospitalId: string;
+    specialty: string;
+    shift: string;
+  }>({
+    role: "doctor",
+    name: "",
+    email: "",
+    phone: "",
+    hospitalId: clinics[0]?.id || "",
+    specialty: "General Medicine",
+    shift: "Morning (9–5)",
+  });
+
   const [deactivationTarget, setDeactivationTarget] = useState<StaffMember | null>(null);
   const [deactivationReason, setDeactivationReason] = useState("");
   const [isDeactivating, setIsDeactivating] = useState(false);
+
+  const clinicMap = useMemo(() => new Map(clinics.map((c) => [c.id, c])), [clinics]);
 
   const canDeactivate = (member: StaffMember) => (
     member.status !== "Inactive"
@@ -109,6 +148,83 @@ function UsersPage() {
     }
   };
 
+  const submitInviteStaff = async () => {
+    if (!inviteStaffForm.name.trim() || !inviteStaffForm.email.trim()) {
+      toast.error("Full name and email are required");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(inviteStaffForm.email.trim())) {
+      toast.error("Please enter a valid email address");
+      return;
+    }
+
+    if (inviteStaffForm.role !== "super_admin" && !inviteStaffForm.hospitalId) {
+      toast.error("Please select a clinic to assign this user to");
+      return;
+    }
+
+    setIsSending(true);
+    try {
+      if (inviteStaffForm.role === "doctor") {
+        await createDoctor({
+          name: inviteStaffForm.name.trim(),
+          email: inviteStaffForm.email.trim(),
+          phone: inviteStaffForm.phone.trim(),
+          specialty: inviteStaffForm.specialty.trim() || "General Medicine",
+          qualification: "MBBS",
+          medicalRegistrationNumber: `REG-${Math.floor(100000 + Math.random() * 900000)}`,
+          experienceYears: 5,
+          gender: "other",
+          consultationFee: 500,
+          workingHours: "9:00 AM - 5:00 PM",
+          notes: "",
+          hospitalId: inviteStaffForm.hospitalId,
+        });
+        toast.success(`Doctor ${inviteStaffForm.name.trim()} assigned to clinic and invited`);
+      } else if (inviteStaffForm.role === "receptionist") {
+        await createReceptionist({
+          name: inviteStaffForm.name.trim(),
+          email: inviteStaffForm.email.trim(),
+          phone: inviteStaffForm.phone.trim(),
+          shift: inviteStaffForm.shift.trim() || "Morning (9–5)",
+          hospitalId: inviteStaffForm.hospitalId,
+        });
+        toast.success(`Receptionist ${inviteStaffForm.name.trim()} assigned to clinic and invited`);
+      } else if (inviteStaffForm.role === "clinic_admin") {
+        await inviteClinicAdmin({
+          name: inviteStaffForm.name.trim(),
+          email: inviteStaffForm.email.trim(),
+          phone: inviteStaffForm.phone.trim(),
+          hospitalId: inviteStaffForm.hospitalId,
+        });
+        toast.success(`Clinical Admin ${inviteStaffForm.name.trim()} assigned to clinic and invited`);
+      } else if (inviteStaffForm.role === "super_admin") {
+        await inviteSuperAdmin({
+          name: inviteStaffForm.name.trim(),
+          email: inviteStaffForm.email.trim(),
+          phone: inviteStaffForm.phone.trim(),
+          tempPassword: generateTempPassword(),
+        });
+        toast.success(`Super Admin ${inviteStaffForm.name.trim()} invited`);
+      }
+
+      setInviteStaffDialogOpen(false);
+      setInviteStaffForm({
+        role: "doctor",
+        name: "",
+        email: "",
+        phone: "",
+        hospitalId: clinics[0]?.id || "",
+        specialty: "General Medicine",
+        shift: "Morning (9–5)",
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to invite user");
+    } finally {
+      setIsSending(false);
+    }
+  };
+
   const confirmDeactivation = async () => {
     if (!deactivationTarget) return;
     setIsDeactivating(true);
@@ -128,19 +244,145 @@ function UsersPage() {
     <>
       <PageHeader
         title="Users"
-        description="Hospital staff with access to ClinicFlow."
+        description="Hospital staff and administrators with access to ClinicFlow."
         actions={user?.role === "super_admin" ? (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Dialog open={inviteStaffDialogOpen} onOpenChange={setInviteStaffDialogOpen}>
+              <DialogTrigger asChild>
+                <Button className="gap-1.5 shadow-sm">
+                  <UserPlus className="h-4 w-4" />
+                  Add / Invite User
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Invite User & Assign Clinic</DialogTitle>
+                  <DialogDescription>
+                    Create a new user with a specific role and assign them directly to a clinic.
+                  </DialogDescription>
+                </DialogHeader>
+                <div className="space-y-3.5 py-1">
+                  <div className="space-y-1.5">
+                    <Label>User Role</Label>
+                    <Select
+                      value={inviteStaffForm.role}
+                      onValueChange={(val) => setInviteStaffForm({ ...inviteStaffForm, role: val as Role })}
+                    >
+                      <SelectTrigger className="h-11 rounded-xl">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="doctor">Doctor</SelectItem>
+                        <SelectItem value="receptionist">Receptionist</SelectItem>
+                        <SelectItem value="clinic_admin">Clinical Admin</SelectItem>
+                        <SelectItem value="super_admin">Super Admin</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>Full Name</Label>
+                    <Input
+                      value={inviteStaffForm.name}
+                      onChange={(e) => setInviteStaffForm({ ...inviteStaffForm, name: e.target.value })}
+                      className="h-11 rounded-xl"
+                      placeholder="e.g. Dr. David Smith"
+                      autoComplete="name"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>Email (Login ID)</Label>
+                    <Input
+                      type="email"
+                      value={inviteStaffForm.email}
+                      onChange={(e) => setInviteStaffForm({ ...inviteStaffForm, email: e.target.value })}
+                      className="h-11 rounded-xl"
+                      placeholder="david@clinic.com"
+                      autoComplete="email"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>Phone Number</Label>
+                    <Input
+                      type="tel"
+                      value={inviteStaffForm.phone}
+                      onChange={(e) => setInviteStaffForm({ ...inviteStaffForm, phone: e.target.value })}
+                      className="h-11 rounded-xl"
+                      placeholder="+91 98765 43210"
+                      autoComplete="tel"
+                    />
+                  </div>
+
+                  {inviteStaffForm.role !== "super_admin" && (
+                    <div className="space-y-1.5">
+                      <Label>Assigned Clinic</Label>
+                      <Select
+                        value={inviteStaffForm.hospitalId}
+                        onValueChange={(val) => setInviteStaffForm({ ...inviteStaffForm, hospitalId: val })}
+                      >
+                        <SelectTrigger className="h-11 rounded-xl">
+                          <SelectValue placeholder="Select clinic" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {clinics.map((clinic) => (
+                            <SelectItem key={clinic.id} value={clinic.id}>
+                              {clinic.name} ({clinic.city || clinic.id})
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[11px] text-muted-foreground">
+                        This user will be linked directly to the selected clinic.
+                      </p>
+                    </div>
+                  )}
+
+                  {inviteStaffForm.role === "doctor" && (
+                    <div className="space-y-1.5">
+                      <Label>Medical Specialty</Label>
+                      <Input
+                        value={inviteStaffForm.specialty}
+                        onChange={(e) => setInviteStaffForm({ ...inviteStaffForm, specialty: e.target.value })}
+                        className="h-11 rounded-xl"
+                        placeholder="e.g. Cardiology, Pediatrics"
+                      />
+                    </div>
+                  )}
+
+                  {inviteStaffForm.role === "receptionist" && (
+                    <div className="space-y-1.5">
+                      <Label>Work Shift</Label>
+                      <Input
+                        value={inviteStaffForm.shift}
+                        onChange={(e) => setInviteStaffForm({ ...inviteStaffForm, shift: e.target.value })}
+                        className="h-11 rounded-xl"
+                        placeholder="e.g. Morning (9 AM - 5 PM)"
+                      />
+                    </div>
+                  )}
+                </div>
+                <DialogFooter>
+                  <Button onClick={submitInviteStaff} disabled={isSending} className="w-full">
+                    {isSending ? "Creating & Inviting..." : "Create & Send Invitation"}
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
             <Dialog open={clinicAdminDialogOpen} onOpenChange={setClinicAdminDialogOpen}>
               <DialogTrigger asChild>
-                <Button variant="outline"><UserPlus className="mr-1.5 h-4 w-4" />Invite Clinic Admin</Button>
+                <Button variant="outline" className="gap-1.5">
+                  <Building2 className="h-4 w-4" />
+                  Invite Clinic Admin
+                </Button>
               </DialogTrigger>
               <DialogContent className="max-w-md">
                 <DialogHeader>
                   <DialogTitle>Invite Clinic Admin</DialogTitle>
                   <DialogDescription>
-                    A secure password setup link will be sent to the email address provided.
-                    The link remains valid until the admin sets their password.
+                    A secure 24-hour password setup link will be sent to the email address provided.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3">
@@ -174,7 +416,7 @@ function UsersPage() {
                     />
                   </div>
                   <div className="space-y-1.5">
-                    <Label>Assign to Hospital</Label>
+                    <Label>Assign to Hospital / Clinic</Label>
                     <Select
                       value={clinicAdminForm.hospitalId}
                       onValueChange={(value) => setClinicAdminForm({ ...clinicAdminForm, hospitalId: value })}
@@ -188,11 +430,6 @@ function UsersPage() {
                             {clinic.name} ({clinic.id})
                           </SelectItem>
                         ))}
-                        {clinics.length === 0 && user?.clinicId && (
-                          <SelectItem value={user.clinicId}>
-                            {user.clinic}
-                          </SelectItem>
-                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -204,16 +441,19 @@ function UsersPage() {
                 </DialogFooter>
               </DialogContent>
             </Dialog>
+
             <Dialog open={superAdminDialogOpen} onOpenChange={setSuperAdminDialogOpen}>
               <DialogTrigger asChild>
-                <Button><UserPlus className="mr-1.5 h-4 w-4" />Add Super Admin</Button>
+                <Button variant="outline" className="gap-1.5">
+                  <ShieldCheck className="h-4 w-4" />
+                  Add Super Admin
+                </Button>
               </DialogTrigger>
               <DialogContent className="max-w-md">
                 <DialogHeader>
                   <DialogTitle>Add Super Admin</DialogTitle>
                   <DialogDescription>
                     A secure password setup link will be sent to the email address provided.
-                    The link remains valid until the super admin sets their password.
                   </DialogDescription>
                 </DialogHeader>
                 <div className="space-y-3">
@@ -263,50 +503,92 @@ function UsersPage() {
           <TableHeader>
             <TableRow>
               <TableHead>User</TableHead>
-              <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead>Assigned Clinic</TableHead>
               <TableHead>Status</TableHead>
-              <TableHead className="w-20 text-right">Actions</TableHead>
+              <TableHead className="w-28 text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {staffMembers.map((member) => (
-              <TableRow key={member.id}>
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <div className="grid h-9 w-9 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
-                      {member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}
+            {staffMembers.map((member) => {
+              const assignedClinic = member.clinicId ? clinicMap.get(member.clinicId) : null;
+              return (
+                <TableRow key={member.id} className="hover:bg-muted/30">
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <div className="grid h-9 w-9 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground shrink-0">
+                        {member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}
+                      </div>
+                      <div>
+                        <div className="font-semibold text-foreground">{member.name}</div>
+                        <div className="font-mono text-xs text-muted-foreground">{member.id}</div>
+                      </div>
                     </div>
-                    <div>
-                      <div className="font-semibold">{member.name}</div>
-                      <div className="font-mono text-xs text-muted-foreground">{member.id}</div>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell className="text-muted-foreground">{member.email || "Invitation pending"}</TableCell>
-                <TableCell><Badge variant="outline">{roleLabels[member.role]}</Badge></TableCell>
-                <TableCell>
-                  <Badge variant={member.status === "Active" ? "secondary" : "outline"}>{member.status}</Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  {canDeactivate(member) && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      title={`Deactivate ${member.name}`}
-                      aria-label={`Deactivate ${member.name}`}
-                      onClick={() => setDeactivationTarget(member)}
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="font-medium">
+                      {roleLabels[member.role] || member.role}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {member.email || "Invitation pending"}
+                  </TableCell>
+                  <TableCell>
+                    {assignedClinic ? (
+                      <div className="flex items-center gap-1.5 font-medium text-foreground">
+                        <Building2 className="h-3.5 w-3.5 text-primary shrink-0" />
+                        <span>{assignedClinic.name}</span>
+                      </div>
+                    ) : (
+                      <span className="italic text-muted-foreground text-xs">Not Assigned</span>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        member.status === "Active"
+                          ? "secondary"
+                          : member.status === "Inactive"
+                          ? "destructive"
+                          : "outline"
+                      }
                     >
-                      <UserMinus className="h-4 w-4" />
-                    </Button>
-                  )}
-                </TableCell>
-              </TableRow>
-            ))}
+                      {member.status}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <div className="flex items-center justify-end gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        title={`View ${member.name}'s profile`}
+                        aria-label={`View ${member.name}'s profile`}
+                        onClick={() => setSelectedProfile(member)}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      {canDeactivate(member) && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          title={`Deactivate ${member.name}`}
+                          aria-label={`Deactivate ${member.name}`}
+                          onClick={() => setDeactivationTarget(member)}
+                        >
+                          <UserMinus className="h-4 w-4 text-destructive" />
+                        </Button>
+                      )}
+                    </div>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
             {staffMembers.length === 0 && (
               <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
                   No staff memberships are visible for this account.
                 </TableCell>
               </TableRow>
@@ -315,6 +597,124 @@ function UsersPage() {
         </Table>
       </div>
 
+      {/* User Detailed Profile Dialog */}
+      <Dialog
+        open={Boolean(selectedProfile)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedProfile(null);
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Eye className="h-5 w-5 text-primary" /> User Profile Details
+            </DialogTitle>
+            <DialogDescription>
+              Detailed account and assignment details for this user.
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedProfile && (() => {
+            const clinic = selectedProfile.clinicId ? clinicMap.get(selectedProfile.clinicId) : null;
+            const Icon = roleIcons[selectedProfile.role] || UserCog;
+            return (
+              <div className="space-y-4 py-1">
+                <div className="flex items-center gap-3.5 rounded-xl border bg-muted/40 p-4">
+                  <div className="grid h-12 w-12 place-items-center rounded-xl bg-primary text-primary-foreground font-bold text-base shrink-0">
+                    {selectedProfile.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-base text-foreground">{selectedProfile.name}</h3>
+                    <div className="flex items-center gap-2 mt-1">
+                      <Badge variant="outline" className="gap-1 text-xs font-medium">
+                        <Icon className="h-3 w-3" />
+                        {roleLabels[selectedProfile.role] || selectedProfile.role}
+                      </Badge>
+                      <Badge
+                        variant={
+                          selectedProfile.status === "Active"
+                            ? "secondary"
+                            : selectedProfile.status === "Inactive"
+                            ? "destructive"
+                            : "outline"
+                        }
+                      >
+                        {selectedProfile.status}
+                      </Badge>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border divide-y text-xs bg-card">
+                  <div className="flex items-center justify-between p-3">
+                    <span className="font-medium text-muted-foreground">User ID</span>
+                    <span className="font-mono text-foreground font-semibold">{selectedProfile.id}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-3">
+                    <span className="font-medium text-muted-foreground flex items-center gap-1.5">
+                      <Mail className="h-3.5 w-3.5" /> Email Address
+                    </span>
+                    <span className="text-foreground font-medium">{selectedProfile.email || "Pending activation"}</span>
+                  </div>
+
+                  {selectedProfile.phone && (
+                    <div className="flex items-center justify-between p-3">
+                      <span className="font-medium text-muted-foreground flex items-center gap-1.5">
+                        <Phone className="h-3.5 w-3.5" /> Phone Number
+                      </span>
+                      <span className="text-foreground">{selectedProfile.phone}</span>
+                    </div>
+                  )}
+
+                  <div className="p-3 space-y-1.5 bg-muted/20">
+                    <span className="font-medium text-muted-foreground flex items-center gap-1.5">
+                      <Building2 className="h-3.5 w-3.5 text-primary" /> Assigned Clinic
+                    </span>
+                    {clinic ? (
+                      <div className="rounded-lg border bg-background p-2.5 space-y-1">
+                        <div className="font-semibold text-sm text-foreground">{clinic.name}</div>
+                        <div className="font-mono text-[11px] text-primary">Clinic ID: {clinic.id}</div>
+                        {clinic.city && (
+                          <div className="text-muted-foreground">Location: {clinic.city}</div>
+                        )}
+                        {clinic.address && (
+                          <div className="text-muted-foreground">Address: {clinic.address}</div>
+                        )}
+                        {clinic.phone && (
+                          <div className="text-muted-foreground">Contact: {clinic.phone}</div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="italic text-muted-foreground pt-0.5">Not Assigned (Global Administrator)</div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setSelectedProfile(null)}>
+              Close
+            </Button>
+            {selectedProfile && canDeactivate(selectedProfile) && (
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  const target = selectedProfile;
+                  setSelectedProfile(null);
+                  setDeactivationTarget(target);
+                }}
+              >
+                Deactivate Staff Access
+              </Button>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Deactivate Staff Access Dialog */}
       <Dialog
         open={Boolean(deactivationTarget)}
         onOpenChange={(open) => {

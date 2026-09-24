@@ -98,7 +98,7 @@ function TrashBinPage() {
         next.delete(deleteTarget.id);
         return next;
       });
-      toast.success(`${deleteTarget.name} has been permanently deleted`);
+      toast.success(`${deleteTarget.name} and all associated users permanently deleted`);
       setDeleteTarget(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to permanently delete clinic");
@@ -112,7 +112,7 @@ function TrashBinPage() {
     setIsProcessing(true);
     try {
       await emptyTrash();
-      toast.success("Trash emptied. All clinics have been permanently removed.");
+      toast.success("Trash emptied. All clinics and associated users permanently removed.");
       setSelectedIds(new Set());
       setShowEmptyTrashDialog(false);
     } catch (error) {
@@ -128,7 +128,7 @@ function TrashBinPage() {
     try {
       const ids = Array.from(selectedIds);
       await bulkPermanentlyDeleteClinics(ids);
-      toast.success(`Permanently deleted ${ids.length} clinic${ids.length === 1 ? "" : "s"}`);
+      toast.success(`Permanently deleted ${ids.length} clinic${ids.length === 1 ? "" : "s"} and all associated users`);
       setSelectedIds(new Set());
       setShowBulkDeleteDialog(false);
     } catch (error) {
@@ -408,8 +408,31 @@ function TrashBinPage() {
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-5 w-5 text-destructive" /> Permanent Deletion Warning
             </DialogTitle>
-            <DialogDescription>
-              This action <strong>CANNOT be undone</strong>. <strong>{deleteTarget?.name}</strong> and all associated staff, records, and data will be permanently removed from the database immediately.
+            <DialogDescription className="space-y-3 pt-2 text-left">
+              <p>
+                This action <strong>CANNOT be undone</strong>. Are you sure you want to permanently delete <strong>{deleteTarget?.name}</strong>?
+              </p>
+              <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive space-y-1.5">
+                <div className="flex items-center gap-1.5 font-semibold text-sm text-destructive">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>Warning: All Associated Users Will Be Permanently Removed</span>
+                </div>
+                <p>
+                  Permanently deleting this clinic will immediately and permanently erase all users associated with this clinic:
+                </p>
+                <ul className="list-disc list-inside font-medium space-y-0.5 pl-1">
+                  <li>Clinical Admin</li>
+                  <li>Doctors</li>
+                  <li>Receptionists</li>
+                  <li>Any other users assigned to this clinic</li>
+                </ul>
+                <p className="font-semibold pt-1">
+                  Users cannot remain assigned to a clinic that no longer exists.
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                All patient medical records, appointments, prescriptions, and bills will also be completely erased from the database.
+              </p>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -417,7 +440,7 @@ function TrashBinPage() {
               Cancel
             </Button>
             <Button variant="destructive" onClick={handlePermanentDelete} disabled={isProcessing}>
-              {isProcessing ? "Deleting..." : "Permanently Delete"}
+              {isProcessing ? "Deleting..." : "Permanently Delete Clinic & Users"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -430,8 +453,31 @@ function TrashBinPage() {
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-5 w-5 text-destructive" /> Permanently Delete {selectedIds.size} Clinic{selectedIds.size === 1 ? "" : "s"}
             </DialogTitle>
-            <DialogDescription>
-              This action <strong>CANNOT be undone</strong>. The <strong>{selectedIds.size}</strong> selected clinic{selectedIds.size === 1 ? "" : "s"} and all associated records, staff, and clinical data will be permanently deleted immediately.
+            <DialogDescription className="space-y-3 pt-2 text-left">
+              <p>
+                This action <strong>CANNOT be undone</strong>. Are you sure you want to permanently delete the <strong>{selectedIds.size}</strong> selected clinic{selectedIds.size === 1 ? "" : "s"}?
+              </p>
+              <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive space-y-1.5">
+                <div className="flex items-center gap-1.5 font-semibold text-sm text-destructive">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>Warning: All Associated Users Will Be Permanently Removed</span>
+                </div>
+                <p>
+                  Permanently deleting these clinics will immediately erase all associated users across all selected clinics:
+                </p>
+                <ul className="list-disc list-inside font-medium space-y-0.5 pl-1">
+                  <li>Clinical Admins</li>
+                  <li>Doctors</li>
+                  <li>Receptionists</li>
+                  <li>Any other users assigned to these clinics</li>
+                </ul>
+                <p className="font-semibold pt-1">
+                  Users cannot remain assigned to clinics that no longer exist.
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                All associated records, staff, and clinical data will be permanently purged immediately.
+              </p>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -439,7 +485,7 @@ function TrashBinPage() {
               Cancel
             </Button>
             <Button variant="destructive" onClick={handleBulkPermanentDelete} disabled={isProcessing}>
-              {isProcessing ? "Deleting..." : `Delete ${selectedIds.size} Permanently`}
+              {isProcessing ? "Deleting..." : `Delete ${selectedIds.size} Clinics & Users`}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -452,9 +498,31 @@ function TrashBinPage() {
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <AlertTriangle className="h-5 w-5 text-destructive" /> Empty Entire Clinic Trash
             </DialogTitle>
-            <DialogDescription>
-              This action <strong>CANNOT be undone</strong>. Are you sure you want to permanently delete <strong>all {binClinics.length} clinics</strong> in the Trash?
-              All associated data, staff memberships, patients, appointments, and bills will be erased permanently.
+            <DialogDescription className="space-y-3 pt-2 text-left">
+              <p>
+                This action <strong>CANNOT be undone</strong>. Are you sure you want to permanently delete <strong>all {binClinics.length} clinics</strong> currently in the Trash?
+              </p>
+              <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive space-y-1.5">
+                <div className="flex items-center gap-1.5 font-semibold text-sm text-destructive">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>Warning: All Associated Users Will Be Permanently Removed</span>
+                </div>
+                <p>
+                  All associated users across all trashed clinics will be erased permanently:
+                </p>
+                <ul className="list-disc list-inside font-medium space-y-0.5 pl-1">
+                  <li>Clinical Admins</li>
+                  <li>Doctors</li>
+                  <li>Receptionists</li>
+                  <li>Any other users assigned to these clinics</li>
+                </ul>
+                <p className="font-semibold pt-1">
+                  No users can remain assigned to clinics that no longer exist.
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                All hospital data, staff memberships, patients, appointments, and bills will be erased permanently.
+              </p>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -462,7 +530,7 @@ function TrashBinPage() {
               Cancel
             </Button>
             <Button variant="destructive" onClick={handleEmptyTrash} disabled={isProcessing}>
-              {isProcessing ? "Emptying Trash..." : "Empty Trash Permanently"}
+              {isProcessing ? "Emptying Trash..." : "Empty Trash & Erase All Users"}
             </Button>
           </DialogFooter>
         </DialogContent>

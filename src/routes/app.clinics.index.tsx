@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth";
 import { useWorkspaceData, type Clinic } from "@/lib/workspace-data";
-import { Search, Plus, Download, MapPin, Pencil, Power, Trash2, CheckSquare } from "lucide-react";
+import { Search, Plus, Download, MapPin, Pencil, Power, Trash2, CheckSquare, AlertTriangle } from "lucide-react";
 import { downloadCSV } from "@/lib/exporters";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
@@ -112,7 +112,7 @@ function ClinicsPage() {
         next.delete(deleteTarget.id);
         return next;
       });
-      toast.success(`${deleteTarget.name} moved to Trash`);
+      toast.success(`${deleteTarget.name} and all associated users deactivated and moved to Trash`);
       setDeleteTarget(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to delete clinic");
@@ -127,7 +127,7 @@ function ClinicsPage() {
     try {
       const ids = Array.from(selectedIds);
       await bulkSoftDeleteClinics(ids);
-      toast.success(`Moved ${ids.length} clinic${ids.length === 1 ? "" : "s"} to Trash`);
+      toast.success(`${ids.length} clinic${ids.length === 1 ? "" : "s"} and all associated users deactivated and moved to Trash`);
       setSelectedIds(new Set());
       setShowBulkDeleteDialog(false);
     } catch (error) {
@@ -366,11 +366,33 @@ function ClinicsPage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-destructive">
-              <Trash2 className="h-5 w-5" /> Move to Trash
+              <Trash2 className="h-5 w-5" /> Move to Trash & Deactivate Users
             </DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
-              The clinic will be moved to the Trash where it will be kept for up to 30 days before being permanently deleted.
+            <DialogDescription className="space-y-3 pt-2 text-left">
+              <p>
+                Are you sure you want to delete <strong>{deleteTarget?.name}</strong>?
+              </p>
+              <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive space-y-1.5">
+                <div className="flex items-center gap-1.5 font-semibold text-sm text-destructive">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>Warning: All Associated Users Will Be Deactivated</span>
+                </div>
+                <p>
+                  Deleting this clinic will immediately deactivate all users associated with this clinic so they cannot log in:
+                </p>
+                <ul className="list-disc list-inside font-medium space-y-0.5 pl-1">
+                  <li>Clinical Admin</li>
+                  <li>Doctors</li>
+                  <li>Receptionists</li>
+                  <li>Any other users assigned to this clinic</li>
+                </ul>
+                <p className="font-semibold pt-1">
+                  Users cannot remain assigned to a clinic that no longer exists.
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                The clinic will be kept in the Trash for up to 30 days before being permanently purged.
+              </p>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -380,7 +402,7 @@ function ClinicsPage() {
               onClick={handleSoftDelete}
               disabled={isDeleting}
             >
-              {isDeleting ? "Moving to Trash..." : "Move to Trash"}
+              {isDeleting ? "Moving to Trash..." : "Delete Clinic & Users"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -393,9 +415,31 @@ function ClinicsPage() {
             <DialogTitle className="flex items-center gap-2 text-destructive">
               <Trash2 className="h-5 w-5" /> Move {selectedIds.size} Clinic{selectedIds.size === 1 ? "" : "s"} to Trash
             </DialogTitle>
-            <DialogDescription>
-              Are you sure you want to move the <strong>{selectedIds.size}</strong> selected clinic{selectedIds.size === 1 ? "" : "s"} to Trash?
-              They will be moved to the Trash Bin where they can be restored or will be kept for up to 30 days.
+            <DialogDescription className="space-y-3 pt-2 text-left">
+              <p>
+                Are you sure you want to delete the <strong>{selectedIds.size}</strong> selected clinic{selectedIds.size === 1 ? "" : "s"}?
+              </p>
+              <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive space-y-1.5">
+                <div className="flex items-center gap-1.5 font-semibold text-sm text-destructive">
+                  <AlertTriangle className="h-4 w-4 shrink-0" />
+                  <span>Warning: Associated Users Will Be Deactivated</span>
+                </div>
+                <p>
+                  Deleting these clinics will immediately deactivate all associated users across all selected clinics:
+                </p>
+                <ul className="list-disc list-inside font-medium space-y-0.5 pl-1">
+                  <li>Clinical Admins</li>
+                  <li>Doctors</li>
+                  <li>Receptionists</li>
+                  <li>Any other users assigned to these clinics</li>
+                </ul>
+                <p className="font-semibold pt-1">
+                  Users cannot remain assigned to clinics that no longer exist.
+                </p>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                They will be kept in the Trash Bin for up to 30 days before being permanently purged.
+              </p>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
@@ -405,7 +449,7 @@ function ClinicsPage() {
               onClick={handleBulkSoftDelete}
               disabled={isBulkDeleting}
             >
-              {isBulkDeleting ? "Moving to Trash..." : `Move ${selectedIds.size} to Trash`}
+              {isBulkDeleting ? "Moving to Trash..." : `Delete ${selectedIds.size} Clinics & Users`}
             </Button>
           </DialogFooter>
         </DialogContent>

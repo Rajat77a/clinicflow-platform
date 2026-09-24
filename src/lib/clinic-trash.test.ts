@@ -38,6 +38,26 @@ const authSource = await readFile(
   new URL("./auth.tsx", import.meta.url),
   "utf8",
 );
+const usersSource = await readFile(
+  new URL("../routes/app.users.tsx", import.meta.url),
+  "utf8",
+);
+const emailServiceSource = await readFile(
+  new URL("./email-service.ts", import.meta.url),
+  "utf8",
+);
+
+import {
+  saveRegisteredAccount,
+  verifyRegisteredAccount,
+  deactivateClinicAccounts,
+  reactivateClinicAccounts,
+  deleteClinicAccounts,
+} from "./account-store.ts";
+import {
+  generateInvitationEmailHtml,
+  generateInvitationEmailText,
+} from "./email-service.ts";
 
 test("super admin portal contains clinic deletion moving to trash", () => {
   // Only super admins see the delete button and trash navigation
@@ -125,4 +145,138 @@ test("clinical admin password setup registers credentials and auth supports veri
   assert.match(authSource, /verifyRegisteredAccount/);
   assert.match(authSource, /login:\s*async\s*\(email,\s*password\)/);
 });
+
+test("deletion confirmation dialogs warn that all associated users will be deleted or deactivated", () => {
+  // Single clinic delete dialog
+  assert.match(clinicsListSource, /Clinical Admin/);
+  assert.match(clinicsListSource, /Doctors/);
+  assert.match(clinicsListSource, /Receptionists/);
+  assert.match(clinicsListSource, /deactivate all users associated with this clinic/);
+  assert.match(clinicsListSource, /Users cannot remain assigned to a clinic that no longer exists/);
+
+  // Bulk clinic delete dialog
+  assert.match(clinicsListSource, /all associated users across all selected clinics/);
+
+  // Edit page delete dialog
+  assert.match(clinicEditSource, /deactivate all users associated with this clinic/);
+  assert.match(clinicEditSource, /Users cannot remain assigned to a clinic that no longer exists/);
+
+  // Trash bin permanent deletion dialogs
+  assert.match(clinicsBinSource, /All Associated Users Will Be Permanently Removed/);
+  assert.match(clinicsBinSource, /permanently erase all users associated with this clinic/);
+});
+
+test("user management table contains Assigned Clinic column and renders clinic name or Not Assigned", () => {
+  assert.match(usersSource, /<TableHead>Assigned Clinic<\/TableHead>/);
+  assert.match(usersSource, /Not Assigned/);
+  assert.match(usersSource, /Building2/);
+
+  // User detail profile modal includes clinic assignment
+  assert.match(usersSource, /selectedProfile/);
+  assert.match(usersSource, /User Profile Details/);
+  assert.match(usersSource, /Assigned Clinic/);
+});
+
+test("super admin can select clinic assignment when creating or inviting users", () => {
+  assert.match(usersSource, /Add \/ Invite User/);
+  assert.match(usersSource, /Assigned Clinic/);
+  assert.match(usersSource, /hospitalId/);
+  assert.match(usersSource, /Select clinic/);
+});
+
+test("invitation email includes structured clinic details, 24-hr expiry, and activation CTA", () => {
+  const emailParams = {
+    recipientName: "Dr. Sarah Jenkins",
+    recipientEmail: "sarah.jenkins@cityhealth.org",
+    roleTitle: "Clinical Admin",
+    clinicName: "City Care Clinic",
+    clinicId: "clinic-city-101",
+    clinicAddress: "456 Wellness Way",
+    clinicCity: "San Francisco",
+    clinicPhone: "+1 (555) 012-3456",
+    clinicEmail: "contact@cityhealth.org",
+    setupUrl: "https://clinicflow.app/setup?token=sec-token-12345",
+    expiresInHours: 24,
+  };
+
+  const html = generateInvitationEmailHtml(emailParams);
+  const text = generateInvitationEmailText(emailParams);
+
+  // HTML content checks
+  assert.ok(html.includes("City Care Clinic"), "HTML should include clinic name");
+  assert.ok(html.includes("clinic-city-101"), "HTML should include clinic ID");
+  assert.ok(html.includes("456 Wellness Way"), "HTML should include clinic address");
+  assert.ok(html.includes("San Francisco"), "HTML should include clinic city");
+  assert.ok(html.includes("+1 (555) 012-3456"), "HTML should include clinic phone");
+  assert.ok(html.includes("Dr. Sarah Jenkins"), "HTML should include recipient name");
+  assert.ok(html.includes("sarah.jenkins@cityhealth.org"), "HTML should include recipient email");
+  assert.ok(html.includes("Create Password &amp; Activate Account") || html.includes("Create Password & Activate Account"), "HTML should include CTA button");
+  assert.ok(html.includes("24 hours"), "HTML should specify 24 hour expiry");
+
+  // Text content checks
+  assert.ok(text.includes("City Care Clinic"), "Text should include clinic name");
+  assert.ok(text.includes("456 Wellness Way"), "Text should include clinic address");
+  assert.ok(text.includes("San Francisco"), "Text should include clinic city");
+  assert.ok(text.includes("+1 (555) 012-3456"), "Text should include clinic phone");
+  assert.ok(text.includes("24 hours"), "Text should specify 24 hour expiry");
+  assert.ok(text.includes("Create Password & Activate Account"), "Text should include CTA label");
+});
+
+test("deleting clinic deactivates all associated user accounts and prevents login", () => {
+  const clinicAId = "clinic-alpha-999";
+  const clinicBId = "clinic-beta-888";
+
+  // Register users for Clinic A
+  saveRegisteredAccount({
+    email: "admin.alpha@test.com",
+    password: "Password123!",
+    name: "Alpha Admin",
+    role: "clinic_admin",
+    clinicId: clinicAId,
+    clinicName: "Alpha Clinic",
+  });
+  saveRegisteredAccount({
+    email: "doctor.alpha@test.com",
+    password: "Password123!",
+    name: "Dr. Alpha",
+    role: "doctor",
+    clinicId: clinicAId,
+    clinicName: "Alpha Clinic",
+  });
+
+  // Register user for Clinic B
+  saveRegisteredAccount({
+    email: "doctor.beta@test.com",
+    password: "Password123!",
+    name: "Dr. Beta",
+    role: "doctor",
+    clinicId: clinicBId,
+    clinicName: "Beta Clinic",
+  });
+
+  // Initial verification: all accounts are active and can verify
+  assert.ok(verifyRegisteredAccount("admin.alpha@test.com", "Password123!"));
+  assert.ok(verifyRegisteredAccount("doctor.alpha@test.com", "Password123!"));
+  assert.ok(verifyRegisteredAccount("doctor.beta@test.com", "Password123!"));
+
+  // Super Admin deletes Clinic A -> deactivate all Clinic A accounts
+  deactivateClinicAccounts(clinicAId);
+
+  // Clinic A users can no longer log in
+  assert.equal(verifyRegisteredAccount("admin.alpha@test.com", "Password123!"), null);
+  assert.equal(verifyRegisteredAccount("doctor.alpha@test.com", "Password123!"), null);
+
+  // Clinic B user is unaffected and can still log in
+  assert.ok(verifyRegisteredAccount("doctor.beta@test.com", "Password123!"));
+
+  // Super Admin restores Clinic A -> reactivate accounts
+  reactivateClinicAccounts(clinicAId);
+  assert.ok(verifyRegisteredAccount("admin.alpha@test.com", "Password123!"));
+  assert.ok(verifyRegisteredAccount("doctor.alpha@test.com", "Password123!"));
+
+  // Super Admin permanently deletes Clinic A -> delete accounts
+  deleteClinicAccounts(clinicAId);
+  assert.equal(verifyRegisteredAccount("admin.alpha@test.com", "Password123!"), null);
+});
+
 

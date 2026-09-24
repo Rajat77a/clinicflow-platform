@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Activity, ArrowRight, Building2, Eye, EyeOff, ShieldCheck, Stethoscope, UserCog } from "lucide-react";
+import { Activity, ArrowRight, Building2, Clock, Eye, EyeOff, Mail, MapPin, Phone, ShieldCheck, Stethoscope, UserCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,6 +28,7 @@ interface TokenInfo {
   clinic_email: string | null;
   clinic_phone: string | null;
   clinic_address: string | null;
+  clinic_city?: string | null;
   specialty: string | null;
   shift: string | null;
   gender: string | null;
@@ -95,9 +96,10 @@ function SetupPage() {
           facility_id: null,
           department_id: null,
           clinic_name: local.clinicName,
-          clinic_email: null,
-          clinic_phone: null,
-          clinic_address: null,
+          clinic_email: local.clinicEmail || null,
+          clinic_phone: local.clinicPhone || null,
+          clinic_address: local.clinicAddress || null,
+          clinic_city: local.clinicCity || null,
           specialty: null,
           shift: null,
           gender: null,
@@ -333,23 +335,68 @@ function SetupPage() {
             </div>
           </div>
 
-          <div className="mt-4 rounded-xl border bg-muted/40 p-4 text-sm">
-            <div className="font-semibold">{tokenInfo.full_name}</div>
-            <div className="text-muted-foreground">{tokenInfo.email}</div>
+          <div className="mt-4 rounded-xl border bg-card/60 backdrop-blur-sm p-4 text-sm shadow-sm space-y-3">
+            <div className="flex items-start justify-between gap-2 border-b pb-3">
+              <div>
+                <div className="text-[11px] uppercase tracking-wider font-semibold text-muted-foreground">
+                  Invited User
+                </div>
+                <div className="font-semibold text-foreground text-base mt-0.5">{tokenInfo.full_name}</div>
+                <div className="text-xs text-muted-foreground flex items-center gap-1.5 mt-0.5">
+                  <Mail className="h-3.5 w-3.5" />
+                  <span>{tokenInfo.email}</span>
+                </div>
+              </div>
+              <span className="inline-flex items-center gap-1 rounded-full bg-primary/10 px-2.5 py-0.5 text-xs font-semibold text-primary">
+                {ROLE_LABELS[tokenInfo.role_code] ?? tokenInfo.role_code}
+              </span>
+            </div>
+
             {tokenInfo.clinic_name && (
-              <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
-                <Building2 className="h-3.5 w-3.5" />
-                <span>{tokenInfo.clinic_name}</span>
-                {tokenInfo.clinic_address && <span>· {tokenInfo.clinic_address}</span>}
+              <div className="space-y-2 rounded-lg bg-muted/50 p-3 text-xs">
+                <div className="font-semibold text-foreground flex items-center gap-1.5 text-sm">
+                  <Building2 className="h-4 w-4 text-primary" />
+                  <span>{tokenInfo.clinic_name}</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5 text-muted-foreground pt-1">
+                  {tokenInfo.hospital_id && (
+                    <div>
+                      <span className="font-medium text-foreground">Clinic ID: </span>
+                      <span className="font-mono text-[11px]">{tokenInfo.hospital_id}</span>
+                    </div>
+                  )}
+                  {tokenInfo.clinic_city && (
+                    <div className="flex items-center gap-1">
+                      <MapPin className="h-3 w-3 shrink-0 text-muted-foreground" />
+                      <span>{tokenInfo.clinic_city}</span>
+                    </div>
+                  )}
+                  {tokenInfo.clinic_address && (
+                    <div className="sm:col-span-2 flex items-center gap-1">
+                      <MapPin className="h-3 w-3 shrink-0 text-muted-foreground" />
+                      <span>{tokenInfo.clinic_address}</span>
+                    </div>
+                  )}
+                  {tokenInfo.clinic_phone && (
+                    <div className="flex items-center gap-1">
+                      <Phone className="h-3 w-3 shrink-0 text-muted-foreground" />
+                      <span>{tokenInfo.clinic_phone}</span>
+                    </div>
+                  )}
+                </div>
               </div>
             )}
+
             {tokenInfo.specialty && (
-              <div className="mt-1 text-xs text-muted-foreground">
-                Specialty: {tokenInfo.specialty}
+              <div className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">Specialty: </span>
+                <span>{tokenInfo.specialty}</span>
               </div>
             )}
-            <div className="mt-2.5 inline-flex items-center gap-1.5 text-[11px] font-medium text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300 px-2 py-0.5 rounded-md">
-              <span>⏰ 24-Hour Invitation Link · Valid for password generation</span>
+
+            <div className="flex items-center gap-1.5 text-[11px] font-medium text-amber-700 bg-amber-50 dark:bg-amber-950/40 dark:text-amber-300 px-2.5 py-1.5 rounded-md border border-amber-200/60 dark:border-amber-900/60">
+              <Clock className="h-3.5 w-3.5 shrink-0" />
+              <span>This invitation link will expire in 24 hours. Create your password below.</span>
             </div>
           </div>
 
@@ -412,7 +459,7 @@ function SetupPage() {
               disabled={submitting}
               className="h-11 w-full rounded-xl text-sm font-semibold"
             >
-              {submitting ? "Setting password..." : "Set password & sign in"} <ArrowRight className="ml-1.5 h-4 w-4" />
+              {submitting ? "Activating account..." : "Create Password & Activate Account"} <ArrowRight className="ml-1.5 h-4 w-4" />
             </Button>
           </form>
 
