@@ -428,7 +428,7 @@ begin
 
   if private.is_platform_admin() then
     v_actor_role := 'super_admin';
-  elsif v_hospital_id is not null and v_hospital_id = private.current_hospital_id() and private.has_permission('people.manage') then
+  elsif (v_hospital_id is null or v_hospital_id = private.current_hospital_id()) and private.has_permission('people.manage') then
     v_actor_role := 'clinic_admin';
   else
     raise exception 'Access denied: insufficient permissions to manage staff' using errcode = '42501';
@@ -495,7 +495,7 @@ begin
 
   if private.is_platform_admin() then
     v_actor_role := 'super_admin';
-  elsif v_hospital_id is not null and v_hospital_id = private.current_hospital_id() and private.has_permission('people.manage') then
+  elsif (v_hospital_id is null or v_hospital_id = private.current_hospital_id()) and private.has_permission('people.manage') then
     v_actor_role := 'clinic_admin';
   else
     raise exception 'Access denied: insufficient permissions to manage staff' using errcode = '42501';
@@ -551,7 +551,7 @@ begin
 
   if private.is_platform_admin() then
     v_actor_role := 'super_admin';
-  elsif v_hospital_id is not null and v_hospital_id = private.current_hospital_id() and private.has_permission('people.manage') then
+  elsif (v_hospital_id is null or v_hospital_id = private.current_hospital_id()) and private.has_permission('people.manage') then
     v_actor_role := 'clinic_admin';
   else
     raise exception 'Access denied: insufficient permissions to manage staff' using errcode = '42501';

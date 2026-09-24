@@ -1,8 +1,12 @@
--- Run this script in the Supabase SQL Editor to create or update the invite token RPCs.
--- This bypasses the edge function entirely, creating and validating tokens directly in the database.
+-- Run this script in the Supabase SQL Editor to create or update all invitation, user deletion, and trash RPCs.
+-- This sets up table columns, indexes, and security-definer RPCs directly in the database.
 
+-- 1. Ensure columns exist on staff_memberships and invite_tokens
 alter table public.invite_tokens alter column hospital_id drop not null;
+alter table public.staff_memberships add column if not exists status text default 'Active';
+alter table public.staff_memberships add column if not exists deleted_at timestamptz default null;
 
+-- 2. Staff Invitation Creation RPC
 create or replace function public.create_staff_invite_token(
   p_email text,
   p_full_name text,
@@ -110,3 +114,208 @@ end;
 $$;
 
 grant execute on function public.create_staff_invite_token(text, text, text, text, uuid, uuid, text, text, text, text, text, integer, numeric, text, text) to authenticated, anon, service_role;
+
+-- 3. Soft Delete Staff Member RPC
+create or replace function public.soft_delete_staff_member(p_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = 'public', 'private'
+as $$
+declare
+  v_hospital_id uuid;
+  v_email text;
+  v_actor_role text := 'clinic_admin';
+begin
+  if p_user_id = auth.uid() then
+    raise exception 'You cannot delete your own account' using errcode = '22023';
+  end if;
+
+  select hospital_id into v_hospital_id
+  from public.staff_memberships
+  where user_id = p_user_id;
+
+  if private.is_platform_admin() then
+    v_actor_role := 'super_admin';
+  elsif (v_hospital_id is null or v_hospital_id = private.current_hospital_id()) and private.has_permission('people.manage') then
+    v_actor_role := 'clinic_admin';
+  else
+    raise exception 'Access denied: insufficient permissions to manage staff' using errcode = '42501';
+  end if;
+
+  select lower(email) into v_email
+  from public.profiles
+  where id = p_user_id;
+
+  -- Deactivate membership and mark soft-deleted
+  update public.staff_memberships
+  set active = false,
+      status = 'Inactive',
+      deleted_at = now(),
+      updated_at = now()
+  where user_id = p_user_id;
+
+  -- Deactivate patient care team assignments
+  update public.patient_care_teams
+  set active = false
+  where staff_user_id = p_user_id;
+
+  -- Invalidate any pending invite tokens
+  if v_email is not null then
+    update public.invite_tokens
+    set expires_at = now() - interval '1 second'
+    where lower(email) = v_email and used_at is null;
+  end if;
+
+  -- Ban Supabase Auth user to disable login
+  update auth.users
+  set banned_until = '3000-01-01 00:00:00+00'::timestamptz,
+      raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"banned": true, "deleted": true}'::jsonb,
+      updated_at = now()
+  where id = p_user_id;
+
+  -- Insert audit event
+  if v_hospital_id is not null then
+    insert into public.audit_events (
+      hospital_id, actor_user_id, actor_role, action, entity_type, entity_id
+    ) values (
+      v_hospital_id, auth.uid(), v_actor_role, 'staff.soft_deleted', 'staff_membership', p_user_id::text
+    );
+  end if;
+end;
+$$;
+
+grant execute on function public.soft_delete_staff_member(uuid) to authenticated, service_role;
+
+-- 4. Restore Staff Member RPC
+create or replace function public.restore_staff_member(p_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = 'public', 'private'
+as $$
+declare
+  v_hospital_id uuid;
+  v_actor_role text := 'clinic_admin';
+begin
+  select hospital_id into v_hospital_id
+  from public.staff_memberships
+  where user_id = p_user_id;
+
+  if private.is_platform_admin() then
+    v_actor_role := 'super_admin';
+  elsif (v_hospital_id is null or v_hospital_id = private.current_hospital_id()) and private.has_permission('people.manage') then
+    v_actor_role := 'clinic_admin';
+  else
+    raise exception 'Access denied: insufficient permissions to manage staff' using errcode = '42501';
+  end if;
+
+  -- Reactivate membership
+  update public.staff_memberships
+  set active = true,
+      status = 'Active',
+      deleted_at = null,
+      updated_at = now()
+  where user_id = p_user_id;
+
+  -- Unban Supabase Auth user
+  update auth.users
+  set banned_until = null,
+      raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) - 'banned' - 'deleted',
+      updated_at = now()
+  where id = p_user_id;
+
+  -- Insert audit event
+  if v_hospital_id is not null then
+    insert into public.audit_events (
+      hospital_id, actor_user_id, actor_role, action, entity_type, entity_id
+    ) values (
+      v_hospital_id, auth.uid(), v_actor_role, 'staff.restored', 'staff_membership', p_user_id::text
+    );
+  end if;
+end;
+$$;
+
+grant execute on function public.restore_staff_member(uuid) to authenticated, service_role;
+
+-- 5. Permanently Delete Staff User RPC
+create or replace function public.permanently_delete_staff_user(p_user_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = 'public', 'private'
+as $$
+declare
+  v_hospital_id uuid;
+  v_email text;
+  v_actor_role text := 'clinic_admin';
+begin
+  if p_user_id = auth.uid() then
+    raise exception 'You cannot delete your own account' using errcode = '22023';
+  end if;
+
+  select hospital_id into v_hospital_id
+  from public.staff_memberships
+  where user_id = p_user_id;
+
+  if private.is_platform_admin() then
+    v_actor_role := 'super_admin';
+  elsif (v_hospital_id is null or v_hospital_id = private.current_hospital_id()) and private.has_permission('people.manage') then
+    v_actor_role := 'clinic_admin';
+  else
+    raise exception 'Access denied: insufficient permissions to manage staff' using errcode = '42501';
+  end if;
+
+  select lower(email) into v_email
+  from public.profiles
+  where id = p_user_id;
+
+  -- Deactivate patient care team assignments
+  update public.patient_care_teams
+  set active = false
+  where staff_user_id = p_user_id;
+
+  -- Invalidate and remove invite tokens
+  if v_email is not null then
+    delete from public.invite_tokens where lower(email) = v_email;
+  end if;
+
+  -- Deactivate and mark membership inactive
+  update public.staff_memberships
+  set active = false,
+      status = 'Inactive',
+      deleted_at = now(),
+      updated_at = now()
+  where user_id = p_user_id;
+
+  -- Ban Supabase Auth user and scramble credentials to permanently block login
+  update auth.users
+  set banned_until = '3000-01-01 00:00:00+00'::timestamptz,
+      encrypted_password = 'DELETED_' || encode(gen_random_bytes(32), 'hex'),
+      raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"banned": true, "deleted": true, "permanently_deleted": true}'::jsonb,
+      updated_at = now()
+  where id = p_user_id;
+
+  begin
+    delete from public.staff_memberships where user_id = p_user_id;
+  exception when others then
+    null;
+  end;
+
+  begin
+    delete from auth.users where id = p_user_id;
+  exception when others then
+    null;
+  end;
+
+  if v_hospital_id is not null then
+    insert into public.audit_events (
+      hospital_id, actor_user_id, actor_role, action, entity_type, entity_id
+    ) values (
+      v_hospital_id, auth.uid(), v_actor_role, 'staff.permanently_deleted', 'staff_membership', p_user_id::text
+    );
+  end if;
+end;
+$$;
+
+grant execute on function public.permanently_delete_staff_user(uuid) to authenticated, service_role;

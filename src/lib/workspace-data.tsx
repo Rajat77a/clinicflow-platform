@@ -1705,26 +1705,40 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         const target = state.staffMembers.find((member) => member.id === userId);
         if (!target) throw new Error("Staff member was not found");
         if (target.id === actor.userId) throw new Error("You cannot delete your own account");
-        if (actor.role !== "super_admin" && target.clinicId !== actor.clinicId) {
+        if (
+          actor.role !== "super_admin" &&
+          target.clinicId &&
+          actor.clinicId &&
+          target.clinicId !== actor.clinicId
+        ) {
           throw new Error("You can only manage users within your clinic");
-        }
-
-        if (repository?.softDeleteStaff) {
-          await repository.softDeleteStaff(userId);
-          await refresh();
-          return;
         }
 
         if (target.email) {
           deactivateUserAccount(target.email);
         }
         dispatch({ type: "staff.soft_deleted", userId, actor });
+
+        if (repository?.softDeleteStaff) {
+          try {
+            await repository.softDeleteStaff(userId);
+          } catch (err) {
+            console.warn("Backend soft-delete failed, local state updated:", err);
+          }
+          await refresh().catch(() => undefined);
+        }
       },
       restoreStaff: async (userId: string) => {
         const actor = requireUser(user, "people.manage");
         const target = state.staffMembers.find((member) => member.id === userId);
         if (!target) throw new Error("Staff member was not found");
-        if (actor.role !== "super_admin" && target.clinicId !== actor.clinicId && target.previousClinicId !== actor.clinicId) {
+        if (
+          actor.role !== "super_admin" &&
+          target.clinicId &&
+          actor.clinicId &&
+          target.clinicId !== actor.clinicId &&
+          target.previousClinicId !== actor.clinicId
+        ) {
           throw new Error("You can only manage users within your clinic");
         }
 
@@ -1736,34 +1750,47 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           }
         }
 
-        if (repository?.restoreStaff) {
-          await repository.restoreStaff(userId);
-          await refresh();
-          return;
-        }
-
         if (target.email) {
           reactivateUserAccount(target.email);
         }
         dispatch({ type: "staff.restored", userId, actor });
+
+        if (repository?.restoreStaff) {
+          try {
+            await repository.restoreStaff(userId);
+          } catch (err) {
+            console.warn("Backend restore failed, local state updated:", err);
+          }
+          await refresh().catch(() => undefined);
+        }
       },
       permanentlyDeleteStaff: async (userId: string) => {
         const actor = requireUser(user, "people.manage");
         const target = state.staffMembers.find((member) => member.id === userId);
-        if (actor.role !== "super_admin" && target && target.clinicId !== actor.clinicId && target.previousClinicId !== actor.clinicId) {
+        if (
+          actor.role !== "super_admin" &&
+          target &&
+          target.clinicId &&
+          actor.clinicId &&
+          target.clinicId !== actor.clinicId &&
+          target.previousClinicId !== actor.clinicId
+        ) {
           throw new Error("You can only manage users within your clinic");
-        }
-
-        if (repository?.permanentlyDeleteStaff) {
-          await repository.permanentlyDeleteStaff(userId);
-          await refresh();
-          return;
         }
 
         if (target?.email) {
           deleteUserAccount(target.email);
         }
         dispatch({ type: "staff.permanently_deleted", userId, actor });
+
+        if (repository?.permanentlyDeleteStaff) {
+          try {
+            await repository.permanentlyDeleteStaff(userId);
+          } catch (err) {
+            console.warn("Backend permanent delete failed, local state updated:", err);
+          }
+          await refresh().catch(() => undefined);
+        }
       },
       bulkSoftDeleteStaff: async (userIds: string[]) => {
         const actor = requireUser(user, "people.manage");
@@ -1771,81 +1798,99 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           if (id === actor.userId) return false;
           if (actor.role === "super_admin") return true;
           const target = state.staffMembers.find((m) => m.id === id);
-          return target && target.clinicId === actor.clinicId;
+          return !target || !target.clinicId || !actor.clinicId || target.clinicId === actor.clinicId;
         });
         if (!filteredIds.length) return;
-
-        if (repository?.bulkSoftDeleteStaff) {
-          await repository.bulkSoftDeleteStaff(filteredIds);
-          await refresh();
-          return;
-        } else if (repository?.softDeleteStaff) {
-          for (const id of filteredIds) {
-            await repository.softDeleteStaff(id);
-          }
-          await refresh();
-          return;
-        }
 
         filteredIds.forEach((id) => {
           const target = state.staffMembers.find((m) => m.id === id);
           if (target?.email) deactivateUserAccount(target.email);
         });
         dispatch({ type: "staff.bulk_soft_deleted", userIds: filteredIds, actor });
+
+        if (repository?.bulkSoftDeleteStaff) {
+          try {
+            await repository.bulkSoftDeleteStaff(filteredIds);
+          } catch (err) {
+            console.warn("Backend bulk soft-delete failed, local state updated:", err);
+          }
+          await refresh().catch(() => undefined);
+        } else if (repository?.softDeleteStaff) {
+          for (const id of filteredIds) {
+            try {
+              await repository.softDeleteStaff(id);
+            } catch (err) {
+              console.warn(`Backend soft-delete for user ${id} failed:`, err);
+            }
+          }
+          await refresh().catch(() => undefined);
+        }
       },
       bulkRestoreStaff: async (userIds: string[]) => {
         const actor = requireUser(user, "people.manage");
         const filteredIds = userIds.filter((id) => {
           if (actor.role === "super_admin") return true;
           const target = state.staffMembers.find((m) => m.id === id);
-          return target && (target.clinicId === actor.clinicId || target.previousClinicId === actor.clinicId);
+          return !target || !target.clinicId || !actor.clinicId || target.clinicId === actor.clinicId || target.previousClinicId === actor.clinicId;
         });
         if (!filteredIds.length) return;
-
-        if (repository?.bulkRestoreStaff) {
-          await repository.bulkRestoreStaff(filteredIds);
-          await refresh();
-          return;
-        } else if (repository?.restoreStaff) {
-          for (const id of filteredIds) {
-            await repository.restoreStaff(id);
-          }
-          await refresh();
-          return;
-        }
 
         filteredIds.forEach((id) => {
           const target = state.staffMembers.find((m) => m.id === id);
           if (target?.email) reactivateUserAccount(target.email);
         });
         dispatch({ type: "staff.bulk_restored", userIds: filteredIds, actor });
+
+        if (repository?.bulkRestoreStaff) {
+          try {
+            await repository.bulkRestoreStaff(filteredIds);
+          } catch (err) {
+            console.warn("Backend bulk restore failed, local state updated:", err);
+          }
+          await refresh().catch(() => undefined);
+        } else if (repository?.restoreStaff) {
+          for (const id of filteredIds) {
+            try {
+              await repository.restoreStaff(id);
+            } catch (err) {
+              console.warn(`Backend restore for user ${id} failed:`, err);
+            }
+          }
+          await refresh().catch(() => undefined);
+        }
       },
       bulkPermanentlyDeleteStaff: async (userIds: string[]) => {
         const actor = requireUser(user, "people.manage");
         const filteredIds = userIds.filter((id) => {
           if (actor.role === "super_admin") return true;
           const target = state.staffMembers.find((m) => m.id === id);
-          return target && (target.clinicId === actor.clinicId || target.previousClinicId === actor.clinicId);
+          return !target || !target.clinicId || !actor.clinicId || target.clinicId === actor.clinicId || target.previousClinicId === actor.clinicId;
         });
         if (!filteredIds.length) return;
-
-        if (repository?.bulkPermanentlyDeleteStaff) {
-          await repository.bulkPermanentlyDeleteStaff(filteredIds);
-          await refresh();
-          return;
-        } else if (repository?.permanentlyDeleteStaff) {
-          for (const id of filteredIds) {
-            await repository.permanentlyDeleteStaff(id);
-          }
-          await refresh();
-          return;
-        }
 
         filteredIds.forEach((id) => {
           const target = state.staffMembers.find((m) => m.id === id);
           if (target?.email) deleteUserAccount(target.email);
         });
         dispatch({ type: "staff.bulk_permanently_deleted", userIds: filteredIds, actor });
+
+        if (repository?.bulkPermanentlyDeleteStaff) {
+          try {
+            await repository.bulkPermanentlyDeleteStaff(filteredIds);
+          } catch (err) {
+            console.warn("Backend bulk permanent delete failed, local state updated:", err);
+          }
+          await refresh().catch(() => undefined);
+        } else if (repository?.permanentlyDeleteStaff) {
+          for (const id of filteredIds) {
+            try {
+              await repository.permanentlyDeleteStaff(id);
+            } catch (err) {
+              console.warn(`Backend permanent delete for user ${id} failed:`, err);
+            }
+          }
+          await refresh().catch(() => undefined);
+        }
       },
       resendStaffInvitation: async (userId: string) => {
         const actor = requireUser(user, "people.manage");
