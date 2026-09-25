@@ -7,8 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth";
-import { useWorkspaceData, type Clinic } from "@/lib/workspace-data";
-import { Search, Plus, Download, MapPin, Pencil, Power, Trash2, CheckSquare, AlertTriangle } from "lucide-react";
+import { useWorkspaceData, type Clinic, type StaffMember } from "@/lib/workspace-data";
+import { Search, Plus, Download, MapPin, Pencil, Power, Trash2, CheckSquare, AlertTriangle, Users } from "lucide-react";
 import { downloadCSV } from "@/lib/exporters";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
@@ -17,7 +17,7 @@ export const Route = createFileRoute("/app/clinics/")({ component: ClinicsPage }
 
 function ClinicsPage() {
   const { user } = useAuth();
-  const { clinics, binClinics, setClinicAccess, softDeleteClinic, bulkSoftDeleteClinics } = useWorkspaceData();
+  const { clinics, binClinics, staffMembers, setClinicAccess, softDeleteClinic, bulkSoftDeleteClinics } = useWorkspaceData();
   const navigate = useNavigate();
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -28,6 +28,26 @@ function ClinicsPage() {
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const isSuperAdmin = user?.role === "super_admin";
+
+  const clinicAdminCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    staffMembers.forEach((member) => {
+      if (member.role === "clinic_admin" && member.clinicId && member.status !== "Inactive") {
+        counts[member.clinicId] = (counts[member.clinicId] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [staffMembers]);
+
+  const clinicAdminInvitedCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    staffMembers.forEach((member) => {
+      if (member.role === "clinic_admin" && member.clinicId && member.status === "Invited") {
+        counts[member.clinicId] = (counts[member.clinicId] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [staffMembers]);
 
   const visibleClinics = useMemo(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -68,9 +88,11 @@ function ClinicsPage() {
   };
 
   const exportClinic = (c: Clinic) => {
+    const adminCount = clinicAdminCounts[c.id] ?? 0;
+    const invitedCount = clinicAdminInvitedCounts[c.id] ?? 0;
     const summary = [{
       clinicId: c.id, clinicName: c.name, location: c.city,
-      doctors: c.doctors, receptionists: c.receptionists, patients: c.patients,
+      doctors: c.doctors, receptionists: c.receptionists, clinicAdmins: adminCount, invitedAdmins: invitedCount, patients: c.patients,
       plan: c.plan, subscriptionStatus: c.status, renews: c.expires,
     }];
     downloadCSV(`${c.id}-summary.csv`, summary);
@@ -78,11 +100,15 @@ function ClinicsPage() {
   };
 
   const exportAll = () => {
-    const combined = clinics.map(c => ({
-      clinicId: c.id, clinicName: c.name, location: c.city,
-      doctors: c.doctors, receptionists: c.receptionists, patients: c.patients,
-      plan: c.plan, subscriptionStatus: c.status, renews: c.expires,
-    }));
+    const combined = clinics.map(c => {
+      const adminCount = clinicAdminCounts[c.id] ?? 0;
+      const invitedCount = clinicAdminInvitedCounts[c.id] ?? 0;
+      return {
+        clinicId: c.id, clinicName: c.name, location: c.city,
+        doctors: c.doctors, receptionists: c.receptionists, clinicAdmins: adminCount, invitedAdmins: invitedCount, patients: c.patients,
+        plan: c.plan, subscriptionStatus: c.status, renews: c.expires,
+      };
+    });
     downloadCSV("clinicflow-all-clinics.csv", combined);
     toast.success("Exported all clinics");
   };
@@ -232,6 +258,7 @@ function ClinicsPage() {
                 <TableHead>Location</TableHead>
                 <TableHead className="text-right">Doctors</TableHead>
                 <TableHead className="text-right">Receptionists</TableHead>
+                <TableHead className="text-right">Clinic Admins</TableHead>
                 <TableHead className="text-right">Patients</TableHead>
                 <TableHead>Renews</TableHead>
                 <TableHead>Subscription</TableHead>
@@ -242,7 +269,7 @@ function ClinicsPage() {
             <TableBody>
               {visibleClinics.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={isSuperAdmin ? 10 : 8} className="h-28 text-center text-muted-foreground">
+                  <TableCell colSpan={isSuperAdmin ? 11 : 9} className="h-28 text-center text-muted-foreground">
                     {searchQuery ? "No clinics matching search query." : "No active clinics found."}
                   </TableCell>
                 </TableRow>
@@ -279,6 +306,17 @@ function ClinicsPage() {
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{c.doctors}</TableCell>
                     <TableCell className="text-right tabular-nums">{c.receptionists}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Users className="h-4 w-4 text-muted-foreground" />
+                        {clinicAdminCounts[c.id] ?? 0}
+                        {clinicAdminInvitedCounts[c.id] && clinicAdminInvitedCounts[c.id] > 0 && (
+                          <Badge variant="outline" className="text-xs ml-1">
+                            +{clinicAdminInvitedCounts[c.id]} invited
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell className="text-right tabular-nums">{c.patients.toLocaleString()}</TableCell>
                     <TableCell className="text-muted-foreground">{c.expires}</TableCell>
                     <TableCell>
