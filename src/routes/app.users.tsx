@@ -10,9 +10,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth, type Role } from "@/lib/auth";
 import { useWorkspaceData, type StaffMember } from "@/lib/workspace-data";
-import { UserMinus, UserPlus } from "lucide-react";
+import { UserMinus, UserPlus, Trash2, Filter, RotateCcw } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export const Route = createFileRoute("/app/users")({ component: UsersPage });
 
@@ -43,6 +44,14 @@ function UsersPage() {
   const [deactivationTarget, setDeactivationTarget] = useState<StaffMember | null>(null);
   const [deactivationReason, setDeactivationReason] = useState("");
   const [isDeactivating, setIsDeactivating] = useState(false);
+  const [activeTab, setActiveTab] = useState<"active" | "trash">("active");
+
+  const filteredStaffMembers = staffMembers.filter((member) => {
+    if (activeTab === "active") {
+      return member.status !== "Inactive";
+    }
+    return member.status === "Inactive";
+  });
 
   const canDeactivate = (member: StaffMember) => (
     member.status !== "Inactive"
@@ -250,61 +259,138 @@ function UsersPage() {
         ) : undefined}
       />
 
-      <div className="overflow-x-auto rounded-2xl border bg-card shadow-soft">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead>User</TableHead>
-              <TableHead>Email</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Status</TableHead>
-              <TableHead className="w-20 text-right">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {staffMembers.map((member) => (
-              <TableRow key={member.id}>
-                <TableCell>
-                  <div className="flex items-center gap-3">
-                    <div className="grid h-9 w-9 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
-                      {member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}
-                    </div>
-                    <div>
-                      <div className="font-semibold">{member.name}</div>
-                      <div className="font-mono text-xs text-muted-foreground">{member.id}</div>
-                    </div>
-                  </div>
-                </TableCell>
-                <TableCell className="text-muted-foreground">{member.email || "Invitation pending"}</TableCell>
-                <TableCell><Badge variant="outline">{roleLabels[member.role]}</Badge></TableCell>
-                <TableCell>
-                  <Badge variant={member.status === "Active" ? "secondary" : "outline"}>{member.status}</Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  {canDeactivate(member) && (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      title={`Deactivate ${member.name}`}
-                      aria-label={`Deactivate ${member.name}`}
-                      onClick={() => setDeactivationTarget(member)}
-                    >
-                      <UserMinus className="h-4 w-4" />
-                    </Button>
+      <div className="mt-4">
+        <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as "active" | "trash")} className="w-full">
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="active">
+              <Filter className="mr-2 h-4 w-4" />
+              Active & Invited
+            </TabsTrigger>
+            <TabsTrigger value="trash">
+              <Trash2 className="mr-2 h-4 w-4" />
+              Trash
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="active" className="mt-4">
+            <div className="overflow-x-auto rounded-2xl border bg-card shadow-soft">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>User</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-20 text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredStaffMembers.map((member) => (
+                    <TableRow key={member.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="grid h-9 w-9 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+                            {member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}
+                          </div>
+                          <div>
+                            <div className="font-semibold">{member.name}</div>
+                            <div className="font-mono text-xs text-muted-foreground">{member.id}</div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{member.email || "Invitation pending"}</TableCell>
+                      <TableCell><Badge variant="outline">{roleLabels[member.role]}</Badge></TableCell>
+                      <TableCell>
+                        <Badge variant={member.status === "Active" ? "secondary" : "outline"}>{member.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        {canDeactivate(member) && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            title={`Deactivate ${member.name}`}
+                            aria-label={`Deactivate ${member.name}`}
+                            onClick={() => setDeactivationTarget(member)}
+                          >
+                            <UserMinus className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredStaffMembers.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                        No active or invited staff members found.
+                      </TableCell>
+                    </TableRow>
                   )}
-                </TableCell>
-              </TableRow>
-            ))}
-            {staffMembers.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
-                  No staff memberships are visible for this account.
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="trash" className="mt-4">
+            <div className="overflow-x-auto rounded-2xl border bg-card shadow-soft">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>User</TableHead>
+                    <TableHead>Email</TableHead>
+                    <TableHead>Role</TableHead>
+                    <TableHead>Status</TableHead>
+                    <TableHead className="w-20 text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {filteredStaffMembers.map((member) => (
+                    <TableRow key={member.id}>
+                      <TableCell>
+                        <div className="flex items-center gap-3">
+                          <div className="grid h-9 w-9 place-items-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
+                            {member.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}
+                          </div>
+                          <div>
+                            <div className="font-semibold">{member.name}</div>
+                            <div className="font-mono text-xs text-muted-foreground">{member.id}</div>
+                          </div>
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-muted-foreground">{member.email || "Invitation pending"}</TableCell>
+                      <TableCell><Badge variant="outline">{roleLabels[member.role]}</Badge></TableCell>
+                      <TableCell>
+                        <Badge variant="destructive">{member.status}</Badge>
+                      </TableCell>
+                      <TableCell className="text-right">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          title={`Restore ${member.name}`}
+                          aria-label={`Restore ${member.name}`}
+                          onClick={() => {
+                            toast.info("Restore functionality requires backend support");
+                          }}
+                          disabled
+                        >
+                          <RotateCcw className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {filteredStaffMembers.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={5} className="h-24 text-center text-muted-foreground">
+                        Trash is empty. Deactivated staff will appear here.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </TabsContent>
+        </Tabs>
       </div>
 
       <Dialog

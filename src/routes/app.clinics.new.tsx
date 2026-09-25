@@ -8,6 +8,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { FileUploader } from "@/components/forms/file-uploader";
 import { useWorkspaceData } from "@/lib/workspace-data";
 import { toast } from "sonner";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Copy } from "lucide-react";
 
 export const Route = createFileRoute("/app/clinics/new")({ component: AddClinic });
 
@@ -36,6 +38,13 @@ function AddClinic() {
   });
   const [logo, setLogo] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [setupUrl, setSetupUrl] = useState<string | null>(null);
+  const [setupDialogOpen, setSetupDialogOpen] = useState(false);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success("Setup link copied to clipboard");
+  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -59,8 +68,13 @@ function AddClinic() {
         adminEmail: form.adminEmail.trim(),
         adminPhone: form.adminPhone.trim(),
       });
-      toast.success(`Clinic ${clinic.id} created. A secure setup invitation was sent to ${form.adminEmail.trim()}`);
-      navigate({ to: "/app/clinics" });
+      if (clinic.adminSetupUrl) {
+        setSetupUrl(clinic.adminSetupUrl);
+        setSetupDialogOpen(true);
+      } else {
+        toast.success(`Clinic ${clinic.id} created. A secure setup invitation was sent to ${form.adminEmail.trim()}`);
+        navigate({ to: "/app/clinics" });
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to create the clinic");
     } finally {
@@ -131,6 +145,45 @@ function AddClinic() {
           </div>
         </aside>
       </form>
+
+      <Dialog open={setupDialogOpen} onOpenChange={setSetupDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Clinic Created Successfully</DialogTitle>
+            <DialogDescription>
+              Share this secure setup link with the Clinical Admin so they can set their password and access the clinic.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground">Setup Link</Label>
+              <div className="flex gap-2">
+                <Input
+                  readOnly
+                  value={setupUrl ?? ""}
+                  className="flex-1 h-11 rounded-xl bg-muted/50"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => copyToClipboard(setupUrl ?? "")}
+                  disabled={!setupUrl}
+                >
+                  <Copy className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs text-muted-foreground">
+              This link expires in 24 hours. The Clinical Admin will use it to create their password and log in.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => { setSetupDialogOpen(false); navigate({ to: "/app/clinics" }); }} className="w-full">
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -7,8 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useAuth } from "@/lib/auth";
-import { useWorkspaceData, type Clinic } from "@/lib/workspace-data";
-import { Search, Plus, Download, MapPin, Pencil, Power } from "lucide-react";
+import { useWorkspaceData, type Clinic, type StaffMember } from "@/lib/workspace-data";
+import { Search, Plus, Download, MapPin, Pencil, Power, Users } from "lucide-react";
 import { downloadCSV } from "@/lib/exporters";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
@@ -17,16 +17,27 @@ export const Route = createFileRoute("/app/clinics/")({ component: ClinicsPage }
 
 function ClinicsPage() {
   const { user } = useAuth();
-  const { clinics, setClinicAccess } = useWorkspaceData();
+  const { clinics, staffMembers, setClinicAccess } = useWorkspaceData();
   const navigate = useNavigate();
   const [suspendTarget, setSuspendTarget] = useState<Clinic | null>(null);
   const [isSuspending, setIsSuspending] = useState(false);
-   const isSuperAdmin = user?.role === "super_admin";
+  const isSuperAdmin = user?.role === "super_admin";
+
+  const clinicAdminCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    staffMembers.forEach((member) => {
+      if (member.role === "clinic_admin" && member.clinicId && member.status !== "Inactive") {
+        counts[member.clinicId] = (counts[member.clinicId] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [staffMembers]);
 
   const exportClinic = (c: Clinic) => {
+    const adminCount = clinicAdminCounts[c.id] ?? 0;
     const summary = [{
       clinicId: c.id, clinicName: c.name, location: c.city,
-      doctors: c.doctors, receptionists: c.receptionists, patients: c.patients,
+      doctors: c.doctors, receptionists: c.receptionists, clinicAdmins: adminCount, patients: c.patients,
       plan: c.plan, subscriptionStatus: c.status, renews: c.expires,
     }];
     downloadCSV(`${c.id}-summary.csv`, summary);
@@ -34,11 +45,14 @@ function ClinicsPage() {
   };
 
   const exportAll = () => {
-    const combined = clinics.map(c => ({
-      clinicId: c.id, clinicName: c.name, location: c.city,
-      doctors: c.doctors, receptionists: c.receptionists, patients: c.patients,
-      plan: c.plan, subscriptionStatus: c.status, renews: c.expires,
-    }));
+    const combined = clinics.map(c => {
+      const adminCount = clinicAdminCounts[c.id] ?? 0;
+      return {
+        clinicId: c.id, clinicName: c.name, location: c.city,
+        doctors: c.doctors, receptionists: c.receptionists, clinicAdmins: adminCount, patients: c.patients,
+        plan: c.plan, subscriptionStatus: c.status, renews: c.expires,
+      };
+    });
     downloadCSV("clinicflow-all-clinics.csv", combined);
     toast.success("Exported all clinics");
   };
@@ -64,15 +78,15 @@ function ClinicsPage() {
         title="Clinics"
         description="Manage hospital clinics, access, staff counts and exports."
          actions={isSuperAdmin ? (
-           <div className="flex gap-2">
-             <Button variant="outline" onClick={exportAll}>
-               <Download className="mr-1.5 h-4 w-4" />Download
-             </Button>
-             <Button asChild>
-               <Link to="/app/clinics/new"><Plus className="mr-1.5 h-4 w-4" /> Add Clinic</Link>
-             </Button>
-           </div>
-         ) : undefined} />
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={exportAll}>
+              <Download className="mr-1.5 h-4 w-4" />Download
+            </Button>
+            <Button asChild>
+              <Link to="/app/clinics/new"><Plus className="mr-1.5 h-4 w-4" /> Add Clinic</Link>
+            </Button>
+          </div>
+        ) : undefined} />
       <div className="rounded-2xl border bg-card shadow-soft">
         <div className="flex flex-wrap items-center gap-3 border-b p-4">
           <div className="relative min-w-[240px] flex-1">
@@ -89,6 +103,7 @@ function ClinicsPage() {
                 <TableHead>Location</TableHead>
                 <TableHead className="text-right">Doctors</TableHead>
                 <TableHead className="text-right">Receptionists</TableHead>
+                <TableHead className="text-right">Clinic Admins</TableHead>
                 <TableHead className="text-right">Patients</TableHead>
                 <TableHead>Renews</TableHead>
                 <TableHead>Subscription</TableHead>
@@ -118,6 +133,12 @@ function ClinicsPage() {
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{c.doctors}</TableCell>
                   <TableCell className="text-right tabular-nums">{c.receptionists}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    <div className="flex items-center justify-end gap-1.5">
+                      <Users className="h-4 w-4 text-muted-foreground" />
+                      {clinicAdminCounts[c.id] ?? 0}
+                    </div>
+                  </TableCell>
                   <TableCell className="text-right tabular-nums">{c.patients.toLocaleString()}</TableCell>
                   <TableCell className="text-muted-foreground">{c.expires}</TableCell>
                   <TableCell>

@@ -877,8 +877,9 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       });
       throwIfError(logoConfigError);
     }
+    let adminSetupUrl: string | undefined;
     if (input.adminName && input.adminEmail) {
-      await this.inviteStaff(
+      const { setupUrl } = await this.inviteStaff(
         {
           email: input.adminEmail,
           name: input.adminName,
@@ -887,8 +888,9 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         "clinic_admin",
         data as string,
       );
+      adminSetupUrl = setupUrl;
     }
-    return { id: data as string };
+    return { id: data as string, adminSetupUrl };
   }
 
   async updateClinic(input: ClinicInput) {
