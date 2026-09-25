@@ -6,12 +6,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { FileUploader } from "@/components/forms/file-uploader";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useWorkspaceData } from "@/lib/workspace-data";
 import { toast } from "sonner";
-import { Copy, Check, Mail, ShieldCheck, Send, ExternalLink, AlertTriangle, CheckCircle2 } from "lucide-react";
-import { generateMailtoUrl, generateGmailComposeUrl, generateInvitationEmailText, getAppBaseUrl } from "@/lib/email-service";
-import { supabaseConfig } from "@/lib/supabase/config";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Copy, Mail, CheckCircle, AlertCircle } from "lucide-react";
 
 export const Route = createFileRoute("/app/clinics/new")({ component: AddClinic });
 
@@ -40,37 +38,62 @@ function AddClinic() {
   });
   const [logo, setLogo] = useState<File | null>(null);
   const [isSaving, setIsSaving] = useState(false);
-  const [createdInfo, setCreatedInfo] = useState<{
-    clinicId: string;
-    clinicName: string;
-    adminName: string;
-    adminEmail: string;
-    setupUrl: string;
-    mailtoUrl: string;
-    gmailUrl: string;
-    emailText: string;
-    emailSent?: boolean;
-    emailId?: string;
-    emailError?: string;
-  } | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [copiedText, setCopiedText] = useState(false);
+  const [setupUrl, setSetupUrl] = useState<string | null>(null);
+  const [setupDialogOpen, setSetupDialogOpen] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text);
+    toast.success("Setup link copied to clipboard");
+  };
+
+  const sendInvitationEmail = async () => {
+    if (!setupUrl || !form.adminEmail) return;
+    setSendingEmail(true);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      if (!supabaseUrl || !anonKey) {
+        throw new Error("Supabase configuration not found");
+      }
+      const response = await fetch(`${supabaseUrl}/functions/v1/send-invite`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${anonKey}`,
+        },
+        body: JSON.stringify({
+          email: form.adminEmail,
+          fullName: form.adminName,
+          phone: form.adminPhone,
+          roleCode: "clinic_admin",
+          hospitalId: "", // Will be filled by the function
+          clinicName: form.name,
+          clinicEmail: form.email,
+          clinicPhone: form.phone,
+          clinicAddress: form.address,
+          setupUrl,
+        }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to send invitation email");
+      }
+      setEmailSent(true);
+      toast.success(`Invitation email sent to ${form.adminEmail}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to send invitation email");
+    } finally {
+      setSendingEmail(false);
+    }
+  };
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
-    if (!form.name.trim() || !form.address.trim()) {
-      return toast.error("Clinic name and address are required");
-    }
+    if (!form.name.trim() || !form.address.trim()) return toast.error("Clinic name and address are required");
     if (!form.adminName.trim() || !form.adminEmail.trim()) {
       return toast.error("Clinical admin name and email are required");
-    }
-    if (!emailRegex.test(form.adminEmail.trim())) {
-      return toast.error("Please enter a valid email address for the Clinical Admin");
-    }
-    if (form.email.trim() && !emailRegex.test(form.email.trim())) {
-      return toast.error("Please enter a valid clinic email address");
     }
 
     setIsSaving(true);
@@ -88,75 +111,19 @@ function AddClinic() {
         adminEmail: form.adminEmail.trim(),
         adminPhone: form.adminPhone.trim(),
       });
-
-      const origin = getAppBaseUrl();
-      const setupUrl = clinic.setupUrl || (supabaseConfig.configured && !supabaseConfig.demoMode ? "" : `${origin}/setup?token=demo-${clinic.id}`);
-
-      const emailParams = {
-        recipientEmail: form.adminEmail.trim(),
-        recipientName: form.adminName.trim(),
-        clinicName: form.name.trim(),
-        clinicId: clinic.id,
-        clinicAddress: form.address.trim(),
-        clinicCity: city,
-        clinicPhone: form.adminPhone.trim() || form.phone.trim(),
-        clinicEmail: form.email.trim(),
-        setupUrl,
-        roleTitle: "Clinical Admin",
-        expiresInHours: 24,
-      };
-
-      const mailtoUrl = generateMailtoUrl(emailParams);
-      const gmailUrl = generateGmailComposeUrl(emailParams);
-      const emailText = generateInvitationEmailText(emailParams);
-
-      setCreatedInfo({
-        clinicId: clinic.id,
-        clinicName: form.name.trim(),
-        adminName: form.adminName.trim(),
-        adminEmail: form.adminEmail.trim(),
-        setupUrl,
-        mailtoUrl,
-        gmailUrl,
-        emailText,
-        emailSent: clinic.emailSent,
-        emailId: clinic.emailId,
-        emailError: clinic.emailError,
-      });
-
-      if (clinic.emailSent) {
-        toast.success(`Clinic ${clinic.id} created successfully! Invitation email sent successfully to ${form.adminEmail.trim()}.`);
-      } else if (clinic.emailError) {
-        toast.error(`Clinic ${clinic.id} created, but invitation email failed: ${clinic.emailError}`);
+      if (clinic.adminSetupUrl) {
+        setSetupUrl(clinic.adminSetupUrl);
+        setSetupDialogOpen(true);
+        setEmailSent(false);
       } else {
-        toast.success(`Clinic ${clinic.id} created successfully!`);
+        toast.success(`Clinic ${clinic.id} created. A secure setup invitation was sent to ${form.adminEmail.trim()}`);
+        navigate({ to: "/app/clinics" });
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to create the clinic");
     } finally {
       setIsSaving(false);
     }
-  };
-
-  const copyLink = () => {
-    if (!createdInfo?.setupUrl) return;
-    void navigator.clipboard.writeText(createdInfo.setupUrl);
-    setCopied(true);
-    toast.success("Password setup link copied to clipboard!");
-    setTimeout(() => setCopied(false), 3000);
-  };
-
-  const copyFullEmailText = () => {
-    if (!createdInfo?.emailText) return;
-    void navigator.clipboard.writeText(createdInfo.emailText);
-    setCopiedText(true);
-    toast.success("Full invitation email text copied to clipboard!");
-    setTimeout(() => setCopiedText(false), 3000);
-  };
-
-  const handleFinish = () => {
-    setCreatedInfo(null);
-    navigate({ to: "/app/clinics" });
   };
 
   return (
@@ -198,9 +165,8 @@ function AddClinic() {
                 <Input className="h-11 rounded-xl" value={form.adminPhone} onChange={event => setForm({ ...form, adminPhone: event.target.value })} />
               </Field>
             </div>
-            <p className="mt-3 text-xs text-muted-foreground flex items-center gap-1.5">
-              <Mail className="h-3.5 w-3.5 text-primary" />
-              A 24-hour setup invitation link will be generated for the Clinical Admin to set their 8+ character password.
+            <p className="mt-3 text-xs text-muted-foreground">
+              A one-time account setup invitation is sent to the clinical admin's email.
             </p>
           </section>
         </div>
@@ -213,7 +179,7 @@ function AddClinic() {
           </section>
           <section className="rounded-2xl border bg-card p-6 shadow-soft">
             <h2 className="mb-3 font-display text-base font-semibold">Access control</h2>
-            <p className="text-sm text-muted-foreground">The clinic starts active. Super Admin can later suspend access or move it to Trash Bin.</p>
+            <p className="text-sm text-muted-foreground">The clinic starts active. Super Admin can later suspend access without deleting clinic data.</p>
           </section>
           <div className="flex gap-2">
             <Button type="button" variant="outline" className="flex-1" onClick={() => navigate({ to: "/app/clinics" })}>Cancel</Button>
@@ -224,133 +190,82 @@ function AddClinic() {
         </aside>
       </form>
 
-      {/* Invitation Link Modal Dialog */}
-      <Dialog open={Boolean(createdInfo)} onOpenChange={(open) => { if (!open) handleFinish(); }}>
-        <DialogContent className="max-w-lg">
+      <Dialog open={setupDialogOpen} onOpenChange={setSetupDialogOpen}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className={`flex items-center gap-2 ${createdInfo?.emailError ? "text-amber-600" : "text-emerald-600"}`}>
-              {createdInfo?.emailError ? (
-                <>
-                  <AlertTriangle className="h-5 w-5 text-amber-600" /> Clinic Created (Email Delivery Action Required)
-                </>
-              ) : (
-                <>
-                  <ShieldCheck className="h-5 w-5" /> Clinic Created &amp; Invitation Email Delivered
-                </>
-              )}
-            </DialogTitle>
-            <DialogDescription className="space-y-2 pt-2">
-              <p>
-                <strong>{createdInfo?.clinicName}</strong> ({createdInfo?.clinicId}) has been successfully created.
-              </p>
-              {createdInfo?.emailError ? (
-                <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-destructive">
-                  <div className="flex items-center gap-2 font-medium text-xs">
-                    <AlertTriangle className="h-4 w-4 shrink-0" />
-                    <span>Email service alert: <strong>{createdInfo.emailError}</strong></span>
-                  </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    The automated email could not be delivered. Ensure RESEND_API_KEY and a verified EMAIL_FROM are configured in server settings. In the meantime, you can copy the setup link or deliver the invitation directly below.
-                  </p>
-                </div>
-              ) : (
-                <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/50 p-3 text-emerald-950 dark:bg-emerald-950/20 dark:text-emerald-200">
-                  <div className="flex items-center gap-2 font-medium text-xs">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    <span>Invitation email sent successfully to: <strong>{createdInfo?.adminEmail}</strong></span>
-                  </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
-                    Confirmed by Resend{createdInfo?.emailId ? ` (ID: ${createdInfo.emailId})` : ""}. The Clinical Admin ({createdInfo?.adminName}) has been sent their 24-hour setup link to activate their account and sign in.
-                  </p>
-                </div>
-              )}
+            <DialogTitle>Clinic Created Successfully</DialogTitle>
+            <DialogDescription>
+              Share this secure setup link with the Clinical Admin so they can set their password and access the clinic.
             </DialogDescription>
           </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            <div className="flex items-center justify-between">
-              <Label className="text-xs font-semibold text-muted-foreground">24-Hour Password Generation Link</Label>
-              <span className="text-[11px] font-semibold text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 rounded-full">
-                Valid for 24 Hours
-              </span>
-            </div>
-            <div className="flex items-center gap-2">
-              <Input
-                readOnly
-                value={createdInfo?.setupUrl ?? ""}
-                className="h-10 font-mono text-xs bg-muted/50 rounded-xl"
-              />
-              <Button type="button" size="sm" onClick={copyLink} className="shrink-0 gap-1.5">
-                {copied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
-                {copied ? "Copied" : "Copy Link"}
-              </Button>
-            </div>
-
-            {/* Direct Email Dispatch Options */}
-            <div className="rounded-xl border bg-muted/30 p-3 space-y-2.5">
-              <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
-                <Send className="h-3.5 w-3.5 text-primary" /> Deliver Invitation Email Directly
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground">Clinical Admin Email</Label>
+              <div className="flex items-center gap-2 text-sm">
+                <Mail className="h-4 w-4 text-muted-foreground" />
+                <span>{form.adminEmail}</span>
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                Send the password setup email directly to <strong>{createdInfo?.adminEmail}</strong> using your email application or webmail:
-              </p>
-              <div className="flex flex-wrap gap-2 pt-1">
-                {createdInfo?.mailtoUrl && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="default"
-                    className="h-9 gap-1.5 text-xs rounded-lg"
-                    onClick={() => {
-                      window.location.href = createdInfo.mailtoUrl;
-                      toast.success("Opening default email client with invitation pre-filled!");
-                    }}
-                  >
-                    <Mail className="h-3.5 w-3.5" /> Send via Email Client
-                  </Button>
-                )}
-                {createdInfo?.gmailUrl && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    className="h-9 gap-1.5 text-xs rounded-lg"
-                    onClick={() => window.open(createdInfo.gmailUrl, "_blank")}
-                  >
-                    <ExternalLink className="h-3.5 w-3.5" /> Open in Gmail
-                  </Button>
-                )}
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground">Setup Link</Label>
+              <div className="flex gap-2">
+                <Input
+                  readOnly
+                  value={setupUrl ?? ""}
+                  className="flex-1 h-11 rounded-xl bg-muted/50"
+                />
                 <Button
-                  type="button"
-                  size="sm"
                   variant="outline"
-                  className="h-9 gap-1.5 text-xs rounded-lg"
-                  onClick={copyFullEmailText}
+                  size="icon"
+                  onClick={() => copyToClipboard(setupUrl ?? "")}
+                  disabled={!setupUrl}
                 >
-                  {copiedText ? <Check className="h-3.5 w-3.5 text-emerald-400" /> : <Copy className="h-3.5 w-3.5" />}
-                  {copiedText ? "Email Copied" : "Copy Email Text"}
+                  <Copy className="h-4 w-4" />
                 </Button>
               </div>
             </div>
-
-            <p className="text-[11px] text-muted-foreground">
-              ⏰ This link expires in 24 hours. The Clinical Admin will use this link to set an 8+ character password, after which they can sign in using their email and newly set password.
+            <p className="text-xs text-muted-foreground">
+              This link expires in 24 hours. The Clinical Admin will use it to create their password and log in.
             </p>
-          </div>
-
-          <DialogFooter className="gap-2 sm:gap-0">
-            {createdInfo?.setupUrl && (
+            <div className="flex gap-2">
               <Button
-                variant="outline"
-                type="button"
-                className="w-full sm:w-auto"
-                onClick={() => window.open(createdInfo.setupUrl, "_blank")}
+                variant={emailSent ? "default" : "outline"}
+                onClick={sendInvitationEmail}
+                disabled={sendingEmail || emailSent || !setupUrl}
+                className="flex-1"
               >
-                Open Setup Link in New Tab
+                {sendingEmail ? (
+                  <>
+                    <span className="animate-spin mr-2 h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
+                    Sending...
+                  </>
+                ) : emailSent ? (
+                  <>
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    Email Sent
+                  </>
+                ) : (
+                  <>
+                    <Mail className="mr-2 h-4 w-4" />
+                    Send Invitation Email
+                  </>
+                )}
               </Button>
+              <Button variant="outline" onClick={() => copyToClipboard(setupUrl ?? "")} disabled={!setupUrl} className="flex-1">
+                <Copy className="mr-2 h-4 w-4" />
+                Copy Link
+              </Button>
+            </div>
+            {emailSent && (
+              <p className="text-xs text-green-600 flex items-center gap-1">
+                <CheckCircle className="h-3.5 w-3.5" />
+                Invitation email has been sent to {form.adminEmail}
+              </p>
             )}
-            <Button onClick={handleFinish} className="w-full sm:w-auto">
-              Go to Clinics List
+          </div>
+          <DialogFooter>
+            <Button onClick={() => { setSetupDialogOpen(false); navigate({ to: "/app/clinics" }); }} className="w-full">
+              Done
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -32,9 +32,6 @@ import { getSupabaseBrowserClient } from "./client";
 import { normalizePageInput } from "../record-page";
 import { throwIfFunctionError } from "./function-error";
 import { toSafeBackendError } from "../backend/safe-error";
-import { sendInvitationEmail, getAppBaseUrl, registerLocalInviteToken } from "../email-service";
-import { deactivateClinicAccounts, reactivateClinicAccounts, deleteClinicAccounts } from "../account-store";
-import { supabaseConfig } from "./config";
 
 // Supabase query results are validated and normalized at this repository boundary.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -262,15 +259,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     const hospital = clinicRows.find((row) => row.is_current) ?? clinicRows[0];
     if (!hospital) return EMPTY_SNAPSHOT;
 
-    const deletedStaffIds = new Set(
-      ((membershipsResult.data ?? []) as Row[])
-        .filter((r) => r.active === false || Boolean(r.deleted_at) || r.status === "Inactive")
-        .map((r) => r.user_id),
-    );
-
-    const doctors: Doctor[] = ((doctorsResult.data ?? []) as Row[])
-      .filter((row) => row.status !== "Inactive" && !deletedStaffIds.has(row.user_id))
-      .map((row) => ({
+    const doctors: Doctor[] = ((doctorsResult.data ?? []) as Row[]).map((row) => ({
       id: row.user_id,
       clinicId: hospital.id,
       name: row.display_name,
@@ -320,7 +309,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     const patientById = new Map(patients.map((patient) => [patient.id, patient]));
 
     const receptionists: Receptionist[] = ((membershipsResult.data ?? []) as Row[])
-      .filter((row) => row.role_code === "receptionist" && row.active !== false && !row.deleted_at && row.status !== "Inactive")
+      .filter((row) => row.role_code === "receptionist")
       .map((row) => {
         return {
           id: row.user_id,
@@ -340,8 +329,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         email: row.email ?? "",
         phone: row.phone ?? "",
         role: row.role_code,
-        status: row.status || (row.active === false ? "Inactive" : "Invited"),
-        deletedAt: row.deleted_at || (row.active === false ? new Date().toISOString() : undefined),
+        status: row.status || "Invited",
       };
     });
 
@@ -409,32 +397,19 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       mapBill(row, patientById.get(row.patient_id)?.name),
     );
 
-    const clinics = clinicRows
-      .filter((row) => row.configuration?.purged !== "true" && row.configuration?.purged !== true)
-      .map((row) => {
-        const config = (row.configuration as Record<string, unknown>) || {};
-        return {
-          id: row.id,
-          name: row.name,
-          city: row.city ?? (config.city as string) ?? "Not set",
-          doctors: Number(row.doctors ?? 0),
-          receptionists: Number(row.receptionists ?? 0),
-          patients: Number(row.patients ?? 0),
-          plan: row.plan ?? "ClinicFlow",
-          status: row.status ?? "Expired",
-          expires: row.expires ?? "Not set",
-          price: Number(row.price ?? 499),
-          access: row.access === "Suspended" ? ("Suspended" as const) : ("Allowed" as const),
-          deletedAt: (config.deleted_at as string) || undefined,
-          email: (config.email as string) || (row.email as string) || undefined,
-          phone: (config.phone as string) || (row.phone as string) || undefined,
-          address: (config.address as string) || (row.address as string) || row.city || undefined,
-          logoName: (config.logo_name as string) || undefined,
-          adminName: (config.admin_name as string) || undefined,
-          adminEmail: (config.admin_email as string) || undefined,
-          adminPhone: (config.admin_phone as string) || undefined,
-        };
-      });
+    const clinics = clinicRows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      city: row.city ?? "Not set",
+      doctors: Number(row.doctors ?? 0),
+      receptionists: Number(row.receptionists ?? 0),
+      patients: Number(row.patients ?? 0),
+      plan: row.plan ?? "ClinicFlow",
+      status: row.status ?? "Expired",
+      expires: row.expires ?? "Not set",
+      price: Number(row.price ?? 499),
+      access: row.access === "Suspended" ? "Suspended" as const : "Allowed" as const,
+    }));
 
     const facilities: Facility[] = ((facilitiesResult.data ?? []) as Row[]).map((row) => ({
       id: row.id,
@@ -728,200 +703,53 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     input: DoctorInput | ReceptionistInput | ClinicAdminInput,
     roleCode: "clinic_admin" | "doctor" | "receptionist" | "super_admin",
     targetHospitalId?: string,
-  ): Promise<{ setupUrl: string; emailSent?: boolean; emailId?: string; emailError?: string }> {
-    let hospitalId = targetHospitalId;
-    if (!hospitalId) {
-      const { data: hospital } = await this.client.from("hospitals").select("id").single();
-      hospitalId = hospital?.id ?? "";
-    }
-
-    let setupUrl: string | undefined;
-
-    let clinicName = "ClinicFlow";
-    let clinicAddress: string | undefined;
-    let clinicCity: string | undefined;
-    let clinicPhone: string | undefined;
-    let clinicEmail: string | undefined;
-
-    if (hospitalId) {
-      try {
-        const { data: hospital } = await this.client
-          .from("hospitals")
-          .select("name, configuration")
-          .eq("id", hospitalId)
-          .single();
-        if (hospital?.name) clinicName = hospital.name;
-        const config = hospital?.configuration as Record<string, unknown> | undefined;
-        clinicAddress = (config?.address as string) || undefined;
-        clinicCity = (config?.city as string) || undefined;
-        clinicPhone = (config?.phone as string) || undefined;
-        clinicEmail = (config?.email as string) || undefined;
-      } catch {
-        // use defaults
-      }
-    }
-
-    // Call create_staff_invite_token RPC directly as primary mechanism
-    try {
-      const { data: tokenResult, error: tokenError } = await this.client.rpc(
-        "create_staff_invite_token",
-        {
-          p_email: input.email.trim().toLowerCase(),
-          p_full_name: input.name.trim(),
-          p_phone: input.phone?.trim() || "",
-          p_role_code: roleCode,
-          p_hospital_id: hospitalId || null,
-          p_facility_id: null,
-          p_specialty: "specialty" in input && input.specialty ? input.specialty : null,
-          p_shift: "shift" in input && input.shift ? input.shift : null,
-          p_gender: "gender" in input && input.gender ? input.gender : null,
-          p_qualification: "qualification" in input && input.qualification ? input.qualification : null,
-          p_medical_registration_number: "medicalRegistrationNumber" in input && input.medicalRegistrationNumber ? input.medicalRegistrationNumber : null,
-          p_experience_years: "experienceYears" in input && input.experienceYears ? Number(input.experienceYears) : null,
-          p_consultation_fee: "consultationFee" in input && input.consultationFee ? Number(input.consultationFee) : null,
-          p_working_hours: "workingHours" in input && input.workingHours ? input.workingHours : null,
-          p_notes: "notes" in input && input.notes ? input.notes : null,
-        },
-      );
-
-      if (tokenError) {
-        console.error("[inviteStaff] create_staff_invite_token RPC error:", tokenError.message);
-      } else if (tokenResult) {
-        let extractedToken: string | null = null;
-        if (typeof tokenResult === "string") {
-          try {
-            const parsed = JSON.parse(tokenResult);
-            extractedToken = typeof parsed?.token === "string" ? parsed.token : tokenResult;
-          } catch {
-            extractedToken = tokenResult;
-          }
-        } else if (typeof tokenResult === "object" && tokenResult !== null) {
-          const rawObj = Array.isArray(tokenResult)
-            ? (tokenResult[0] as Record<string, unknown> | undefined)
-            : (tokenResult as Record<string, unknown>);
-          extractedToken = typeof rawObj?.token === "string" ? rawObj.token : null;
-        }
-
-        if (extractedToken) {
-          extractedToken = extractedToken.trim();
-          console.log(`[inviteStaff] invite token generated, token length = ${extractedToken.length}`);
-          const origin = getAppBaseUrl();
-          setupUrl = `${origin}/setup?token=${extractedToken}`;
-        }
-      }
-    } catch (rpcErr) {
-      console.error("[inviteStaff] create_staff_invite_token RPC exception:", rpcErr);
-    }
-
-    // Try Edge Function if available and setupUrl not yet produced
-    if (!setupUrl && supabaseConfig.configured) {
-      try {
-        const requestId = randomKey();
-        const { data, error } = await this.client.functions.invoke("invite-staff", {
-          headers: {
-            "Idempotency-Key": randomKey(),
-            "X-Request-ID": requestId,
-          },
-          body: {
-            email: input.email.trim().toLowerCase(),
-            fullName: input.name.trim(),
-            phone: input.phone || "",
-            roleCode,
-            targetHospitalId: hospitalId,
-            specialty: "specialty" in input ? input.specialty : undefined,
-            shift: "shift" in input ? input.shift : undefined,
-            gender: "gender" in input ? input.gender : undefined,
-            qualification: "qualification" in input ? input.qualification : undefined,
-            medicalRegistrationNumber: "medicalRegistrationNumber" in input ? input.medicalRegistrationNumber : undefined,
-            experienceYears: "experienceYears" in input ? input.experienceYears : undefined,
-            consultationFee: "consultationFee" in input ? input.consultationFee : undefined,
-            workingHours: "workingHours" in input ? input.workingHours : undefined,
-            notes: "notes" in input ? input.notes : undefined,
-          },
-        });
-        await throwIfFunctionError(error);
-        if (data && typeof data.setupUrl === "string") {
-          setupUrl = data.setupUrl;
-        }
-      } catch {
-        // Edge Function unavailable
-      }
-    }
-
-    // In production, an invitation must be persistently stored in Supabase
-    if (!setupUrl) {
-      if (!supabaseConfig.demoMode && supabaseConfig.configured) {
-        throw new Error("Unable to create invitation in Supabase. Please verify database connection and migrations.");
-      }
-      const fallbackToken = (globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? Math.random().toString(36).slice(2)) +
-        (globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? Math.random().toString(36).slice(2));
-      const origin = getAppBaseUrl();
-      setupUrl = `${origin}/setup?token=${fallbackToken}`;
-
-      registerLocalInviteToken({
-        token: fallbackToken,
-        email: input.email.trim().toLowerCase(),
-        name: input.name,
-        phone: input.phone || "",
-        clinicName,
-        clinicId: hospitalId || "",
-        clinicAddress,
-        clinicCity,
-        clinicPhone,
-        clinicEmail,
+  ): Promise<{ setupUrl: string }> {
+    const requestId = randomKey();
+    const { data, error } = await this.client.functions.invoke("invite-staff", {
+      headers: {
+        "Idempotency-Key": randomKey(),
+        "X-Request-ID": requestId,
+      },
+      body: {
+        email: input.email,
+        fullName: input.name,
+        phone: input.phone,
         roleCode,
-        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-        used: false,
-      });
+        targetHospitalId,
+        specialty: "specialty" in input ? input.specialty : undefined,
+        shift: "shift" in input ? input.shift : undefined,
+        gender: "gender" in input ? input.gender : undefined,
+        qualification: "qualification" in input ? input.qualification : undefined,
+        medicalRegistrationNumber: "medicalRegistrationNumber" in input ? input.medicalRegistrationNumber : undefined,
+        experienceYears: "experienceYears" in input ? input.experienceYears : undefined,
+        consultationFee: "consultationFee" in input ? input.consultationFee : undefined,
+        workingHours: "workingHours" in input ? input.workingHours : undefined,
+        notes: "notes" in input ? input.notes : undefined,
+      },
+    });
+    await throwIfFunctionError(error);
+    if (!data || typeof data.setupUrl !== "string") {
+      throw new Error("The invitation service returned an invalid response");
     }
-
-    const roleTitles: Record<string, string> = {
-      super_admin: "Super Admin",
-      clinic_admin: "Clinical Admin",
-      doctor: "Doctor",
-      receptionist: "Receptionist",
-    };
-
-    let emailSent = false;
-    let emailId: string | undefined;
-    let emailError: string | undefined;
-
-    try {
-      const emailResult = await sendInvitationEmail({
-        recipientEmail: input.email,
-        recipientName: input.name,
-        clinicName,
-        clinicId: hospitalId || undefined,
-        clinicAddress,
-        clinicCity,
-        clinicPhone,
-        clinicEmail,
-        setupUrl,
-        roleTitle: roleTitles[roleCode] ?? "Staff Member",
-        expiresInHours: 24,
-      });
-      emailSent = emailResult.success;
-      emailId = emailResult.emailId;
-    } catch (err) {
-      emailError = err instanceof Error ? err.message : "Failed to deliver email";
-      console.error("[Staff Invite] Email delivery failed:", emailError);
-    }
-
-    return { setupUrl, emailSent, emailId, emailError };
+    return { setupUrl: data.setupUrl };
   }
 
   async createDoctor(input: DoctorInput) {
-    const { setupUrl } = await this.inviteStaff(input, "doctor", input.hospitalId);
+    const { setupUrl } = await this.inviteStaff(input, "doctor");
     let photoWarning: string | undefined;
     if (input.photo) {
       try {
         if (!["image/jpeg", "image/png"].includes(input.photo.type) || input.photo.size > 5 * 1024 * 1024) {
           throw new Error("Doctor photo must be a JPG or PNG up to 5 MB");
         }
-        const hospitalId = input.hospitalId || (await this.client.from("hospitals").select("id").single()).data?.id;
-        if (!hospitalId) throw new Error("The active hospital could not be loaded");
+        const { data: hospital, error: hospitalError } = await this.client
+          .from("hospitals")
+          .select("id")
+          .single();
+        throwIfError(hospitalError);
+        if (!hospital) throw new Error("The active hospital could not be loaded");
         const extension = input.photo.type === "image/png" ? "png" : "jpg";
-        const path = `${hospitalId}/pending/avatar.${extension}`;
+        const path = `${hospital.id}/pending/avatar.${extension}`;
         const { error: uploadError } = await this.client.storage
           .from("staff-avatars")
           .upload(path, input.photo, { contentType: input.photo.type, upsert: true });
@@ -930,10 +758,9 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         photoWarning = "The invitation was sent, but the doctor photo could not be saved";
       }
     }
-    const resolvedClinicId = input.hospitalId || ((await this.client.from("hospitals").select("id").single()).data?.id ?? "");
     const doctor: Doctor = {
       id: `pending-${randomKey().slice(0, 8)}`,
-      clinicId: resolvedClinicId,
+      clinicId: (await this.client.from("hospitals").select("id").single()).data?.id ?? "",
       name: input.name,
       specialty: input.specialty,
       email: input.email,
@@ -955,11 +782,10 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   }
 
   async createReceptionist(input: ReceptionistInput) {
-    const { setupUrl } = await this.inviteStaff(input, "receptionist", input.hospitalId);
-    const resolvedClinicId = input.hospitalId || ((await this.client.from("hospitals").select("id").single()).data?.id ?? "");
+    const { setupUrl } = await this.inviteStaff(input, "receptionist");
     const receptionist: Receptionist = {
       id: `pending-${randomKey().slice(0, 8)}`,
-      clinicId: resolvedClinicId,
+      clinicId: (await this.client.from("hospitals").select("id").single()).data?.id ?? "",
       name: input.name,
       email: input.email,
       phone: input.phone,
@@ -976,15 +802,20 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       hospitalId = hospital?.id ?? "";
     }
     if (!hospitalId) throw new Error("A hospital must be selected");
-    await this.inviteStaff(
+    const { data: tokenResult, error: tokenError } = await this.client.rpc(
+      "create_staff_invite_token",
       {
-        email: input.email,
-        name: input.name,
-        phone: input.phone,
+        p_email: input.email,
+        p_full_name: input.name,
+        p_phone: input.phone,
+        p_role_code: "clinic_admin",
+        p_hospital_id: hospitalId,
       },
-      "clinic_admin",
-      hospitalId,
     );
+    throwIfError(tokenError);
+    if (!tokenResult || typeof tokenResult.token !== "string") {
+      throw new Error("Failed to generate admin invite token");
+    }
     const membership: StaffMember = {
       id: `pending-${randomKey().slice(0, 8)}`,
       clinicId: hospitalId,
@@ -1021,11 +852,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       phone: input.phone ?? null,
       address: input.address ?? null,
       logo_name: input.logoName ?? null,
-      admin_name: input.adminName ?? null,
-      admin_email: input.adminEmail ?? null,
-      admin_phone: input.adminPhone ?? null,
     };
-
     const { data, error } = await this.client.rpc("create_platform_clinic", {
       p_name: input.name,
       p_configuration: configuration,
@@ -1033,56 +860,37 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     });
     throwIfError(error);
     if (!data) throw new Error("Failed to create clinic");
-    const hospitalId = data as string;
-
-    if (input.logo && hospitalId) {
-      try {
-        if (["image/jpeg", "image/png", "image/webp"].includes(input.logo.type) && input.logo.size <= 2 * 1024 * 1024) {
-          const extension = input.logo.type === "image/png" ? "png" : input.logo.type === "image/webp" ? "webp" : "jpg";
-          const logoPath = `${hospitalId}/logo.${extension}`;
-          const { error: uploadError } = await this.client.storage
-            .from("clinic-branding")
-            .upload(logoPath, input.logo, { contentType: input.logo.type, upsert: true });
-          if (!uploadError) {
-            await this.client.rpc("update_platform_clinic", {
-              p_hospital_id: hospitalId,
-              p_name: input.name,
-              p_configuration: { ...configuration, logo_path: logoPath, logo_name: input.logo.name },
-            });
-          }
-        }
-      } catch (err) {
-        console.warn("Logo upload skipped:", err);
+    if (input.logo) {
+      if (!["image/jpeg", "image/png", "image/webp"].includes(input.logo.type) || input.logo.size > 2 * 1024 * 1024) {
+        throw new Error("Clinic logo must be a PNG, JPG or WebP up to 2 MB");
       }
+      const extension = input.logo.type === "image/png" ? "png" : input.logo.type === "image/webp" ? "webp" : "jpg";
+      const logoPath = `${data}/logo.${extension}`;
+      const { error: uploadError } = await this.client.storage
+        .from("clinic-branding")
+        .upload(logoPath, input.logo, { contentType: input.logo.type, upsert: true });
+      throwIfError(uploadError);
+      const { error: logoConfigError } = await this.client.rpc("update_platform_clinic", {
+        p_hospital_id: data,
+        p_name: input.name,
+        p_configuration: { logo_path: logoPath, logo_name: input.logo.name },
+      });
+      throwIfError(logoConfigError);
     }
-
-    let setupUrl: string | undefined;
-    let emailSent = false;
-    let emailId: string | undefined;
-    let emailError: string | undefined;
-
-    if (input.adminName && input.adminEmail && hospitalId) {
-      try {
-        const inviteResult = await this.inviteStaff(
-          {
-            email: input.adminEmail,
-            name: input.adminName,
-            phone: input.adminPhone ?? "",
-          },
-          "clinic_admin",
-          hospitalId,
-        );
-        setupUrl = inviteResult.setupUrl;
-        emailSent = inviteResult.emailSent ?? false;
-        emailId = inviteResult.emailId;
-        emailError = inviteResult.emailError;
-      } catch (inviteError) {
-        emailError = inviteError instanceof Error ? inviteError.message : "Clinical admin invitation error";
-        console.error("Clinical admin invitation error:", inviteError);
-      }
+    let adminSetupUrl: string | undefined;
+    if (input.adminName && input.adminEmail) {
+      const { setupUrl } = await this.inviteStaff(
+        {
+          email: input.adminEmail,
+          name: input.adminName,
+          phone: input.adminPhone ?? "",
+        },
+        "clinic_admin",
+        data as string,
+      );
+      adminSetupUrl = setupUrl;
     }
-
-    return { id: hospitalId, setupUrl, emailSent, emailId, emailError };
+    return { id: data as string, adminSetupUrl };
   }
 
   async updateClinic(input: ClinicInput) {
@@ -1091,170 +899,22 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       p_hospital_id: input.id,
       p_name: input.name,
       p_configuration: {
-        city: input.city,
-        email: input.email ?? null,
-        phone: input.phone ?? null,
-        address: input.address ?? null,
-        logo_name: input.logoName ?? null,
-        admin_name: input.adminName ?? null,
-        admin_email: input.adminEmail ?? null,
-        admin_phone: input.adminPhone ?? null,
+          city: input.city,
+          email: input.email ?? null,
+          phone: input.phone ?? null,
+          address: input.address ?? null,
+          logo_name: input.logoName ?? null,
       },
     });
     throwIfError(error);
   }
 
   async deleteClinic(id: string) {
-    await this.softDeleteClinic(id);
-  }
-
-  async bulkSoftDeleteClinics(ids: string[]) {
-    await Promise.all(ids.map((id) => this.softDeleteClinic(id)));
-  }
-
-  async bulkRestoreClinics(ids: string[]) {
-    await Promise.all(ids.map((id) => this.restoreClinic(id)));
-  }
-
-  async bulkPermanentlyDeleteClinics(ids: string[]) {
-    await Promise.all(ids.map((id) => this.permanentlyDeleteClinic(id)));
-  }
-
-  async softDeleteClinic(id: string) {
-    const { error } = await this.client.rpc("soft_delete_platform_clinic", {
+    const { error } = await this.client.rpc("set_platform_clinic_access", {
       p_hospital_id: id,
+      p_active: false,
     });
-    if (error) {
-      const deletedAt = new Date().toISOString();
-      const { data: hospital } = await this.client
-        .from("hospitals")
-        .select("name, configuration")
-        .eq("id", id)
-        .maybeSingle();
-
-      const name = hospital?.name || "Clinic";
-      const config: Record<string, unknown> = {
-        ...((hospital?.configuration as Record<string, unknown>) ?? {}),
-        deleted_at: deletedAt,
-      };
-      delete config.purged;
-
-      await this.client
-        .from("hospitals")
-        .update({ active: false, configuration: config })
-        .eq("id", id);
-
-      await this.client.rpc("update_platform_clinic", {
-        p_hospital_id: id,
-        p_name: name,
-        p_configuration: config,
-      });
-
-      await this.client.rpc("set_platform_clinic_access", {
-        p_hospital_id: id,
-        p_active: false,
-      });
-    }
-
-    try {
-      await this.client
-        .from("staff_memberships")
-        .update({ active: false, status: "Inactive" })
-        .eq("hospital_id", id);
-    } catch {
-      // non-fatal
-    }
-    deactivateClinicAccounts(id);
-  }
-
-  async restoreClinic(id: string) {
-    const { error } = await this.client.rpc("restore_platform_clinic", {
-      p_hospital_id: id,
-    });
-    if (error) {
-      const { data: hospital } = await this.client
-        .from("hospitals")
-        .select("name, configuration")
-        .eq("id", id)
-        .maybeSingle();
-
-      const name = hospital?.name || "Clinic";
-      const config: Record<string, unknown> = { ...((hospital?.configuration as Record<string, unknown>) ?? {}) };
-      delete config.deleted_at;
-      delete config.purged;
-
-      await this.client
-        .from("hospitals")
-        .update({ active: true, configuration: config })
-        .eq("id", id);
-
-      await this.client.rpc("update_platform_clinic", {
-        p_hospital_id: id,
-        p_name: name,
-        p_configuration: config,
-      });
-
-      await this.client.rpc("set_platform_clinic_access", {
-        p_hospital_id: id,
-        p_active: true,
-      });
-    }
-
-    try {
-      await this.client
-        .from("staff_memberships")
-        .update({ active: true, status: "Active" })
-        .eq("hospital_id", id);
-    } catch {
-      // non-fatal
-    }
-    reactivateClinicAccounts(id);
-  }
-
-  async permanentlyDeleteClinic(id: string) {
-    const { error } = await this.client.rpc("permanently_delete_platform_clinic", {
-      p_hospital_id: id,
-    });
-    if (error) {
-      const { data: hospital } = await this.client
-        .from("hospitals")
-        .select("name, configuration")
-        .eq("id", id)
-        .maybeSingle();
-
-      const name = hospital?.name || "Clinic";
-      const config: Record<string, unknown> = {
-        ...((hospital?.configuration as Record<string, unknown>) ?? {}),
-        purged: "true",
-        deleted_at: new Date().toISOString(),
-      };
-
-      await this.client
-        .from("hospitals")
-        .update({ active: false, configuration: config })
-        .eq("id", id);
-
-      await this.client.rpc("update_platform_clinic", {
-        p_hospital_id: id,
-        p_name: name,
-        p_configuration: config,
-      });
-
-      await this.client.rpc("set_platform_clinic_access", {
-        p_hospital_id: id,
-        p_active: false,
-      });
-    }
-
-    try {
-      await this.client
-        .from("staff_memberships")
-        .delete()
-        .eq("hospital_id", id);
-    } catch {
-      // non-fatal
-    }
-    deleteClinicAccounts(id);
+    throwIfError(error);
   }
 
   async setClinicAccess(id: string, active: boolean) {
@@ -1425,97 +1085,4 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       active: data.active,
     };
   }
-
-  async softDeleteStaff(userId: string): Promise<void> {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
-    if (!isUuid) return;
-
-    const { error } = await this.client.rpc("soft_delete_staff_member", {
-      p_user_id: userId,
-    });
-    if (error) {
-      const now = new Date().toISOString();
-      let updateResult = await this.client
-        .from("staff_memberships")
-        .update({ active: false, status: "Inactive", deleted_at: now, updated_at: now })
-        .eq("user_id", userId);
-      if (updateResult.error) {
-        updateResult = await this.client
-          .from("staff_memberships")
-          .update({ active: false, updated_at: now })
-          .eq("user_id", userId);
-      }
-      if (updateResult.error) {
-        console.warn("Could not soft delete staff via RPC or direct update:", error, updateResult.error);
-        throw toSafeBackendError(error, "Failed to delete user");
-      }
-    }
-  }
-
-  async restoreStaff(userId: string): Promise<void> {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
-    if (!isUuid) return;
-
-    const { error } = await this.client.rpc("restore_staff_member", {
-      p_user_id: userId,
-    });
-    if (error) {
-      const now = new Date().toISOString();
-      let updateResult = await this.client
-        .from("staff_memberships")
-        .update({ active: true, status: "Active", deleted_at: null, updated_at: now })
-        .eq("user_id", userId);
-      if (updateResult.error) {
-        updateResult = await this.client
-          .from("staff_memberships")
-          .update({ active: true, updated_at: now })
-          .eq("user_id", userId);
-      }
-      if (updateResult.error) {
-        console.warn("Could not restore staff via RPC or direct update:", error, updateResult.error);
-        throw toSafeBackendError(error, "Failed to restore user");
-      }
-    }
-  }
-
-  async permanentlyDeleteStaff(userId: string): Promise<void> {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
-    if (!isUuid) return;
-
-    const { error } = await this.client.rpc("permanently_delete_staff_user", {
-      p_user_id: userId,
-    });
-    if (error) {
-      const { error: deleteError } = await this.client
-        .from("staff_memberships")
-        .delete()
-        .eq("user_id", userId);
-      if (deleteError) {
-        // Fallback to deactivation if constrained
-        await this.client
-          .from("staff_memberships")
-          .update({ active: false, status: "Inactive", deleted_at: new Date().toISOString() })
-          .eq("user_id", userId);
-      }
-    }
-  }
-
-  async bulkSoftDeleteStaff(userIds: string[]): Promise<void> {
-    for (const id of userIds) {
-      await this.softDeleteStaff(id);
-    }
-  }
-
-  async bulkRestoreStaff(userIds: string[]): Promise<void> {
-    for (const id of userIds) {
-      await this.restoreStaff(id);
-    }
-  }
-
-  async bulkPermanentlyDeleteStaff(userIds: string[]): Promise<void> {
-    for (const id of userIds) {
-      await this.permanentlyDeleteStaff(id);
-    }
-  }
 }
-

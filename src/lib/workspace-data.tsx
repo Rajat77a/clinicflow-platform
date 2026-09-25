@@ -1174,7 +1174,7 @@ interface WorkspaceData {
   listLabReports: (input?: RecordPageInput) => Promise<RecordPage<LabReport>>;
   listBills: (input?: RecordPageInput) => Promise<RecordPage<Bill>>;
   listAuditLogs: (input?: RecordPageInput) => Promise<RecordPage<AuditEntry>>;
-  createClinic: (input: ClinicInput) => Promise<Clinic>;
+  createClinic: (input: ClinicInput) => Promise<Clinic & { adminSetupUrl?: string }>;
   updateClinic: (input: ClinicInput) => Promise<void>;
   deleteClinic: (id: string) => Promise<void>;
   softDeleteClinic: (id: string) => Promise<void>;
