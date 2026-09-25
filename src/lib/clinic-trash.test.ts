@@ -356,5 +356,20 @@ test("clinic creation only confirms delivery when Resend succeeds and alerts if 
   assert.match(workspaceDataSource, /getAppBaseUrl/);
 });
 
+test("workspace-data persists soft deleted staff and excludes them from active staff", () => {
+  assert.match(workspaceDataSource, /STORAGE_KEY_SOFT_DELETED_STAFF/);
+  assert.match(workspaceDataSource, /STORAGE_KEY_PERM_DELETED_STAFF/);
+  assert.match(workspaceDataSource, /loadSoftDeletedStaffFromStorage/);
+  assert.match(workspaceDataSource, /saveSoftDeletedStaffToStorage/);
+  assert.match(workspaceDataSource, /binStaffMembers/);
+});
+
+test("deleting a clinic cascades to soft-deleting its associated users to trash", () => {
+  assert.match(workspaceDataSource, /associatedStaff/);
+  assert.match(workspaceDataSource, /previousClinicName/);
+  assert.match(workspaceDataSource, /repository\.softDeleteStaff/);
+});
+
+
 
 
