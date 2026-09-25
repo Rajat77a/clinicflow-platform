@@ -32,6 +32,54 @@ import {
   deleteUserAccount,
 } from "./account-store";
 
+const STORAGE_KEY_SOFT_DELETED_STAFF = "cf_soft_deleted_staff";
+const STORAGE_KEY_PERM_DELETED_STAFF = "cf_perm_deleted_staff";
+
+export interface StoredSoftDeletedStaff {
+  deletedAt: string;
+  deletedBy?: string;
+  previousClinicId?: string | null;
+  previousClinicName?: string | null;
+}
+
+export function loadSoftDeletedStaffFromStorage(): Record<string, StoredSoftDeletedStaff> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_SOFT_DELETED_STAFF);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveSoftDeletedStaffToStorage(data: Record<string, StoredSoftDeletedStaff>): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEY_SOFT_DELETED_STAFF, JSON.stringify(data));
+  } catch {
+    // Ignore quota or disabled storage
+  }
+}
+
+export function loadPermDeletedStaffFromStorage(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_PERM_DELETED_STAFF);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function savePermDeletedStaffToStorage(ids: string[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEY_PERM_DELETED_STAFF, JSON.stringify(ids));
+  } catch {
+    // Ignore quota or disabled storage
+  }
+}
+
 const DEFAULT_CLINIC_ID = "CL-001";
 
 export type Clinic = {
@@ -412,6 +460,9 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       });
       const permDeleted = state.permanentlyDeletedIds || new Set<string>();
 
+      const storedSoftStaff = loadSoftDeletedStaffFromStorage();
+      const storedPermStaff = new Set(loadPermDeletedStaffFromStorage());
+
       const updatedClinics = command.value.clinics
         .filter((c) => !permDeleted.has(c.id))
         .map((c) => {
@@ -422,9 +473,50 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
           return c;
         });
 
+      const deletedClinicIds = new Set(
+        updatedClinics.filter((c) => Boolean(c.deletedAt)).map((c) => c.id)
+      );
+      const clinicNameMap = new Map(updatedClinics.map((c) => [c.id, c.name]));
+
+      const updatedStaffMembers = command.value.staffMembers
+        .filter((m) => !storedPermStaff.has(m.id))
+        .map((m) => {
+          // Check if associated clinic is soft-deleted
+          const isClinicDeleted = Boolean(m.clinicId && deletedClinicIds.has(m.clinicId));
+          const clinicDeletedAt = m.clinicId ? softDeletedMap.get(m.clinicId) || updatedClinics.find((c) => c.id === m.clinicId)?.deletedAt : undefined;
+
+          // Check if user was directly soft-deleted
+          const softStaffInfo = storedSoftStaff[m.id];
+
+          if (isClinicDeleted) {
+            return {
+              ...m,
+              status: "Inactive" as const,
+              deletedAt: m.deletedAt || clinicDeletedAt || new Date().toISOString(),
+              deletedBy: m.deletedBy || softStaffInfo?.deletedBy || "Super Admin",
+              previousClinicId: m.clinicId,
+              previousClinicName: (m.clinicId ? clinicNameMap.get(m.clinicId) : null) || m.previousClinicName || "Clinic",
+            };
+          }
+
+          if (softStaffInfo) {
+            return {
+              ...m,
+              status: "Inactive" as const,
+              deletedAt: m.deletedAt || softStaffInfo.deletedAt,
+              deletedBy: m.deletedBy || softStaffInfo.deletedBy || "Super Admin",
+              previousClinicId: m.previousClinicId || softStaffInfo.previousClinicId || m.clinicId,
+              previousClinicName: m.previousClinicName || softStaffInfo.previousClinicName || (m.clinicId ? clinicNameMap.get(m.clinicId) : null),
+            };
+          }
+
+          return m;
+        });
+
       return {
         ...command.value,
         clinics: updatedClinics,
+        staffMembers: updatedStaffMembers,
         permanentlyDeletedIds: permDeleted,
       };
     }
@@ -550,6 +642,18 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       deactivateClinicAccounts(command.id);
       const now = new Date().toISOString();
       const clinicObj = state.clinics.find((c) => c.id === command.id);
+      const storedSoft = loadSoftDeletedStaffFromStorage();
+      state.staffMembers.forEach((m) => {
+        if (m.clinicId === command.id) {
+          storedSoft[m.id] = {
+            deletedAt: now,
+            deletedBy: command.actor.name,
+            previousClinicId: m.clinicId,
+            previousClinicName: clinicObj?.name || "Clinic",
+          };
+        }
+      });
+      saveSoftDeletedStaffToStorage(storedSoft);
       return appendAudit(
         {
           ...state,
@@ -583,6 +687,13 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
     }
     case "clinic.restored": {
       reactivateClinicAccounts(command.id);
+      const storedSoft = loadSoftDeletedStaffFromStorage();
+      state.staffMembers.forEach((m) => {
+        if (m.clinicId === command.id || m.previousClinicId === command.id) {
+          delete storedSoft[m.id];
+        }
+      });
+      saveSoftDeletedStaffToStorage(storedSoft);
       return appendAudit(
         {
           ...state,
@@ -616,6 +727,18 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       deleteClinicAccounts(command.id);
       const nextPerm = new Set(state.permanentlyDeletedIds || []);
       nextPerm.add(command.id);
+
+      const storedSoft = loadSoftDeletedStaffFromStorage();
+      const storedPerm = new Set(loadPermDeletedStaffFromStorage());
+      state.staffMembers.forEach((m) => {
+        if (m.clinicId === command.id || m.previousClinicId === command.id) {
+          delete storedSoft[m.id];
+          storedPerm.add(m.id);
+        }
+      });
+      saveSoftDeletedStaffToStorage(storedSoft);
+      savePermDeletedStaffToStorage(Array.from(storedPerm));
+
       return appendAudit(
         {
           ...state,
@@ -678,6 +801,20 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       command.ids.forEach((id) => deactivateClinicAccounts(id));
       const now = new Date().toISOString();
       const clinicMap = new Map(state.clinics.map((c) => [c.id, c.name]));
+
+      const storedSoft = loadSoftDeletedStaffFromStorage();
+      state.staffMembers.forEach((m) => {
+        if (m.clinicId && idSet.has(m.clinicId)) {
+          storedSoft[m.id] = {
+            deletedAt: now,
+            deletedBy: command.actor.name,
+            previousClinicId: m.clinicId,
+            previousClinicName: clinicMap.get(m.clinicId) || "Clinic",
+          };
+        }
+      });
+      saveSoftDeletedStaffToStorage(storedSoft);
+
       return appendAudit(
         {
           ...state,
@@ -712,6 +849,15 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
     case "clinic.bulk_restored": {
       const idSet = new Set(command.ids);
       command.ids.forEach((id) => reactivateClinicAccounts(id));
+
+      const storedSoft = loadSoftDeletedStaffFromStorage();
+      state.staffMembers.forEach((m) => {
+        if ((m.clinicId && idSet.has(m.clinicId)) || (m.previousClinicId && idSet.has(m.previousClinicId))) {
+          delete storedSoft[m.id];
+        }
+      });
+      saveSoftDeletedStaffToStorage(storedSoft);
+
       return appendAudit(
         {
           ...state,
@@ -746,6 +892,18 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       command.ids.forEach((id) => deleteClinicAccounts(id));
       const nextPerm = new Set(state.permanentlyDeletedIds || []);
       command.ids.forEach((id) => nextPerm.add(id));
+
+      const storedSoft = loadSoftDeletedStaffFromStorage();
+      const storedPerm = new Set(loadPermDeletedStaffFromStorage());
+      state.staffMembers.forEach((m) => {
+        if ((m.clinicId && idSet.has(m.clinicId)) || (m.previousClinicId && idSet.has(m.previousClinicId))) {
+          delete storedSoft[m.id];
+          storedPerm.add(m.id);
+        }
+      });
+      saveSoftDeletedStaffToStorage(storedSoft);
+      savePermDeletedStaffToStorage(Array.from(storedPerm));
+
       return appendAudit(
         {
           ...state,
@@ -772,6 +930,17 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       if (member?.email) deactivateUserAccount(member.email);
       const now = new Date().toISOString();
       const clinic = member?.clinicId ? state.clinics.find((c) => c.id === member.clinicId) : null;
+      const prevClinicName = clinic?.name || member?.previousClinicName || null;
+
+      const storedSoft = loadSoftDeletedStaffFromStorage();
+      storedSoft[command.userId] = {
+        deletedAt: now,
+        deletedBy: command.actor.name,
+        previousClinicId: member?.clinicId || member?.previousClinicId || null,
+        previousClinicName: prevClinicName,
+      };
+      saveSoftDeletedStaffToStorage(storedSoft);
+
       return appendAudit(
         {
           ...state,
@@ -782,8 +951,8 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
                   status: "Inactive",
                   deletedAt: now,
                   deletedBy: command.actor.name,
-                  previousClinicId: m.clinicId,
-                  previousClinicName: clinic?.name || m.previousClinicName || null,
+                  previousClinicId: m.clinicId || m.previousClinicId,
+                  previousClinicName: prevClinicName,
                 }
               : m
           ),
@@ -801,6 +970,11 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
     case "staff.restored": {
       const member = state.staffMembers.find((m) => m.id === command.userId);
       if (member?.email) reactivateUserAccount(member.email);
+
+      const storedSoft = loadSoftDeletedStaffFromStorage();
+      delete storedSoft[command.userId];
+      saveSoftDeletedStaffToStorage(storedSoft);
+
       return appendAudit(
         {
           ...state,
@@ -828,6 +1002,15 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
     case "staff.permanently_deleted": {
       const member = state.staffMembers.find((m) => m.id === command.userId);
       if (member?.email) deleteUserAccount(member.email);
+
+      const storedSoft = loadSoftDeletedStaffFromStorage();
+      delete storedSoft[command.userId];
+      saveSoftDeletedStaffToStorage(storedSoft);
+
+      const storedPerm = new Set(loadPermDeletedStaffFromStorage());
+      storedPerm.add(command.userId);
+      savePermDeletedStaffToStorage(Array.from(storedPerm));
+
       return appendAudit(
         {
           ...state,
@@ -858,6 +1041,20 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       state.staffMembers.forEach((m) => {
         if (idSet.has(m.id) && m.email) deactivateUserAccount(m.email);
       });
+
+      const storedSoft = loadSoftDeletedStaffFromStorage();
+      state.staffMembers.forEach((m) => {
+        if (idSet.has(m.id)) {
+          storedSoft[m.id] = {
+            deletedAt: now,
+            deletedBy: command.actor.name,
+            previousClinicId: m.clinicId || m.previousClinicId,
+            previousClinicName: m.clinicId ? (clinicMap.get(m.clinicId) || m.previousClinicName || null) : m.previousClinicName || null,
+          };
+        }
+      });
+      saveSoftDeletedStaffToStorage(storedSoft);
+
       return appendAudit(
         {
           ...state,
@@ -868,7 +1065,7 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
                   status: "Inactive",
                   deletedAt: now,
                   deletedBy: command.actor.name,
-                  previousClinicId: m.clinicId,
+                  previousClinicId: m.clinicId || m.previousClinicId,
                   previousClinicName: m.clinicId ? (clinicMap.get(m.clinicId) || m.previousClinicName || null) : m.previousClinicName || null,
                 }
               : m
@@ -889,6 +1086,13 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       state.staffMembers.forEach((m) => {
         if (idSet.has(m.id) && m.email) reactivateUserAccount(m.email);
       });
+
+      const storedSoft = loadSoftDeletedStaffFromStorage();
+      command.userIds.forEach((id) => {
+        delete storedSoft[id];
+      });
+      saveSoftDeletedStaffToStorage(storedSoft);
+
       return appendAudit(
         {
           ...state,
@@ -918,6 +1122,19 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       state.staffMembers.forEach((m) => {
         if (idSet.has(m.id) && m.email) deleteUserAccount(m.email);
       });
+
+      const storedSoft = loadSoftDeletedStaffFromStorage();
+      command.userIds.forEach((id) => {
+        delete storedSoft[id];
+      });
+      saveSoftDeletedStaffToStorage(storedSoft);
+
+      const storedPerm = new Set(loadPermDeletedStaffFromStorage());
+      command.userIds.forEach((id) => {
+        storedPerm.add(id);
+      });
+      savePermDeletedStaffToStorage(Array.from(storedPerm));
+
       return appendAudit(
         {
           ...state,
@@ -1191,10 +1408,30 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         ? state.auditLogs
         : state.auditLogs.filter(entry => entry.clinicId === clinicId),
       staffMembers: user && hasPermission(user.role, "people.manage")
-        ? clinicScope(state.staffMembers).filter((m) => !m.deletedAt && m.status !== "Inactive")
+        ? clinicScope(state.staffMembers).filter((m) => {
+            if (m.deletedAt || m.status === "Inactive") return false;
+            if (m.clinicId && state.clinics.some((c) => c.id === m.clinicId && Boolean(c.deletedAt))) {
+              return false;
+            }
+            return true;
+          })
         : [],
       binStaffMembers: user && hasPermission(user.role, "people.manage")
-        ? (isSuperAdmin ? state.staffMembers : clinicScope(state.staffMembers)).filter((m) => Boolean(m.deletedAt) || m.status === "Inactive")
+        ? (isSuperAdmin ? state.staffMembers : clinicScope(state.staffMembers))
+            .filter((m) => {
+              if (Boolean(m.deletedAt) || m.status === "Inactive") return true;
+              if (m.clinicId && state.clinics.some((c) => c.id === m.clinicId && Boolean(c.deletedAt))) {
+                return true;
+              }
+              return false;
+            })
+            .map((m) => {
+              if (!m.previousClinicName && m.clinicId) {
+                const c = state.clinics.find((clinic) => clinic.id === m.clinicId);
+                if (c?.name) return { ...m, previousClinicName: c.name };
+              }
+              return m;
+            })
         : [],
       facilities: user && hasPermission(user.role, "facilities.manage")
         ? clinicScope(state.facilities)
@@ -1441,23 +1678,33 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       },
       deleteClinic: async (id) => {
         const actor = requireUser(user, "platform.clinics.manage");
+        const associatedStaff = state.staffMembers.filter((m) => m.clinicId === id);
         dispatch({ type: "clinic.soft_deleted", id, actor });
         if (repository) {
           await repository.deleteClinic(id);
+          if (repository.softDeleteStaff) {
+            await Promise.allSettled(associatedStaff.map((m) => repository.softDeleteStaff!(m.id)));
+          }
           await refresh().catch(() => undefined);
         }
       },
       softDeleteClinic: async (id) => {
         const actor = requireUser(user, "platform.clinics.manage");
+        const associatedStaff = state.staffMembers.filter((m) => m.clinicId === id);
         dispatch({ type: "clinic.soft_deleted", id, actor });
         if (repository) {
           await repository.softDeleteClinic(id);
+          if (repository.softDeleteStaff) {
+            await Promise.allSettled(associatedStaff.map((m) => repository.softDeleteStaff!(m.id)));
+          }
           await refresh().catch(() => undefined);
         }
       },
       bulkSoftDeleteClinics: async (ids) => {
         const actor = requireUser(user, "platform.clinics.manage");
         if (!ids.length) return;
+        const idSet = new Set(ids);
+        const associatedStaff = state.staffMembers.filter((m) => m.clinicId && idSet.has(m.clinicId));
         dispatch({ type: "clinic.bulk_soft_deleted", ids, actor });
         if (repository) {
           if (repository.bulkSoftDeleteClinics) {
@@ -1465,20 +1712,31 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           } else {
             await Promise.all(ids.map((id) => repository.softDeleteClinic(id)));
           }
+          if (repository.bulkSoftDeleteStaff) {
+            await repository.bulkSoftDeleteStaff(associatedStaff.map((m) => m.id)).catch(() => undefined);
+          } else if (repository.softDeleteStaff) {
+            await Promise.allSettled(associatedStaff.map((m) => repository.softDeleteStaff!(m.id)));
+          }
           await refresh().catch(() => undefined);
         }
       },
       restoreClinic: async (id) => {
         const actor = requireUser(user, "platform.clinics.manage");
+        const associatedStaff = state.staffMembers.filter((m) => m.clinicId === id || m.previousClinicId === id);
         dispatch({ type: "clinic.restored", id, actor });
         if (repository) {
           await repository.restoreClinic(id);
+          if (repository.restoreStaff) {
+            await Promise.allSettled(associatedStaff.map((m) => repository.restoreStaff!(m.id)));
+          }
           await refresh().catch(() => undefined);
         }
       },
       bulkRestoreClinics: async (ids) => {
         const actor = requireUser(user, "platform.clinics.manage");
         if (!ids.length) return;
+        const idSet = new Set(ids);
+        const associatedStaff = state.staffMembers.filter((m) => (m.clinicId && idSet.has(m.clinicId)) || (m.previousClinicId && idSet.has(m.previousClinicId)));
         dispatch({ type: "clinic.bulk_restored", ids, actor });
         if (repository) {
           if (repository.bulkRestoreClinics) {
@@ -1486,26 +1744,42 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           } else {
             await Promise.all(ids.map((id) => repository.restoreClinic(id)));
           }
+          if (repository.bulkRestoreStaff) {
+            await repository.bulkRestoreStaff(associatedStaff.map((m) => m.id)).catch(() => undefined);
+          } else if (repository.restoreStaff) {
+            await Promise.allSettled(associatedStaff.map((m) => repository.restoreStaff!(m.id)));
+          }
           await refresh().catch(() => undefined);
         }
       },
       permanentlyDeleteClinic: async (id) => {
         const actor = requireUser(user, "platform.clinics.manage");
+        const associatedStaff = state.staffMembers.filter((m) => m.clinicId === id || m.previousClinicId === id);
         dispatch({ type: "clinic.permanently_deleted", id, actor });
         if (repository) {
           await repository.permanentlyDeleteClinic(id);
+          if (repository.permanentlyDeleteStaff) {
+            await Promise.allSettled(associatedStaff.map((m) => repository.permanentlyDeleteStaff!(m.id)));
+          }
           await refresh().catch(() => undefined);
         }
       },
       bulkPermanentlyDeleteClinics: async (ids) => {
         const actor = requireUser(user, "platform.clinics.manage");
         if (!ids.length) return;
+        const idSet = new Set(ids);
+        const associatedStaff = state.staffMembers.filter((m) => (m.clinicId && idSet.has(m.clinicId)) || (m.previousClinicId && idSet.has(m.previousClinicId)));
         dispatch({ type: "clinic.bulk_permanently_deleted", ids, actor });
         if (repository) {
           if (repository.bulkPermanentlyDeleteClinics) {
             await repository.bulkPermanentlyDeleteClinics(ids);
           } else {
             await Promise.all(ids.map((id) => repository.permanentlyDeleteClinic(id)));
+          }
+          if (repository.bulkPermanentlyDeleteStaff) {
+            await repository.bulkPermanentlyDeleteStaff(associatedStaff.map((m) => m.id)).catch(() => undefined);
+          } else if (repository.permanentlyDeleteStaff) {
+            await Promise.allSettled(associatedStaff.map((m) => repository.permanentlyDeleteStaff!(m.id)));
           }
           await refresh().catch(() => undefined);
         }
@@ -1514,12 +1788,19 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         const actor = requireUser(user, "platform.clinics.manage");
         const trashIds = state.clinics.filter((c) => Boolean(c.deletedAt)).map((c) => c.id);
         if (!trashIds.length) return;
+        const idSet = new Set(trashIds);
+        const associatedStaff = state.staffMembers.filter((m) => (m.clinicId && idSet.has(m.clinicId)) || (m.previousClinicId && idSet.has(m.previousClinicId)));
         dispatch({ type: "clinic.bulk_permanently_deleted", ids: trashIds, actor });
         if (repository) {
           if (repository.bulkPermanentlyDeleteClinics) {
             await repository.bulkPermanentlyDeleteClinics(trashIds);
           } else {
             await Promise.all(trashIds.map((id) => repository.permanentlyDeleteClinic(id)));
+          }
+          if (repository.bulkPermanentlyDeleteStaff) {
+            await repository.bulkPermanentlyDeleteStaff(associatedStaff.map((m) => m.id)).catch(() => undefined);
+          } else if (repository.permanentlyDeleteStaff) {
+            await Promise.allSettled(associatedStaff.map((m) => repository.permanentlyDeleteStaff!(m.id)));
           }
           await refresh().catch(() => undefined);
         }
