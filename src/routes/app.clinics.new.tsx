@@ -9,7 +9,7 @@ import { FileUploader } from "@/components/forms/file-uploader";
 import { useWorkspaceData } from "@/lib/workspace-data";
 import { toast } from "sonner";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { Copy } from "lucide-react";
+import { Copy, Mail, CheckCircle, AlertCircle } from "lucide-react";
 
 export const Route = createFileRoute("/app/clinics/new")({ component: AddClinic });
 
@@ -40,10 +40,53 @@ function AddClinic() {
   const [isSaving, setIsSaving] = useState(false);
   const [setupUrl, setSetupUrl] = useState<string | null>(null);
   const [setupDialogOpen, setSetupDialogOpen] = useState(false);
+  const [emailSent, setEmailSent] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success("Setup link copied to clipboard");
+  };
+
+  const sendInvitationEmail = async () => {
+    if (!setupUrl || !form.adminEmail) return;
+    setSendingEmail(true);
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      if (!supabaseUrl || !anonKey) {
+        throw new Error("Supabase configuration not found");
+      }
+      const response = await fetch(`${supabaseUrl}/functions/v1/send-invite`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${anonKey}`,
+        },
+        body: JSON.stringify({
+          email: form.adminEmail,
+          fullName: form.adminName,
+          phone: form.adminPhone,
+          roleCode: "clinic_admin",
+          hospitalId: "", // Will be filled by the function
+          clinicName: form.name,
+          clinicEmail: form.email,
+          clinicPhone: form.phone,
+          clinicAddress: form.address,
+          setupUrl,
+        }),
+      });
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || "Failed to send invitation email");
+      }
+      setEmailSent(true);
+      toast.success(`Invitation email sent to ${form.adminEmail}`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to send invitation email");
+    } finally {
+      setSendingEmail(false);
+    }
   };
 
   const submit = async (event: React.FormEvent) => {
@@ -71,6 +114,7 @@ function AddClinic() {
       if (clinic.adminSetupUrl) {
         setSetupUrl(clinic.adminSetupUrl);
         setSetupDialogOpen(true);
+        setEmailSent(false);
       } else {
         toast.success(`Clinic ${clinic.id} created. A secure setup invitation was sent to ${form.adminEmail.trim()}`);
         navigate({ to: "/app/clinics" });
@@ -156,6 +200,13 @@ function AddClinic() {
           </DialogHeader>
           <div className="space-y-4">
             <div className="space-y-2">
+              <Label className="text-xs font-semibold text-muted-foreground">Clinical Admin Email</Label>
+              <div className="flex items-center gap-2 text-sm">
+                <Mail className="h-4 w-4 text-muted-foreground" />
+                <span>{form.adminEmail}</span>
+              </div>
+            </div>
+            <div className="space-y-2">
               <Label className="text-xs font-semibold text-muted-foreground">Setup Link</Label>
               <div className="flex gap-2">
                 <Input
@@ -176,6 +227,41 @@ function AddClinic() {
             <p className="text-xs text-muted-foreground">
               This link expires in 24 hours. The Clinical Admin will use it to create their password and log in.
             </p>
+            <div className="flex gap-2">
+              <Button
+                variant={emailSent ? "default" : "outline"}
+                onClick={sendInvitationEmail}
+                disabled={sendingEmail || emailSent || !setupUrl}
+                className="flex-1"
+              >
+                {sendingEmail ? (
+                  <>
+                    <span className="animate-spin mr-2 h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
+                    Sending...
+                  </>
+                ) : emailSent ? (
+                  <>
+                    <CheckCircle className="mr-2 h-4 w-4" />
+                    Email Sent
+                  </>
+                ) : (
+                  <>
+                    <Mail className="mr-2 h-4 w-4" />
+                    Send Invitation Email
+                  </>
+                )}
+              </Button>
+              <Button variant="outline" onClick={() => copyToClipboard(setupUrl ?? "")} disabled={!setupUrl} className="flex-1">
+                <Copy className="mr-2 h-4 w-4" />
+                Copy Link
+              </Button>
+            </div>
+            {emailSent && (
+              <p className="text-xs text-green-600 flex items-center gap-1">
+                <CheckCircle className="h-3.5 w-3.5" />
+                Invitation email has been sent to {form.adminEmail}
+              </p>
+            )}
           </div>
           <DialogFooter>
             <Button onClick={() => { setSetupDialogOpen(false); navigate({ to: "/app/clinics" }); }} className="w-full">

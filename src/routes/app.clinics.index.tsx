@@ -33,11 +33,22 @@ function ClinicsPage() {
     return counts;
   }, [staffMembers]);
 
+  const clinicAdminInvitedCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    staffMembers.forEach((member) => {
+      if (member.role === "clinic_admin" && member.clinicId && member.status === "Invited") {
+        counts[member.clinicId] = (counts[member.clinicId] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [staffMembers]);
+
   const exportClinic = (c: Clinic) => {
     const adminCount = clinicAdminCounts[c.id] ?? 0;
+    const invitedCount = clinicAdminInvitedCounts[c.id] ?? 0;
     const summary = [{
       clinicId: c.id, clinicName: c.name, location: c.city,
-      doctors: c.doctors, receptionists: c.receptionists, clinicAdmins: adminCount, patients: c.patients,
+      doctors: c.doctors, receptionists: c.receptionists, clinicAdmins: adminCount, invitedAdmins: invitedCount, patients: c.patients,
       plan: c.plan, subscriptionStatus: c.status, renews: c.expires,
     }];
     downloadCSV(`${c.id}-summary.csv`, summary);
@@ -47,9 +58,10 @@ function ClinicsPage() {
   const exportAll = () => {
     const combined = clinics.map(c => {
       const adminCount = clinicAdminCounts[c.id] ?? 0;
+      const invitedCount = clinicAdminInvitedCounts[c.id] ?? 0;
       return {
         clinicId: c.id, clinicName: c.name, location: c.city,
-        doctors: c.doctors, receptionists: c.receptionists, clinicAdmins: adminCount, patients: c.patients,
+        doctors: c.doctors, receptionists: c.receptionists, clinicAdmins: adminCount, invitedAdmins: invitedCount, patients: c.patients,
         plan: c.plan, subscriptionStatus: c.status, renews: c.expires,
       };
     });
@@ -137,6 +149,11 @@ function ClinicsPage() {
                     <div className="flex items-center justify-end gap-1.5">
                       <Users className="h-4 w-4 text-muted-foreground" />
                       {clinicAdminCounts[c.id] ?? 0}
+                      {clinicAdminInvitedCounts[c.id] && clinicAdminInvitedCounts[c.id] > 0 && (
+                        <Badge variant="outline" className="text-xs ml-1">
+                          +{clinicAdminInvitedCounts[c.id]} invited
+                        </Badge>
+                      )}
                     </div>
                   </TableCell>
                   <TableCell className="text-right tabular-nums">{c.patients.toLocaleString()}</TableCell>
