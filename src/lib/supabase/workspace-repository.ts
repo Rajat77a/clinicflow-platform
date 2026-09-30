@@ -793,7 +793,55 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       console.warn("Edge function invite-staff failed, falling back to local token:", err);
     }
 
-    // In production, an invitation must be persistently stored in Supabase
+    if (!setupUrl && supabaseConfig.configured && !supabaseConfig.demoMode) {
+      try {
+        const { data: tokenResult, error: tokenError } = await this.client.rpc(
+          "create_staff_invite_token",
+          {
+            p_email: input.email.trim().toLowerCase(),
+            p_full_name: input.name.trim(),
+            p_phone: input.phone?.trim() || "",
+            p_role_code: roleCode,
+            p_hospital_id: hospitalId || null,
+            p_facility_id: null,
+            p_specialty: "specialty" in input && input.specialty ? input.specialty : null,
+            p_shift: "shift" in input && input.shift ? input.shift : null,
+            p_gender: "gender" in input && input.gender ? input.gender : null,
+            p_qualification: "qualification" in input && input.qualification ? input.qualification : null,
+            p_medical_registration_number: "medicalRegistrationNumber" in input && input.medicalRegistrationNumber ? input.medicalRegistrationNumber : null,
+            p_experience_years: "experienceYears" in input && input.experienceYears ? Number(input.experienceYears) : null,
+            p_consultation_fee: "consultationFee" in input && input.consultationFee ? Number(input.consultationFee) : null,
+            p_working_hours: "workingHours" in input && input.workingHours ? input.workingHours : null,
+            p_notes: "notes" in input && input.notes ? input.notes : null,
+          }
+        );
+
+        if (!tokenError && tokenResult) {
+          let extractedToken: string | null = null;
+          if (typeof tokenResult === "string") {
+            try {
+              const parsed = JSON.parse(tokenResult);
+              extractedToken = typeof parsed?.token === "string" ? parsed.token : tokenResult;
+            } catch {
+              extractedToken = tokenResult;
+            }
+          } else if (typeof tokenResult === "object" && tokenResult !== null) {
+            const rawObj = Array.isArray(tokenResult)
+              ? (tokenResult[0] as Record<string, unknown> | undefined)
+              : (tokenResult as Record<string, unknown>);
+            extractedToken = typeof rawObj?.token === "string" ? rawObj.token : null;
+          }
+
+          if (extractedToken) {
+            setupUrl = `${getAppBaseUrl()}/setup?token=${extractedToken.trim()}`;
+          }
+        }
+      } catch (rpcErr) {
+        console.warn("Fallback to create_staff_invite_token RPC failed:", rpcErr);
+      }
+    }
+
+    // In demo mode or if everything else failed, generate a purely local token
     if (!setupUrl) {
       if (!supabaseConfig.demoMode && supabaseConfig.configured) {
         console.warn("Unable to create invitation in Supabase. Please verify database connection and migrations.");
