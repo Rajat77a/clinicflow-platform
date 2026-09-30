@@ -175,7 +175,7 @@ function SetupPage() {
         .then(({ data, error: rpcError }: { data: unknown; error: { message: string } | null }) => {
           if (rpcError) {
             console.error("[InviteSetup] validate_invite_token RPC error:", rpcError.message);
-            if (supabaseConfig.demoMode && tryLocalToken()) return;
+            if (tryLocalToken()) return;
             setErrorInfo({
               title: "Unable to Validate Invitation",
               message: "Unable to validate this invitation. Please try again.",
@@ -189,7 +189,7 @@ function SetupPage() {
 
           if (!row) {
             console.warn("[InviteSetup] validate_invite_token returned empty data");
-            if (supabaseConfig.demoMode && tryLocalToken()) return;
+            if (tryLocalToken()) return;
             setErrorInfo({
               title: "Link Invalid",
               message: "This invitation link is invalid.",
@@ -218,7 +218,7 @@ function SetupPage() {
           } else if (row.status === "valid" || rawStatus === "valid") {
             const email = String(row.p_email ?? row.email ?? "").trim();
             if (!email) {
-              if (supabaseConfig.demoMode && tryLocalToken()) return;
+              if (tryLocalToken()) return;
               setErrorInfo({
                 title: "Link Invalid",
                 message: "This invitation link is invalid.",
@@ -254,7 +254,7 @@ function SetupPage() {
               administrative_notes: (row.p_administrative_notes ?? row.administrative_notes ?? null) as string | null,
             });
           } else {
-            if (supabaseConfig.demoMode && tryLocalToken()) return;
+            if (tryLocalToken()) return;
             setErrorInfo({
               title: "Link Invalid",
               message: "This invitation link is invalid.",
@@ -264,7 +264,7 @@ function SetupPage() {
         .catch((err: unknown) => {
           const errorMsg = err instanceof Error ? err.message : String(err);
           console.error("[InviteSetup] validate_invite_token failure:", errorMsg);
-          if (supabaseConfig.demoMode && tryLocalToken()) return;
+          if (tryLocalToken()) return;
           setErrorInfo({
             title: "Unable to Validate Invitation",
             message: "Unable to validate this invitation. Please try again.",
@@ -274,7 +274,7 @@ function SetupPage() {
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       console.error("[InviteSetup] validate_invite_token initialization error:", errorMsg);
-      if (supabaseConfig.demoMode && tryLocalToken()) return;
+      if (tryLocalToken()) return;
       setErrorInfo({
         title: "Unable to Validate Invitation",
         message: "Unable to validate this invitation. Please try again.",
