@@ -836,20 +836,13 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       hospitalId = hospital?.id ?? "";
     }
     if (!hospitalId) throw new Error("A hospital must be selected");
-    const { data: tokenResult, error: tokenError } = await this.client.rpc(
-      "create_staff_invite_token",
-      {
-        p_email: input.email,
-        p_full_name: input.name,
-        p_phone: input.phone,
-        p_role_code: "clinic_admin",
-        p_hospital_id: hospitalId,
-      },
+    
+    await this.inviteStaff(
+      { name: input.name, email: input.email, phone: input.phone },
+      "clinic_admin",
+      hospitalId
     );
-    throwIfError(tokenError);
-    if (!tokenResult || typeof tokenResult.token !== "string") {
-      throw new Error("Failed to generate admin invite token");
-    }
+
     const membership: StaffMember = {
       id: `pending-${randomKey().slice(0, 8)}`,
       clinicId: hospitalId,
