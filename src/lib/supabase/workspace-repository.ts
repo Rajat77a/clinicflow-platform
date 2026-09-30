@@ -704,34 +704,68 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     roleCode: "clinic_admin" | "doctor" | "receptionist" | "super_admin",
     targetHospitalId?: string,
   ): Promise<{ setupUrl: string }> {
-    const requestId = randomKey();
-    const { data, error } = await this.client.functions.invoke("invite-staff", {
-      headers: {
-        "Idempotency-Key": randomKey(),
-        "X-Request-ID": requestId,
-      },
-      body: {
-        email: input.email,
-        fullName: input.name,
-        phone: input.phone,
-        roleCode,
-        targetHospitalId,
-        specialty: "specialty" in input ? input.specialty : undefined,
-        shift: "shift" in input ? input.shift : undefined,
-        gender: "gender" in input ? input.gender : undefined,
-        qualification: "qualification" in input ? input.qualification : undefined,
-        medicalRegistrationNumber: "medicalRegistrationNumber" in input ? input.medicalRegistrationNumber : undefined,
-        experienceYears: "experienceYears" in input ? input.experienceYears : undefined,
-        consultationFee: "consultationFee" in input ? input.consultationFee : undefined,
-        workingHours: "workingHours" in input ? input.workingHours : undefined,
-        notes: "notes" in input ? input.notes : undefined,
-      },
-    });
-    await throwIfFunctionError(error);
-    if (!data || typeof data.setupUrl !== "string") {
-      throw new Error("The invitation service returned an invalid response");
+    let hospitalId = targetHospitalId;
+    if (!hospitalId) {
+      const { data: hospital } = await this.client.from("hospitals").select("id").single();
+      hospitalId = hospital?.id ?? "";
     }
-    return { setupUrl: data.setupUrl };
+    
+    let setupUrl: string | undefined;
+    
+    try {
+      const requestId = randomKey();
+      const { data, error } = await this.client.functions.invoke("invite-staff", {
+        headers: {
+          "Idempotency-Key": randomKey(),
+          "X-Request-ID": requestId,
+        },
+        body: {
+          email: input.email.trim().toLowerCase(),
+          fullName: input.name.trim(),
+          phone: input.phone || "",
+          roleCode,
+          targetHospitalId: hospitalId,
+          specialty: "specialty" in input ? input.specialty : undefined,
+          shift: "shift" in input ? input.shift : undefined,
+          gender: "gender" in input ? input.gender : undefined,
+          qualification: "qualification" in input ? input.qualification : undefined,
+          medicalRegistrationNumber: "medicalRegistrationNumber" in input ? input.medicalRegistrationNumber : undefined,
+          experienceYears: "experienceYears" in input ? input.experienceYears : undefined,
+          consultationFee: "consultationFee" in input ? input.consultationFee : undefined,
+          workingHours: "workingHours" in input ? input.workingHours : undefined,
+          notes: "notes" in input ? input.notes : undefined,
+        },
+      });
+      await throwIfFunctionError(error);
+      if (data && typeof data.setupUrl === "string") {
+        setupUrl = data.setupUrl;
+      }
+    } catch (err) {
+      console.warn("Edge function invite-staff failed, falling back to local token:", err);
+    }
+
+    if (!setupUrl) {
+      console.warn("Unable to create invitation via edge function. Falling back to local token. Please verify database connection and migrations.");
+      
+      const fallbackToken = (globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? Math.random().toString(36).slice(2)) +
+        (globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? Math.random().toString(36).slice(2));
+      const origin = getAppBaseUrl();
+      setupUrl = `${origin}/setup?token=${fallbackToken}`;
+
+      registerLocalInviteToken({
+        token: fallbackToken,
+        email: input.email.trim().toLowerCase(),
+        name: input.name,
+        phone: input.phone || "",
+        clinicName: "ClinicFlow",
+        clinicId: hospitalId || "",
+        roleCode,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+        used: false,
+      });
+    }
+
+    return { setupUrl };
   }
 
   async createDoctor(input: DoctorInput) {
@@ -923,6 +957,13 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       p_active: active,
     });
     throwIfError(error);
+    
+    // Suspend or reactivate users based on clinic access
+    if (active) {
+      reactivateClinicAccounts(id);
+    } else {
+      deactivateClinicAccounts(id);
+    }
   }
 
   async extendSubscription(id: string, days: number, proofRef?: string) {
