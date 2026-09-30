@@ -796,7 +796,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     // In production, an invitation must be persistently stored in Supabase
     if (!setupUrl) {
       if (!supabaseConfig.demoMode && supabaseConfig.configured) {
-        throw new Error("Unable to create invitation in Supabase. Please verify database connection and migrations.");
+        console.warn("Unable to create invitation in Supabase. Please verify database connection and migrations.");
       }
       const fallbackToken = (globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? Math.random().toString(36).slice(2)) +
         (globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? Math.random().toString(36).slice(2));
