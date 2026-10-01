@@ -69,6 +69,20 @@ function UsersPage() {
           if (mounted) refresh();
         }
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "invite_tokens" },
+        () => {
+          if (mounted) refresh();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "platform_admins" },
+        () => {
+          if (mounted) refresh();
+        }
+      )
       .subscribe();
 
     return () => {

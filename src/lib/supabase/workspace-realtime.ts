@@ -24,6 +24,8 @@ const REALTIME_TABLES: readonly RealtimeTable[] = [
   { table: "audit_events", filterColumn: "hospital_id", anyPermission: ["audit.read"] },
   { table: "hospital_subscriptions", platformOnly: true },
   { table: "hospital_subscription_events", platformOnly: true },
+  { table: "platform_admins", platformOnly: true },
+  { table: "invite_tokens", filterColumn: "hospital_id", anyPermission: ["people.manage"] },
 ];
 
 export function realtimeTablesForRole(role: Role) {
@@ -60,7 +62,7 @@ export function subscribeToWorkspaceChanges({
       event: "*" as const,
       schema: "public",
       table,
-      ...(role === "super_admin" && (table === "hospitals" || table.startsWith("hospital_subscription"))
+      ...(role === "super_admin" && (table === "hospitals" || table.startsWith("hospital_subscription") || table === "staff_memberships" || table === "invite_tokens" || table === "platform_admins")
         ? {}
         : { filter: `${filterColumn}=eq.${hospitalId}` }),
     };
