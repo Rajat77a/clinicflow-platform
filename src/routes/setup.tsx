@@ -301,7 +301,7 @@ function SetupPage() {
 
     setSubmitting(true);
     try {
-      if (supabaseConfig.configured) {
+      if (supabaseConfig.configured && !isLocalToken) {
         const supabase = getSupabaseBrowserClient();
         console.log(`[InviteSetup] Calling activate_invited_user RPC (token length = ${token.length})`);
 
