@@ -1633,6 +1633,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           city: input.city,
           doctors: 0,
           receptionists: 0,
+          clinicalAdmins: 0,
           patients: 0,
           plan: "ClinicFlow",
           status: "Active",
