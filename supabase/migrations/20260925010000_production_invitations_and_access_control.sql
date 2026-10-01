@@ -364,8 +364,8 @@ begin
     )
     on conflict (user_id) do update set
       hospital_id = excluded.hospital_id,
-      facility_id = coalesce(excluded.facility_id, public.staff_memberships.facility_id),
-      department_id = coalesce(excluded.department_id, public.staff_memberships.department_id),
+      facility_id = case when excluded.hospital_id != public.staff_memberships.hospital_id then excluded.facility_id else coalesce(excluded.facility_id, public.staff_memberships.facility_id) end,
+      department_id = case when excluded.hospital_id != public.staff_memberships.hospital_id then excluded.department_id else coalesce(excluded.department_id, public.staff_memberships.department_id) end,
       role_code = excluded.role_code,
       active = true,
       status = 'Active',
