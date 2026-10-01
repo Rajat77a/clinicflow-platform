@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { useWorkspaceData, type StaffMember } from "@/lib/workspace-data";
 import { UserMinus, UserPlus, Eye, Building2, ShieldCheck, Stethoscope, UserCog, Mail, Phone, Trash2, RotateCw, Send, CheckSquare, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export const Route = createFileRoute("/app/users")({ component: UsersPage });
 
@@ -52,7 +53,29 @@ function UsersPage() {
     softDeleteStaff,
     bulkSoftDeleteStaff,
     resendStaffInvitation,
+    refresh,
   } = useWorkspaceData();
+
+  useEffect(() => {
+    let mounted = true;
+    const supabase = getSupabaseBrowserClient();
+    
+    const channel = supabase
+      .channel("public:staff_memberships")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "staff_memberships" },
+        () => {
+          if (mounted) refresh();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, [refresh]);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
@@ -669,7 +692,7 @@ function UsersPage() {
                       </div>
                       <div>
                         <div className="font-semibold text-foreground">{member.name}</div>
-                        <div className="font-mono text-xs text-muted-foreground">{member.id}</div>
+                        <div className="font-mono text-xs text-muted-foreground">{member.employeeNumber || member.id}</div>
                       </div>
                     </div>
                   </TableCell>

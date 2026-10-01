@@ -340,6 +340,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         email: row.email ?? "",
         phone: row.phone ?? "",
         role: row.role_code,
+        employeeNumber: row.employee_number,
         status: row.status || (row.active === false ? "Inactive" : "Invited"),
         deletedAt: row.deleted_at || (row.active === false ? new Date().toISOString() : undefined),
       };
@@ -419,6 +420,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
           city: row.city ?? (config.city as string) ?? "Not set",
           doctors: Number(row.doctors ?? 0),
           receptionists: Number(row.receptionists ?? 0),
+          clinicalAdmins: Number(row.clinical_admins ?? 0),
           patients: Number(row.patients ?? 0),
           plan: row.plan ?? "ClinicFlow",
           status: row.status ?? "Expired",
