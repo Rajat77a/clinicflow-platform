@@ -88,6 +88,7 @@ export type Clinic = {
   city: string;
   doctors: number;
   receptionists: number;
+  clinicalAdmins: number;
   patients: number;
   plan: string;
   status: string;
@@ -1558,6 +1559,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             city: input.city,
             doctors: 0,
             receptionists: 0,
+            clinicalAdmins: 0,
             patients: 0,
             plan: "ClinicFlow",
             status: "Active",

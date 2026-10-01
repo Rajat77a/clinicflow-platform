@@ -419,6 +419,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
           city: row.city ?? (config.city as string) ?? "Not set",
           doctors: Number(row.doctors ?? 0),
           receptionists: Number(row.receptionists ?? 0),
+          clinicalAdmins: Number(row.clinical_admins ?? 0),
           patients: Number(row.patients ?? 0),
           plan: row.plan ?? "ClinicFlow",
           status: row.status ?? "Expired",
