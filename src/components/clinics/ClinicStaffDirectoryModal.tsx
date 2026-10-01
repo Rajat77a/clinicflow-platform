@@ -50,6 +50,7 @@ export function ClinicStaffDirectoryModal({ clinicId, clinicName, onClose }: Sta
 
         if (mounted && data) {
           const mapped: StaffMember[] = data
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             .map((m: any) => ({
               id: m.profiles?.id || "",
               name: m.profiles?.display_name || "Unknown",
@@ -57,6 +58,7 @@ export function ClinicStaffDirectoryModal({ clinicId, clinicName, onClose }: Sta
               role: m.role_code,
               employeeNumber: m.employee_number || "-",
             }))
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             .filter((m: any) => m.role === "doctor" || m.role === "clinic_admin" || m.role === "receptionist");
           setStaff(mapped);
         }
