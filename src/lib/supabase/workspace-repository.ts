@@ -816,6 +816,10 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
           }
         );
 
+        if (tokenError) {
+          console.warn("create_staff_invite_token returned error:", tokenError);
+        }
+
         if (!tokenError && tokenResult) {
           let extractedToken: string | null = null;
           if (typeof tokenResult === "string") {
