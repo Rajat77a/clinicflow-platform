@@ -9,7 +9,7 @@ import {
 } from "@tanstack/react-router";
 import { type ReactNode } from "react";
 
-import "../styles.css";
+import appCss from "../styles.css?url";
 import { AuthProvider } from "@/lib/auth";
 import { WorkspaceDataProvider } from "@/lib/workspace-data";
 import { Toaster } from "@/components/ui/sonner";
@@ -84,6 +84,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { name: "twitter:description", content: "Secure hospital operations for authorized clinical and administrative staff." },
     ],
     links: [
+      { rel: "stylesheet", href: appCss },
       { rel: "icon", type: "image/svg+xml", href: "/clinicflow-icon.svg" },
     ],
   }),
