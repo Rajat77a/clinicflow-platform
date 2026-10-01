@@ -57,7 +57,7 @@ export function ClinicStaffDirectoryModal({ clinicId, clinicName, onClose }: Sta
               role: m.role_code,
               employeeNumber: m.employee_number || "-",
             }))
-            .filter((m) => m.role === "doctor" || m.role === "clinic_admin" || m.role === "receptionist");
+            .filter((m: any) => m.role === "doctor" || m.role === "clinic_admin" || m.role === "receptionist");
           setStaff(mapped);
         }
       } catch (e) {
