@@ -12,6 +12,7 @@ import { Search, Plus, Download, MapPin, Pencil, Power, Trash2, CheckSquare, Ale
 import { downloadCSV } from "@/lib/exporters";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
+import { ClinicStaffDirectoryModal } from "@/components/clinics/ClinicStaffDirectoryModal";
 
 export const Route = createFileRoute("/app/clinics/")({ component: ClinicsPage });
 
@@ -27,6 +28,7 @@ function ClinicsPage() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [staffDirectoryTarget, setStaffDirectoryTarget] = useState<Clinic | null>(null);
   const isSuperAdmin = user?.role === "super_admin";
 
   const visibleClinics = useMemo(() => {
@@ -70,7 +72,7 @@ function ClinicsPage() {
   const exportClinic = (c: Clinic) => {
     const summary = [{
       clinicId: c.id, clinicName: c.name, location: c.city,
-      doctors: c.doctors, receptionists: c.receptionists, patients: c.patients,
+      admins: c.clinicalAdmins, doctors: c.doctors, receptionists: c.receptionists, patients: c.patients,
       plan: c.plan, subscriptionStatus: c.status, renews: c.expires,
     }];
     downloadCSV(`${c.id}-summary.csv`, summary);
@@ -80,7 +82,7 @@ function ClinicsPage() {
   const exportAll = () => {
     const combined = clinics.map(c => ({
       clinicId: c.id, clinicName: c.name, location: c.city,
-      doctors: c.doctors, receptionists: c.receptionists, patients: c.patients,
+      admins: c.clinicalAdmins, doctors: c.doctors, receptionists: c.receptionists, patients: c.patients,
       plan: c.plan, subscriptionStatus: c.status, renews: c.expires,
     }));
     downloadCSV("clinicflow-all-clinics.csv", combined);
@@ -230,6 +232,7 @@ function ClinicsPage() {
                 )}
                 <TableHead>Clinic</TableHead>
                 <TableHead>Location</TableHead>
+                <TableHead className="text-right">Admins</TableHead>
                 <TableHead className="text-right">Doctors</TableHead>
                 <TableHead className="text-right">Receptionists</TableHead>
                 <TableHead className="text-right">Patients</TableHead>
@@ -262,9 +265,13 @@ function ClinicsPage() {
                     )}
                     <TableCell>
                       <div className="flex items-center gap-3">
-                        <div className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-primary-foreground text-xs font-bold">
+                        <button
+                          className="grid h-9 w-9 place-items-center rounded-xl bg-primary text-primary-foreground text-xs font-bold hover:opacity-80 transition-opacity focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                          onClick={() => setStaffDirectoryTarget(c)}
+                          title="View Staff Directory"
+                        >
                           {c.name.split(" ").map(n => n[0]).slice(0, 2).join("")}
-                        </div>
+                        </button>
                         <div className="min-w-0">
                           <div className="font-semibold">{c.name}</div>
                           <div className="text-xs text-muted-foreground">{c.id}</div>
@@ -277,6 +284,7 @@ function ClinicsPage() {
                         {c.city}
                       </div>
                     </TableCell>
+                    <TableCell className="text-right tabular-nums">{c.clinicalAdmins}</TableCell>
                     <TableCell className="text-right tabular-nums">{c.doctors}</TableCell>
                     <TableCell className="text-right tabular-nums">{c.receptionists}</TableCell>
                     <TableCell className="text-right tabular-nums">{c.patients.toLocaleString()}</TableCell>
@@ -454,6 +462,12 @@ function ClinicsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <ClinicStaffDirectoryModal
+        clinicId={staffDirectoryTarget?.id || null}
+        clinicName={staffDirectoryTarget?.name || ""}
+        onClose={() => setStaffDirectoryTarget(null)}
+      />
     </>
   );
 }

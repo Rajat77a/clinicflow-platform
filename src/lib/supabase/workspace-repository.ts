@@ -340,6 +340,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         email: row.email ?? "",
         phone: row.phone ?? "",
         role: row.role_code,
+        employeeNumber: row.employee_number,
         status: row.status || (row.active === false ? "Inactive" : "Invited"),
         deletedAt: row.deleted_at || (row.active === false ? new Date().toISOString() : undefined),
       };

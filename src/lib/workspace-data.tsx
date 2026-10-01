@@ -247,6 +247,7 @@ export type StaffMember = {
   tempPassword?: string;
   deletedAt?: string;
   deletedBy?: string;
+  employeeNumber?: string;
   previousClinicId?: string | null;
   previousClinicName?: string | null;
   emailSent?: boolean;
