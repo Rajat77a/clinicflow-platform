@@ -416,6 +416,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         const config = (row.configuration as Record<string, unknown>) || {};
         return {
           id: row.id,
+          shortId: row.short_id,
           name: row.name,
           city: row.city ?? (config.city as string) ?? "Not set",
           doctors: Number(row.doctors ?? 0),

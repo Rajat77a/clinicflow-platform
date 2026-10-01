@@ -84,6 +84,7 @@ const DEFAULT_CLINIC_ID = "CL-001";
 
 export type Clinic = {
   id: string;
+  shortId?: string;
   name: string;
   city: string;
   doctors: number;
