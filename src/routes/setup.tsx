@@ -10,7 +10,7 @@ import { supabaseConfig } from "@/lib/supabase/config";
 import { getLocalInviteToken, markLocalInviteTokenUsed } from "@/lib/email-service";
 import { MIN_PASSWORD_LENGTH, passwordPolicyError } from "@/lib/password-policy";
 import { saveRegisteredAccount } from "@/lib/account-store";
-import { useAuth, type Role } from "@/lib/auth";
+import type { Role } from "@/lib/auth";
 
 export const Route = createFileRoute("/setup")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -58,7 +58,6 @@ const ROLE_ICONS: Record<string, React.ComponentType<{ className?: string }>> = 
 };
 
 function SetupPage() {
-  const { login } = useAuth();
   const navigate = useNavigate();
   const searchParams = Route.useSearch();
   const [token, setToken] = useState<string | null>(null);
@@ -345,19 +344,8 @@ function SetupPage() {
         markLocalInviteTokenUsed(token);
       }
 
-      try {
-        await login(tokenInfo.email.trim(), pw);
-      } catch (loginErr) {
-        console.warn("[InviteSetup] auto-signin notice:", loginErr);
-      }
-
       toast.success("Your account has been activated successfully.");
       setIsActivated(true);
-      
-      // Auto-navigate to dashboard after a short delay
-      setTimeout(() => {
-        navigate({ to: "/app" });
-      }, 1500);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Unable to set password");
     } finally {
@@ -613,15 +601,6 @@ function SetupPage() {
                       {showPw2 ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                   </div>
-                </div>
-
-                <div className="rounded-lg bg-muted/40 p-3 text-xs space-y-1.5 text-muted-foreground">
-                  <p className="font-semibold text-foreground mb-1">Password Requirements:</p>
-                  <ul className="list-disc pl-4 space-y-0.5">
-                    <li className={pw.length >= MIN_PASSWORD_LENGTH ? "text-emerald-500" : ""}>At least {MIN_PASSWORD_LENGTH} characters</li>
-                    <li className={/[a-z]/.test(pw) ? "text-emerald-500" : ""}>One lowercase letter</li>
-                    <li className={/[A-Z]/.test(pw) ? "text-emerald-500" : ""}>One uppercase letter</li>
-                  </ul>
                 </div>
 
                 <Button
