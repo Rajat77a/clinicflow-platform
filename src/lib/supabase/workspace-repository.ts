@@ -817,10 +817,11 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         );
 
         if (tokenError) {
-          console.warn("create_staff_invite_token returned error:", tokenError);
+          console.error("create_staff_invite_token returned error:", tokenError);
+          throw new Error(`Failed to create invite token: ${tokenError.message}`);
         }
 
-        if (!tokenError && tokenResult) {
+        if (tokenResult) {
           let extractedToken: string | null = null;
           if (typeof tokenResult === "string") {
             try {
@@ -841,7 +842,9 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
           }
         }
       } catch (rpcErr) {
-        console.warn("Fallback to create_staff_invite_token RPC failed:", rpcErr);
+        console.error("Fallback to create_staff_invite_token RPC failed:", rpcErr);
+        if (rpcErr instanceof Error) throw rpcErr;
+        throw new Error(`RPC failed: ${JSON.stringify(rpcErr)}`);
       }
     }
 
