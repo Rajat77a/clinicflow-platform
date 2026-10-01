@@ -846,7 +846,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       } catch (rpcErr) {
         console.error("Fallback to create_staff_invite_token RPC failed:", rpcErr);
         if (rpcErr instanceof Error) throw rpcErr;
-        throw new Error(`RPC failed: ${JSON.stringify(rpcErr)}`);
+        throw new Error(`RPC failed: ${JSON.stringify(rpcErr)}`, { cause: rpcErr });
       }
     }
 
