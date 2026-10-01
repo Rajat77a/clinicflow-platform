@@ -543,7 +543,7 @@ function UsersPage() {
                       <SelectContent>
                         {clinics.map((clinic) => (
                           <SelectItem key={clinic.id} value={clinic.id}>
-                            {clinic.name} ({clinic.id})
+                            {clinic.name} ({clinic.shortId || clinic.id})
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -876,7 +876,7 @@ function UsersPage() {
                     {clinic ? (
                       <div className="rounded-lg border bg-background p-2.5 space-y-1">
                         <div className="font-semibold text-sm text-foreground">{clinic.name}</div>
-                        <div className="font-mono text-[11px] text-primary">Clinic ID: {clinic.id}</div>
+                        <div className="font-mono text-[11px] text-primary">Clinic ID: {clinic.shortId || clinic.id}</div>
                         {clinic.city && (
                           <div className="text-muted-foreground">Location: {clinic.city}</div>
                         )}
