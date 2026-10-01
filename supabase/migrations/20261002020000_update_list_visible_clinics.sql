@@ -1,3 +1,5 @@
+drop function if exists public.list_visible_clinics();
+
 create or replace function public.list_visible_clinics()
 returns table (
   id uuid, name text, city text, doctors bigint, receptionists bigint, clinical_admins bigint, patients bigint,
