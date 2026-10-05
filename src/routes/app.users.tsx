@@ -44,9 +44,8 @@ function UsersPage() {
   const { user } = useAuth();
   const {
     staffMembers,
+    binStaffMembers,
     clinics,
-    doctors,
-    receptionists,
     inviteSuperAdmin,
     inviteClinicAdmin,
     createDoctor,
@@ -61,45 +60,18 @@ function UsersPage() {
   const allUsers = useMemo(() => {
     const map = new Map<string, StaffMember>();
     
-    // Add existing staff members
+    // Add active staff members
     staffMembers.forEach(m => map.set(m.id, m));
     
-    // Add doctors if missing
-    doctors?.forEach(d => {
-      if (!map.has(d.id)) {
-        map.set(d.id, {
-          id: d.id,
-          clinicId: d.clinicId,
-          name: d.name,
-          email: d.email,
-          phone: d.phone,
-          role: "doctor",
-          status: d.status as any,
-          employeeNumber: null,
-          deletedAt: undefined
-        });
+    // Add inactive/deleted/expired staff members
+    binStaffMembers.forEach(m => {
+      if (!map.has(m.id)) {
+        map.set(m.id, m);
       }
     });
 
-    // Add receptionists if missing
-    receptionists?.forEach(r => {
-      if (!map.has(r.id)) {
-        map.set(r.id, {
-          id: r.id,
-          clinicId: r.clinicId,
-          name: r.name,
-          email: r.email,
-          phone: r.phone,
-          role: "receptionist",
-          status: r.status as any,
-          employeeNumber: null,
-          deletedAt: undefined
-        });
-      }
-    });
-
-    return Array.from(map.values());
-  }, [staffMembers, doctors, receptionists]);
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [staffMembers, binStaffMembers]);
 
   useEffect(() => {
     let mounted = true;
