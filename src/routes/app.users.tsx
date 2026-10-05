@@ -63,9 +63,9 @@ function UsersPage() {
     // Add active staff members
     staffMembers.forEach(m => map.set(m.id, m));
     
-    // Add inactive/deleted/expired staff members
+    // Add inactive/expired staff members (excluding deleted ones)
     binStaffMembers.forEach(m => {
-      if (!map.has(m.id)) {
+      if (!m.deletedAt && !map.has(m.id)) {
         map.set(m.id, m);
       }
     });
