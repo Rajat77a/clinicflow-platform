@@ -747,7 +747,7 @@ function UsersPage() {
                         <span>{member.previousClinicName}</span>
                       </div>
                     ) : (
-                      <span className="italic text-muted-foreground text-xs">Not Assigned</span>
+                      <span className="italic text-muted-foreground text-xs">Unassigned</span>
                     )}
                   </TableCell>
                   <TableCell>
