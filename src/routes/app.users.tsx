@@ -45,6 +45,8 @@ function UsersPage() {
   const {
     staffMembers,
     clinics,
+    doctors,
+    receptionists,
     inviteSuperAdmin,
     inviteClinicAdmin,
     createDoctor,
@@ -55,6 +57,49 @@ function UsersPage() {
     resendStaffInvitation,
     refresh,
   } = useWorkspaceData();
+
+  const allUsers = useMemo(() => {
+    const map = new Map<string, StaffMember>();
+    
+    // Add existing staff members
+    staffMembers.forEach(m => map.set(m.id, m));
+    
+    // Add doctors if missing
+    doctors?.forEach(d => {
+      if (!map.has(d.id)) {
+        map.set(d.id, {
+          id: d.id,
+          clinicId: d.clinicId,
+          name: d.name,
+          email: d.email,
+          phone: d.phone,
+          role: "doctor",
+          status: d.status as any,
+          employeeNumber: null,
+          deletedAt: undefined
+        });
+      }
+    });
+
+    // Add receptionists if missing
+    receptionists?.forEach(r => {
+      if (!map.has(r.id)) {
+        map.set(r.id, {
+          id: r.id,
+          clinicId: r.clinicId,
+          name: r.name,
+          email: r.email,
+          phone: r.phone,
+          role: "receptionist",
+          status: r.status as any,
+          employeeNumber: null,
+          deletedAt: undefined
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [staffMembers, doctors, receptionists]);
 
   useEffect(() => {
     let mounted = true;
@@ -311,8 +356,8 @@ function UsersPage() {
   }, [user]);
 
   const deletableStaff = useMemo(
-    () => staffMembers.filter(canDeleteMember),
-    [staffMembers, canDeleteMember],
+    () => allUsers.filter(canDeleteMember),
+    [allUsers, canDeleteMember],
   );
 
   const allSelected =
@@ -683,7 +728,7 @@ function UsersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {staffMembers.map((member) => {
+            {allUsers.map((member) => {
               const assignedClinic = member.clinicId ? clinicMap.get(member.clinicId) : null;
               return (
                 <TableRow key={member.id} className="hover:bg-muted/30">
@@ -802,7 +847,7 @@ function UsersPage() {
                 </TableRow>
               );
             })}
-            {staffMembers.length === 0 && (
+            {allUsers.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
                   No staff memberships are visible for this account.
