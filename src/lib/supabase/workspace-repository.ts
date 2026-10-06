@@ -1437,7 +1437,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   }
 
   async softDeleteStaff(userId: string): Promise<void> {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
     if (!isUuid) return;
 
     const { error } = await this.client.rpc("soft_delete_staff_member", {
@@ -1463,7 +1463,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   }
 
   async restoreStaff(userId: string): Promise<void> {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
     if (!isUuid) return;
 
     const { error } = await this.client.rpc("restore_staff_member", {
@@ -1489,7 +1489,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   }
 
   async permanentlyDeleteStaff(userId: string): Promise<void> {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(userId);
     if (!isUuid) return;
 
     const { error } = await this.client.rpc("permanently_delete_staff_user", {
