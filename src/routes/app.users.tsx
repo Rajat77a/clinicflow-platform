@@ -17,6 +17,13 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export const Route = createFileRoute("/app/users")({ component: UsersPage });
 
+const TEST_EMAILS = [
+  "reception@clinicflow.test",
+  "clinic.admin@clinicflow.test",
+  "doctor@clinicflow.test",
+  "superadmin@clinicflow.test",
+];
+
 const roleLabels: Record<Role, string> = {
   super_admin: "Super Admin",
   clinic_admin: "Clinical Admin",
@@ -160,15 +167,18 @@ function UsersPage() {
 
   const clinicMap = useMemo(() => new Map(clinics.map((c) => [c.id, c])), [clinics]);
 
-  const canDeactivate = (member: StaffMember) => (
-    member.status !== "Inactive"
-    && member.id !== user?.userId
-    && member.role !== "super_admin"
-    && (
-      user?.role === "super_admin"
-      || (user?.role === "clinic_admin" && member.role !== "clinic_admin")
-    )
-  );
+  const canDeactivate = (member: StaffMember) => {
+    if (TEST_EMAILS.includes(member.email.toLowerCase())) return false;
+    return (
+      member.status !== "Inactive"
+      && member.id !== user?.userId
+      && member.role !== "super_admin"
+      && (
+        user?.role === "super_admin"
+        || (user?.role === "clinic_admin" && member.role !== "clinic_admin")
+      )
+    );
+  };
 
   const submitSuperAdmin = async () => {
     if (!superAdminForm.name.trim() || !superAdminForm.email.trim()) {
@@ -355,6 +365,7 @@ function UsersPage() {
   const canManageUsers = isSuperAdmin || user?.role === "clinic_admin";
 
   const canDeleteMember = useCallback((member: StaffMember) => {
+    if (TEST_EMAILS.includes(member.email.toLowerCase())) return false;
     if (member.id === user?.userId) return false;
     if (user?.role === "super_admin") return true;
     if (user?.role === "clinic_admin") {
