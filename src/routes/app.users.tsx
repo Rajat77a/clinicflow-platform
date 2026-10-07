@@ -226,53 +226,68 @@ function UsersPage() {
       return;
     }
 
-    setIsSending(true);
-    try {
-      if (inviteStaffForm.role === "doctor") {
-        await createDoctor({
-          name: inviteStaffForm.name.trim(),
-          email: inviteStaffForm.email.trim(),
-          phone: inviteStaffForm.phone.trim(),
-          specialty: inviteStaffForm.specialty.trim() || "General Medicine",
-          qualification: "MBBS",
-          medicalRegistrationNumber: `REG-${Math.floor(100000 + Math.random() * 900000)}`,
-          experienceYears: 5,
-          gender: "other",
-          consultationFee: 500,
-          workingHours: "9:00 AM - 5:00 PM",
-          notes: "",
-          hospitalId: inviteStaffForm.hospitalId,
-        });
-        toast.success(`Doctor ${inviteStaffForm.name.trim()} assigned to clinic and invited`);
-      } else if (inviteStaffForm.role === "receptionist") {
-        await createReceptionist({
-          name: inviteStaffForm.name.trim(),
-          email: inviteStaffForm.email.trim(),
-          phone: inviteStaffForm.phone.trim(),
-          shift: inviteStaffForm.shift.trim() || "Morning (9–5)",
-          hospitalId: inviteStaffForm.hospitalId,
-        });
-        toast.success(`Receptionist ${inviteStaffForm.name.trim()} assigned to clinic and invited`);
-      } else if (inviteStaffForm.role === "clinic_admin") {
-        await inviteClinicAdmin({
-          name: inviteStaffForm.name.trim(),
-          email: inviteStaffForm.email.trim(),
-          phone: inviteStaffForm.phone.trim(),
-          hospitalId: inviteStaffForm.hospitalId,
-        });
-        toast.success(`Clinical Admin ${inviteStaffForm.name.trim()} assigned to clinic and invited`);
-      } else if (inviteStaffForm.role === "super_admin") {
-        await inviteSuperAdmin({
-          name: inviteStaffForm.name.trim(),
-          email: inviteStaffForm.email.trim(),
-          phone: inviteStaffForm.phone.trim(),
-          tempPassword: generateTempPassword(),
-        });
-        toast.success(`Super Admin ${inviteStaffForm.name.trim()} invited`);
-      }
+          setIsSending(true);
+      try {
+        let res;
+        let roleTitle = "";
 
-      setInviteStaffDialogOpen(false);
-      setInviteStaffForm({
+        if (inviteStaffForm.role === "doctor") {
+          res = await createDoctor({
+            name: inviteStaffForm.name.trim(),
+            email: inviteStaffForm.email.trim(),
+            phone: inviteStaffForm.phone.trim(),
+            specialty: inviteStaffForm.specialty.trim() || "General Medicine",
+            qualification: "MBBS",
+            medicalRegistrationNumber: `REG-${Math.floor(100000 + Math.random() * 900000)}`,
+            experienceYears: 5,
+            gender: "other",
+            consultationFee: 500,
+            workingHours: "9:00 AM - 5:00 PM",
+            notes: "",
+            hospitalId: inviteStaffForm.hospitalId,
+          });
+          roleTitle = "Doctor";
+        } else if (inviteStaffForm.role === "receptionist") {
+          res = await createReceptionist({
+            name: inviteStaffForm.name.trim(),
+            email: inviteStaffForm.email.trim(),
+            phone: inviteStaffForm.phone.trim(),
+            shift: inviteStaffForm.shift.trim() || "Morning (9 AM - 5 PM)",
+            hospitalId: inviteStaffForm.hospitalId,
+          });
+          roleTitle = "Receptionist";
+        } else if (inviteStaffForm.role === "clinic_admin") {
+          res = await inviteClinicAdmin({
+            name: inviteStaffForm.name.trim(),
+            email: inviteStaffForm.email.trim(),
+            phone: inviteStaffForm.phone.trim(),
+            hospitalId: inviteStaffForm.hospitalId,
+          });
+          roleTitle = "Clinic Admin";
+        } else if (inviteStaffForm.role === "super_admin") {
+          res = await inviteSuperAdmin({
+            name: inviteStaffForm.name.trim(),
+            email: inviteStaffForm.email.trim(),
+            phone: inviteStaffForm.phone.trim(),
+            tempPassword: generateTempPassword(),
+          });
+          roleTitle = "Super Admin";
+        }
+
+        if (res) {
+          setCreatedStaffInfo({
+            roleTitle,
+            staffName: res.data.name,
+            staffEmail: res.data.email,
+            setupUrl: res.setupUrl,
+            emailSent: res.emailSent,
+            emailId: res.emailId,
+            emailError: res.emailError,
+          });
+        }
+
+        setInviteStaffDialogOpen(false);
+        setInviteStaffForm({
         role: "doctor",
         name: "",
         email: "",

@@ -886,206 +886,42 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     };
 
     let emailSent = false;
-    let emailId: string | undefined;
-    let emailError: string | undefined;
+      let emailId: string | undefined;
+      let emailError: string | undefined;
+      let membership: StaffMember | undefined;
 
-    try {
-      const emailResult = await sendInvitationEmail({
-        recipientEmail: input.email,
-        recipientName: input.name,
-        clinicName,
-        clinicId: hospitalId || undefined,
-        clinicAddress,
-        clinicCity,
-        clinicPhone,
-        clinicEmail,
-        setupUrl,
-        roleTitle: roleTitles[roleCode] ?? "Staff Member",
-        expiresInHours: 24,
-      });
-      emailSent = emailResult.success;
-      emailId = emailResult.emailId;
-    } catch (err) {
-      emailError = err instanceof Error ? err.message : "Failed to deliver email";
-      console.error("[Staff Invite] Email delivery failed:", emailError);
-    }
-
-    return { setupUrl, emailSent, emailId, emailError };
-  }
-
-  async createDoctor(input: DoctorInput) {
-    const { setupUrl } = await this.inviteStaff(input, "doctor", input.hospitalId);
-    let photoWarning: string | undefined;
-    if (input.photo) {
-      try {
-        if (!["image/jpeg", "image/png"].includes(input.photo.type) || input.photo.size > 5 * 1024 * 1024) {
-          throw new Error("Doctor photo must be a JPG or PNG up to 5 MB");
-        }
-        const hospitalId = input.hospitalId || (await this.client.from("hospitals").select("id").single()).data?.id;
-        if (!hospitalId) throw new Error("The active hospital could not be loaded");
-        const extension = input.photo.type === "image/png" ? "png" : "jpg";
-        const path = `${hospitalId}/pending/avatar.${extension}`;
-        const { error: uploadError } = await this.client.storage
-          .from("staff-avatars")
-          .upload(path, input.photo, { contentType: input.photo.type, upsert: true });
-        throwIfError(uploadError);
-      } catch {
-        photoWarning = "The invitation was sent, but the doctor photo could not be saved";
-      }
-    }
-    const resolvedClinicId = input.hospitalId || ((await this.client.from("hospitals").select("id").single()).data?.id ?? "");
-    const doctor: Doctor = {
-      id: `pending-${randomKey().slice(0, 8)}`,
-      clinicId: resolvedClinicId,
-      name: input.name,
-      specialty: input.specialty,
-      email: input.email,
-      phone: input.phone,
-      gender: input.gender || undefined,
-      qualification: input.qualification || undefined,
-      medicalRegistrationNumber: input.medicalRegistrationNumber || undefined,
-      experienceYears: input.experienceYears || undefined,
-      consultationFee: input.consultationFee || undefined,
-      workingHours: input.workingHours || undefined,
-      notes: input.notes || undefined,
-      avatarPath: undefined,
-      avatarUrl: undefined,
-      photoWarning,
-      patients: 0,
-      status: "Invited",
-    };
-    return doctor;
-  }
-
-  async createReceptionist(input: ReceptionistInput) {
-    const { setupUrl } = await this.inviteStaff(input, "receptionist", input.hospitalId);
-    const resolvedClinicId = input.hospitalId || ((await this.client.from("hospitals").select("id").single()).data?.id ?? "");
-    const receptionist: Receptionist = {
-      id: `pending-${randomKey().slice(0, 8)}`,
-      clinicId: resolvedClinicId,
-      name: input.name,
-      email: input.email,
-      phone: input.phone,
-      shift: input.shift,
-      status: "Invited",
-    };
-    return receptionist;
-  }
-
-  async inviteClinicAdmin(input: ClinicAdminInput) {
-    let hospitalId = input.hospitalId;
-    if (!hospitalId) {
-      const { data: hospital } = await this.client.from("hospitals").select("id").single();
-      hospitalId = hospital?.id ?? "";
-    }
-    if (!hospitalId) throw new Error("A hospital must be selected");
-    await this.inviteStaff(
-      {
-        email: input.email,
-        name: input.name,
-        phone: input.phone,
-      },
-      "clinic_admin",
-      hospitalId,
-    );
-    const membership: StaffMember = {
-      id: `pending-${randomKey().slice(0, 8)}`,
-      clinicId: hospitalId,
-      name: input.name,
-      email: input.email,
-      phone: input.phone,
-      role: "clinic_admin",
-      status: "Invited",
-    };
-    return membership;
-  }
-
-  async inviteSuperAdmin(input: { name: string; email: string; phone: string; tempPassword: string }) {
-    const { setupUrl } = await this.inviteStaff(
-      { name: input.name, email: input.email, phone: input.phone },
-      "super_admin",
-    );
-    const membership: StaffMember = {
-      id: `pending-${randomKey().slice(0, 8)}`,
-      clinicId: null,
-      name: input.name,
-      email: input.email,
-      phone: input.phone,
-      role: "super_admin",
-      status: "Invited",
-    };
-    return membership;
-  }
-
-  async createClinic(input: ClinicInput) {
-    const configuration = {
-      city: input.city,
-      email: input.email ?? null,
-      phone: input.phone ?? null,
-      address: input.address ?? null,
-      logo_name: input.logoName ?? null,
-      admin_name: input.adminName ?? null,
-      admin_email: input.adminEmail ?? null,
-      admin_phone: input.adminPhone ?? null,
-    };
-
-    const { data, error } = await this.client.rpc("create_platform_clinic", {
-      p_name: input.name,
-      p_configuration: configuration,
-      p_trial_days: 14,
-    });
-    throwIfError(error);
-    if (!data) throw new Error("Failed to create clinic");
-    const hospitalId = data as string;
-
-    if (input.logo && hospitalId) {
-      try {
-        if (["image/jpeg", "image/png", "image/webp"].includes(input.logo.type) && input.logo.size <= 2 * 1024 * 1024) {
-          const extension = input.logo.type === "image/png" ? "png" : input.logo.type === "image/webp" ? "webp" : "jpg";
-          const logoPath = `${hospitalId}/logo.${extension}`;
-          const { error: uploadError } = await this.client.storage
-            .from("clinic-branding")
-            .upload(logoPath, input.logo, { contentType: input.logo.type, upsert: true });
-          if (!uploadError) {
-            await this.client.rpc("update_platform_clinic", {
-              p_hospital_id: hospitalId,
-              p_name: input.name,
-              p_configuration: { ...configuration, logo_path: logoPath, logo_name: input.logo.name },
-            });
-          }
-        }
-      } catch (err) {
-        console.warn("Logo upload skipped:", err);
-      }
-    }
-
-    let setupUrl: string | undefined;
-    let emailSent = false;
-    let emailId: string | undefined;
-    let emailError: string | undefined;
-
-    if (input.adminName && input.adminEmail && hospitalId) {
-      try {
-        const inviteResult = await this.inviteStaff(
-          {
-            email: input.adminEmail,
+      if (input.adminName && input.adminEmail && hospitalId) {
+        try {
+          const inviteResult = await this.inviteStaff(
+            {
+              email: input.adminEmail,
+              name: input.adminName,
+              phone: input.adminPhone ?? "",
+            },
+            "clinic_admin",
+            hospitalId,
+          );
+          setupUrl = inviteResult.setupUrl;
+          emailSent = inviteResult.emailSent ?? false;
+          emailId = inviteResult.emailId;
+          emailError = inviteResult.emailError;
+          
+          membership = {
+            id: `pending-${randomKey().slice(0, 8)}`,
+            clinicId: hospitalId,
             name: input.adminName,
+            email: input.adminEmail,
             phone: input.adminPhone ?? "",
-          },
-          "clinic_admin",
-          hospitalId,
-        );
-        setupUrl = inviteResult.setupUrl;
-        emailSent = inviteResult.emailSent ?? false;
-        emailId = inviteResult.emailId;
-        emailError = inviteResult.emailError;
-      } catch (inviteError) {
-        emailError = inviteError instanceof Error ? inviteError.message : "Clinical admin invitation error";
-        console.error("Clinical admin invitation error:", inviteError);
+            role: "clinic_admin",
+            status: "Invited",
+          };
+        } catch (inviteError) {
+          emailError = inviteError instanceof Error ? inviteError.message : "Clinical admin invitation error";
+          console.error("Clinical admin invitation error:", inviteError);
+        }
       }
-    }
 
-    return { id: hospitalId, setupUrl, emailSent, emailId, emailError };
+      return { id: hospitalId, setupUrl, emailSent, emailId, emailError, membership };
   }
 
   async updateClinic(input: ClinicInput) {
@@ -1519,4 +1355,5 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     }
   }
 }
+
 
