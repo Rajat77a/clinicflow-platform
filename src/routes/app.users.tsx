@@ -188,7 +188,7 @@ function UsersPage() {
     setIsSending(true);
     try {
       const tempPassword = generateTempPassword();
-      await inviteSuperAdmin({
+      const res = await inviteSuperAdmin({
         name: superAdminForm.name.trim(),
         email: superAdminForm.email.trim(),
         phone: superAdminForm.phone.trim(),
@@ -197,6 +197,18 @@ function UsersPage() {
       toast.success(`Super Admin added · invitation sent to ${superAdminForm.email.trim()}`);
       setSuperAdminDialogOpen(false);
       setSuperAdminForm({ name: "", email: "", phone: "" });
+      
+      if (res) {
+        setCreatedStaffInfo({
+          roleTitle: "Super Admin",
+          staffName: res.data.name,
+          staffEmail: res.data.email,
+          setupUrl: res.setupUrl,
+          emailSent: res.emailSent,
+          emailId: res.emailId,
+          emailError: res.emailError,
+        });
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to add the super admin");
     } finally {
@@ -219,7 +231,7 @@ function UsersPage() {
     }
     setIsSending(true);
     try {
-      await inviteClinicAdmin({
+      const res = await inviteClinicAdmin({
         name: clinicAdminForm.name.trim(),
         email: clinicAdminForm.email.trim(),
         phone: clinicAdminForm.phone.trim(),
@@ -228,6 +240,18 @@ function UsersPage() {
       toast.success(`Clinic Admin invited · 24-hour setup link sent to ${clinicAdminForm.email.trim()}`);
       setClinicAdminDialogOpen(false);
       setClinicAdminForm({ name: "", email: "", phone: "", hospitalId: "" });
+      
+      if (res) {
+        setCreatedStaffInfo({
+          roleTitle: "Clinic Admin",
+          staffName: res.data.name,
+          staffEmail: res.data.email,
+          setupUrl: res.setupUrl,
+          emailSent: res.emailSent,
+          emailId: res.emailId,
+          emailError: res.emailError,
+        });
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to invite the clinic admin");
     } finally {
