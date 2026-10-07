@@ -728,10 +728,10 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   }
 
   private async inviteStaff(
-    input: DoctorInput | ReceptionistInput | ClinicAdminInput,
+    input: DoctorInput | ReceptionistInput | ClinicAdminInput | { name: string; email: string; phone: string; tempPassword?: string },
     roleCode: "clinic_admin" | "doctor" | "receptionist" | "super_admin",
     targetHospitalId?: string,
-  ): Promise<{ setupUrl: string; emailSent?: boolean; emailId?: string; emailError?: string }> {
+  ): Promise<{ setupUrl: string; emailSent?: boolean; emailId?: string; emailError?: string; membership?: StaffMember }> {
     let hospitalId = targetHospitalId;
     if (!hospitalId) {
       const { data: hospital } = await this.client.from("hospitals").select("id").single();
@@ -886,42 +886,147 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     };
 
     let emailSent = false;
-      let emailId: string | undefined;
-      let emailError: string | undefined;
-      let membership: StaffMember | undefined;
+    let emailId: string | undefined;
+    let emailError: string | undefined;
+    let membership: StaffMember | undefined;
 
-      if (input.adminName && input.adminEmail && hospitalId) {
-        try {
-          const inviteResult = await this.inviteStaff(
-            {
-              email: input.adminEmail,
-              name: input.adminName,
-              phone: input.adminPhone ?? "",
-            },
-            "clinic_admin",
-            hospitalId,
-          );
-          setupUrl = inviteResult.setupUrl;
-          emailSent = inviteResult.emailSent ?? false;
-          emailId = inviteResult.emailId;
-          emailError = inviteResult.emailError;
-          
-          membership = {
-            id: `pending-${randomKey().slice(0, 8)}`,
-            clinicId: hospitalId,
-            name: input.adminName,
+    return { setupUrl, emailSent, emailId, emailError, membership };
+  }
+
+  async createClinic(input: ClinicInput): Promise<{ id: string; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string; membership?: StaffMember }> {
+    const { error: insertError, data: insertData } = await this.client.rpc("create_platform_clinic", {
+      p_name: input.name,
+      p_configuration: {
+        city: input.city,
+        email: input.email ?? null,
+        phone: input.phone ?? null,
+        address: input.address ?? null,
+        logo_name: input.logoName ?? null,
+        admin_name: input.adminName ?? null,
+        admin_email: input.adminEmail ?? null,
+        admin_phone: input.adminPhone ?? null,
+      },
+    });
+
+    if (insertError) {
+      throw new Error(`Failed to create clinic: ${insertError.message}`);
+    }
+
+    const hospitalId = typeof insertData === "string" ? insertData : (insertData as unknown as { id: string })?.id;
+    if (!hospitalId) {
+      throw new Error("Created clinic did not return an ID");
+    }
+
+    let setupUrl: string | undefined;
+    let emailSent = false;
+    let emailId: string | undefined;
+    let emailError: string | undefined;
+
+    let membership: StaffMember | undefined;
+
+    if (input.adminName && input.adminEmail) {
+      try {
+        const inviteResult = await this.inviteStaff(
+          {
             email: input.adminEmail,
+            name: input.adminName,
             phone: input.adminPhone ?? "",
-            role: "clinic_admin",
-            status: "Invited",
-          };
-        } catch (inviteError) {
-          emailError = inviteError instanceof Error ? inviteError.message : "Clinical admin invitation error";
-          console.error("Clinical admin invitation error:", inviteError);
-        }
+          },
+          "clinic_admin",
+          hospitalId,
+        );
+        setupUrl = inviteResult.setupUrl;
+        emailSent = inviteResult.emailSent ?? false;
+        emailId = inviteResult.emailId;
+        emailError = inviteResult.emailError;
+        membership = inviteResult.membership;
+      } catch (inviteError) {
+        emailError = inviteError instanceof Error ? inviteError.message : "Clinical admin invitation error";
+        console.error("Clinical admin invitation error:", inviteError);
       }
+    }
 
-      return { id: hospitalId, setupUrl, emailSent, emailId, emailError, membership };
+    return { id: hospitalId, setupUrl, emailSent, emailId, emailError, membership };
+  }
+
+  async createDoctor(input: DoctorInput): Promise<{ data: Doctor; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }> {
+    if (!input.hospitalId) throw new Error("Hospital ID is required for a doctor");
+    const res = await this.inviteStaff(input, "doctor", input.hospitalId);
+    return {
+      data: {
+        id: res.membership?.id ?? "temp-doc",
+        clinicId: input.hospitalId,
+        name: input.name,
+        email: input.email,
+        phone: input.phone,
+        role: "doctor",
+        status: "Invited",
+        specialty: input.specialty,
+      } as unknown as Doctor,
+      setupUrl: res.setupUrl,
+      emailSent: res.emailSent,
+      emailId: res.emailId,
+      emailError: res.emailError,
+    };
+  }
+
+  async createReceptionist(input: ReceptionistInput): Promise<{ data: Receptionist; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }> {
+    if (!input.hospitalId) throw new Error("Hospital ID is required for a receptionist");
+    const res = await this.inviteStaff(input, "receptionist", input.hospitalId);
+    return {
+      data: {
+        id: res.membership?.id ?? "temp-rec",
+        clinicId: input.hospitalId,
+        name: input.name,
+        email: input.email,
+        phone: input.phone,
+        role: "receptionist",
+        status: "Invited",
+      } as unknown as Receptionist,
+      setupUrl: res.setupUrl,
+      emailSent: res.emailSent,
+      emailId: res.emailId,
+      emailError: res.emailError,
+    };
+  }
+
+  async inviteClinicAdmin(input: ClinicAdminInput): Promise<{ data: StaffMember; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }> {
+    if (!input.hospitalId) throw new Error("Hospital ID is required for clinic admin");
+    const res = await this.inviteStaff(input, "clinic_admin", input.hospitalId);
+    return {
+      data: {
+        id: res.membership?.id ?? "temp-ca",
+        clinicId: input.hospitalId,
+        name: input.name,
+        email: input.email,
+        phone: input.phone,
+        role: "clinic_admin",
+        status: "Invited",
+      } as unknown as StaffMember,
+      setupUrl: res.setupUrl,
+      emailSent: res.emailSent,
+      emailId: res.emailId,
+      emailError: res.emailError,
+    };
+  }
+
+  async inviteSuperAdmin(input: { name: string; email: string; phone: string; tempPassword?: string }): Promise<{ data: StaffMember; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }> {
+    const res = await this.inviteStaff(input, "super_admin");
+    return {
+      data: {
+        id: res.membership?.id ?? "temp-sa",
+        clinicId: null,
+        name: input.name,
+        email: input.email,
+        phone: input.phone,
+        role: "super_admin",
+        status: "Invited",
+      } as unknown as StaffMember,
+      setupUrl: res.setupUrl,
+      emailSent: res.emailSent,
+      emailId: res.emailId,
+      emailError: res.emailError,
+    };
   }
 
   async updateClinic(input: ClinicInput) {

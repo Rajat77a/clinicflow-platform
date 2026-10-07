@@ -59,9 +59,9 @@ export interface WorkspaceRepository {
   bulkPermanentlyDeleteClinics?(ids: string[]): Promise<void>;
   setClinicAccess(id: string, active: boolean): Promise<void>;
   extendSubscription(id: string, days: number, proofRef?: string): Promise<void>;
-  createDoctor(input: DoctorInput): Promise<Doctor>;
-  createReceptionist(input: ReceptionistInput): Promise<Receptionist>;
-  inviteClinicAdmin(input: ClinicAdminInput): Promise<StaffMember>;
+  createDoctor(input: DoctorInput): Promise<{ data: Doctor; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }>;
+  createReceptionist(input: ReceptionistInput): Promise<{ data: Receptionist; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }>;
+  inviteClinicAdmin(input: ClinicAdminInput): Promise<{ data: StaffMember; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }>;
   createPatient(input: PatientInput): Promise<Patient>;
   createAppointment(input: AppointmentInput): Promise<Appointment>;
   updateAppointment(appointment: Appointment): Promise<Appointment>;
@@ -69,7 +69,7 @@ export interface WorkspaceRepository {
   saveLabReports(reports: Omit<LabReport, "clinicId">[]): Promise<LabReport[]>;
   createBill(input: BillInput): Promise<Bill>;
   updateBill(bill: Bill): Promise<Bill>;
-  inviteSuperAdmin(input: { name: string; email: string; phone: string; tempPassword: string }): Promise<StaffMember>;
+  inviteSuperAdmin(input: { name: string; email: string; phone: string; tempPassword?: string }): Promise<{ data: StaffMember; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }>;
   deactivateStaff(userId: string, reason: string): Promise<void>;
   softDeleteStaff?(userId: string): Promise<void>;
   bulkSoftDeleteStaff?(userIds: string[]): Promise<void>;
