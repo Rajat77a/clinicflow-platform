@@ -437,7 +437,7 @@ function UsersPage() {
                   Add / Invite User
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-md">
+              <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Invite User & Assign Clinic</DialogTitle>
                   <DialogDescription>
