@@ -69,7 +69,7 @@ begin
   end if;
 
   -- Generate cryptographically random token (64 hex characters)
-  v_token := encode(gen_random_bytes(32), 'hex');
+  v_token := encode(extensions.gen_random_bytes(32), 'hex');
 
   if p_hospital_id is not null then
     select name, configuration

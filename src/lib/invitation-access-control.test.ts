@@ -71,7 +71,7 @@ test("migration defines persistent user soft delete, permanent delete, and resto
   // Soft delete deactivates membership and bans auth user
   assert.match(migrationSource, /banned_until = '3000-01-01 00:00:00\+00'::timestamptz/);
   // Permanent delete scrambles password
-  assert.match(migrationSource, /encrypted_password = 'DELETED_' \|\| encode\(gen_random_bytes\(32\), 'hex'\)/);
+  assert.match(migrationSource, /encrypted_password = 'DELETED_' \|\| encode\(extensions\.gen_random_bytes\(32\), 'hex'\)/);
 });
 
 test("migration hardens RLS policies for Super Admin global access and Clinical Admin hospital isolation", () => {

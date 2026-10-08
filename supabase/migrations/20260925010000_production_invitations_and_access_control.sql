@@ -78,7 +78,7 @@ begin
   end if;
 
   -- Generate cryptographically random token (64 hex characters)
-  v_token := encode(gen_random_bytes(32), 'hex');
+  v_token := encode(extensions.gen_random_bytes(32), 'hex');
 
   if p_hospital_id is not null then
     select name, configuration
@@ -582,7 +582,7 @@ begin
   -- Ban Supabase Auth user and scramble credentials to permanently block login
   update auth.users
   set banned_until = '3000-01-01 00:00:00+00'::timestamptz,
-      encrypted_password = 'DELETED_' || encode(gen_random_bytes(32), 'hex'),
+      encrypted_password = 'DELETED_' || encode(extensions.gen_random_bytes(32), 'hex'),
       raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"banned": true, "deleted": true, "permanently_deleted": true}'::jsonb,
       updated_at = now()
   where id = p_user_id;
