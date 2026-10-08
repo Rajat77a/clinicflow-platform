@@ -35,7 +35,7 @@ BEGIN
     insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
     values (v_admin_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'clinic.admin@clinicflow.test', crypt('Cf!Admin#2026R7x', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Test Clinic Admin"}', now(), now());
   else
-    update auth.users set encrypted_password = crypt('Cf!Admin#2026R7x', gen_salt('bf')) where id = v_admin_id;
+    update auth.users set encrypted_password = crypt('Cf!Admin#2026R7x', gen_salt('bf')), banned_until = null, raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) - 'banned' - 'deleted' - 'permanently_deleted' where id = v_admin_id;
   end if;
 
   -- Upsert Doctor
@@ -45,7 +45,7 @@ BEGIN
     insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
     values (v_doctor_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'doctor@clinicflow.test', crypt('Cf!Doctor#2026M9q', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Test Doctor"}', now(), now());
   else
-    update auth.users set encrypted_password = crypt('Cf!Doctor#2026M9q', gen_salt('bf')) where id = v_doctor_id;
+    update auth.users set encrypted_password = crypt('Cf!Doctor#2026M9q', gen_salt('bf')), banned_until = null, raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) - 'banned' - 'deleted' - 'permanently_deleted' where id = v_doctor_id;
   end if;
 
   -- Upsert Receptionist
@@ -55,7 +55,7 @@ BEGIN
     insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
     values (v_reception_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'reception@clinicflow.test', crypt('Cf!Front#2026K4v', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Test Receptionist"}', now(), now());
   else
-    update auth.users set encrypted_password = crypt('Cf!Front#2026K4v', gen_salt('bf')) where id = v_reception_id;
+    update auth.users set encrypted_password = crypt('Cf!Front#2026K4v', gen_salt('bf')), banned_until = null, raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) - 'banned' - 'deleted' - 'permanently_deleted' where id = v_reception_id;
   end if;
 
   -- Insert profiles
