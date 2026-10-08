@@ -59,7 +59,7 @@ BEGIN
   end if;
 
   -- Insert profiles
-  insert into public.profiles (id, email, full_name, phone) values
+  insert into public.profiles (id, email, display_name, phone) values
     (v_admin_id, 'clinic.admin@clinicflow.test', 'Test Clinic Admin', '+1234567890'),
     (v_doctor_id, 'doctor@clinicflow.test', 'Test Doctor', '+1234567891'),
     (v_reception_id, 'reception@clinicflow.test', 'Test Receptionist', '+1234567892')
