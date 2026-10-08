@@ -80,11 +80,6 @@ function UsersPage() {
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [staffMembers, binStaffMembers]);
 
-  const displayedUsers = useMemo(() => {
-    if (roleFilter === "all") return allUsers;
-    return allUsers.filter((u) => u.role === roleFilter);
-  }, [allUsers, roleFilter]);
-
   useEffect(() => {
     let mounted = true;
     const supabase = getSupabaseBrowserClient();
@@ -124,6 +119,11 @@ function UsersPage() {
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [roleFilter, setRoleFilter] = useState<Role | "all">("all");
+
+  const displayedUsers = useMemo(() => {
+    if (roleFilter === "all") return allUsers;
+    return allUsers.filter((u) => u.role === roleFilter);
+  }, [allUsers, roleFilter]);
 
   const [createdStaffInfo, setCreatedStaffInfo] = useState<{
     roleTitle: string;
