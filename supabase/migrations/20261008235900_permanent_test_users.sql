@@ -1,48 +1,78 @@
--- 1. Create a hospital for testing
-insert into public.hospitals (id, name, legal_name, slug, timezone, currency, locale)
-values (
-  '00000000-0000-0000-0000-000000000001',
-  'ClinicFlow Test Hospital',
-  'ClinicFlow Test Hospital',
-  'clinicflow-test-hospital',
-  'Asia/Kolkata',
-  'INR',
-  'en-IN'
-)
-on conflict (slug) do nothing;
+DO $$
+DECLARE
+  v_hospital_id uuid := '00000000-0000-0000-0000-000000000001';
+  v_facility_id uuid := '00000000-0000-0000-0000-000000000002';
+  v_admin_id uuid;
+  v_doctor_id uuid;
+  v_reception_id uuid;
+BEGIN
+  -- 1. Create a hospital for testing
+  insert into public.hospitals (id, name, legal_name, slug, timezone, currency, locale)
+  values (
+    v_hospital_id,
+    'ClinicFlow Test Hospital',
+    'ClinicFlow Test Hospital',
+    'clinicflow-test-hospital',
+    'Asia/Kolkata',
+    'INR',
+    'en-IN'
+  )
+  on conflict (slug) do nothing;
 
-insert into public.facilities (id, hospital_id, code, name)
-values (
-  '00000000-0000-0000-0000-000000000002',
-  '00000000-0000-0000-0000-000000000001',
-  'TEST_MAIN',
-  'Main Test Facility'
-)
-on conflict (hospital_id, code) do nothing;
+  insert into public.facilities (id, hospital_id, code, name)
+  values (
+    v_facility_id,
+    v_hospital_id,
+    'TEST_MAIN',
+    'Main Test Facility'
+  )
+  on conflict (hospital_id, code) do nothing;
 
--- 2. Create the users in auth.users
-insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, recovery_sent_at, last_sign_in_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at, confirmation_token, email_change, email_change_token_new, recovery_token)
-values 
-  ('11111111-1111-1111-1111-111111111111', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'clinic.admin@clinicflow.test', crypt('Cf!Admin#2026R7x', gen_salt('bf')), now(), now(), now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Test Clinic Admin"}', now(), now(), '', '', '', ''),
-  ('22222222-2222-2222-2222-222222222222', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'doctor@clinicflow.test', crypt('Cf!Doctor#2026M9q', gen_salt('bf')), now(), now(), now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Test Doctor"}', now(), now(), '', '', '', ''),
-  ('33333333-3333-3333-3333-333333333333', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'reception@clinicflow.test', crypt('Cf!Front#2026K4v', gen_salt('bf')), now(), now(), now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Test Receptionist"}', now(), now(), '', '', '', '')
-on conflict (id) do nothing;
+  -- Upsert Clinic Admin
+  select id into v_admin_id from auth.users where email = 'clinic.admin@clinicflow.test';
+  if v_admin_id is null then
+    v_admin_id := gen_random_uuid();
+    insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+    values (v_admin_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'clinic.admin@clinicflow.test', crypt('Cf!Admin#2026R7x', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Test Clinic Admin"}', now(), now());
+  else
+    update auth.users set encrypted_password = crypt('Cf!Admin#2026R7x', gen_salt('bf')), banned_until = null, raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) - 'banned' - 'deleted' - 'permanently_deleted' where id = v_admin_id;
+  end if;
 
--- 3. Create profiles
-insert into public.profiles (id, email, full_name, phone)
-values
-  ('11111111-1111-1111-1111-111111111111', 'clinic.admin@clinicflow.test', 'Test Clinic Admin', '+1234567890'),
-  ('22222222-2222-2222-2222-222222222222', 'doctor@clinicflow.test', 'Test Doctor', '+1234567891'),
-  ('33333333-3333-3333-3333-333333333333', 'reception@clinicflow.test', 'Test Receptionist', '+1234567892')
-on conflict (id) do nothing;
+  -- Upsert Doctor
+  select id into v_doctor_id from auth.users where email = 'doctor@clinicflow.test';
+  if v_doctor_id is null then
+    v_doctor_id := gen_random_uuid();
+    insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+    values (v_doctor_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'doctor@clinicflow.test', crypt('Cf!Doctor#2026M9q', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Test Doctor"}', now(), now());
+  else
+    update auth.users set encrypted_password = crypt('Cf!Doctor#2026M9q', gen_salt('bf')), banned_until = null, raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) - 'banned' - 'deleted' - 'permanently_deleted' where id = v_doctor_id;
+  end if;
 
--- 4. Create staff memberships
-insert into public.staff_memberships (user_id, hospital_id, facility_id, role_code, active, status)
-values
-  ('11111111-1111-1111-1111-111111111111', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', 'clinic_admin', true, 'Active'),
-  ('22222222-2222-2222-2222-222222222222', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', 'doctor', true, 'Active'),
-  ('33333333-3333-3333-3333-333333333333', '00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000002', 'receptionist', true, 'Active')
-on conflict (user_id) do nothing;
+  -- Upsert Receptionist
+  select id into v_reception_id from auth.users where email = 'reception@clinicflow.test';
+  if v_reception_id is null then
+    v_reception_id := gen_random_uuid();
+    insert into auth.users (id, instance_id, aud, role, email, encrypted_password, email_confirmed_at, raw_app_meta_data, raw_user_meta_data, created_at, updated_at)
+    values (v_reception_id, '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'reception@clinicflow.test', crypt('Cf!Front#2026K4v', gen_salt('bf')), now(), '{"provider":"email","providers":["email"]}', '{"full_name":"Test Receptionist"}', now(), now());
+  else
+    update auth.users set encrypted_password = crypt('Cf!Front#2026K4v', gen_salt('bf')), banned_until = null, raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) - 'banned' - 'deleted' - 'permanently_deleted' where id = v_reception_id;
+  end if;
+
+  -- Insert profiles
+  insert into public.profiles (id, email, display_name, phone) values
+    (v_admin_id, 'clinic.admin@clinicflow.test', 'Test Clinic Admin', '+1234567890'),
+    (v_doctor_id, 'doctor@clinicflow.test', 'Test Doctor', '+1234567891'),
+    (v_reception_id, 'reception@clinicflow.test', 'Test Receptionist', '+1234567892')
+  on conflict (id) do update set email = EXCLUDED.email;
+
+  -- Insert staff memberships
+  insert into public.staff_memberships (user_id, hospital_id, facility_id, role_code, active, status) values
+    (v_admin_id, v_hospital_id, v_facility_id, 'clinic_admin', true, 'Active'),
+    (v_doctor_id, v_hospital_id, v_facility_id, 'doctor', true, 'Active'),
+    (v_reception_id, v_hospital_id, v_facility_id, 'receptionist', true, 'Active')
+  on conflict (user_id) do update set role_code = EXCLUDED.role_code;
+  
+END $$;
 
 -- 5. Modify deletion RPCs to protect these users
 create or replace function public.soft_delete_staff_member(p_user_id uuid)

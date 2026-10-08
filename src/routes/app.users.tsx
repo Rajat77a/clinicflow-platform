@@ -80,6 +80,11 @@ function UsersPage() {
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
   }, [staffMembers, binStaffMembers]);
 
+  const displayedUsers = useMemo(() => {
+    if (roleFilter === "all") return allUsers;
+    return allUsers.filter((u) => u.role === roleFilter);
+  }, [allUsers, roleFilter]);
+
   useEffect(() => {
     let mounted = true;
     const supabase = getSupabaseBrowserClient();
@@ -118,6 +123,7 @@ function UsersPage() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [roleFilter, setRoleFilter] = useState<Role | "all">("all");
 
   const [createdStaffInfo, setCreatedStaffInfo] = useState<{
     roleTitle: string;
@@ -799,6 +805,21 @@ function UsersPage() {
         ) : undefined}
       />
 
+      <div className="flex justify-end mb-4">
+        <Select value={roleFilter} onValueChange={(v: any) => setRoleFilter(v)}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filter by role" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Roles</SelectItem>
+            <SelectItem value="super_admin">Super Admin</SelectItem>
+            <SelectItem value="clinic_admin">Clinical Admin</SelectItem>
+            <SelectItem value="doctor">Doctor</SelectItem>
+            <SelectItem value="receptionist">Receptionist</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Bulk Selection Toolbar */}
       {canManageUsers && selectedIds.size > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm shadow-soft">
@@ -854,7 +875,7 @@ function UsersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {allUsers.map((member) => {
+            {displayedUsers.map((member) => {
               const assignedClinic = member.clinicId ? clinicMap.get(member.clinicId) : null;
               return (
                 <TableRow key={member.id} className="hover:bg-muted/30">
