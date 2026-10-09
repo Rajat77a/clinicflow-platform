@@ -71,6 +71,7 @@ function SetupPage() {
   const [showPw2, setShowPw2] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [isActivated, setIsActivated] = useState(false);
+  const [userExists, setUserExists] = useState(false);
 
   useEffect(() => {
     let rawToken = searchParams.token || "";
