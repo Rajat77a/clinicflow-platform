@@ -255,7 +255,7 @@ begin
   if not private.is_platform_admin() then
     raise exception 'Platform administrator permission is required' using errcode = '42501';
   end if;
-  if p_days not between 1 and 3650 or char_length(coalesce(p_proof_ref, '')) > 200 then
+  if p_days = 0 or p_days not between -3650 and 3650 or char_length(coalesce(p_proof_ref, '')) > 200 then
     raise exception 'Invalid subscription extension' using errcode = '22023';
   end if;
   select expires_at into old_expiry from public.hospital_subscriptions

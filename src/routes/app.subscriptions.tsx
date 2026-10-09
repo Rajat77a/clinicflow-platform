@@ -60,7 +60,7 @@ function SubTable({ rows, onExtend }: { rows: SubscriptionRow[]; onExtend: (id: 
                     disabled={saving === s.id}
                     onClick={async () => {
                       const days = Number(drafts[s.id]);
-                      if (!Number.isFinite(days) || days <= 0) return toast.error("Enter number of days");
+                      if (!Number.isFinite(days) || days === 0) return toast.error("Enter a valid number of days (positive or negative)");
                       setSaving(s.id);
                       try {
                         await onExtend(s.id, days, proofs[s.id]);
