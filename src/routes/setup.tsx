@@ -592,106 +592,78 @@ function SetupPage() {
               </div>
 
               <form onSubmit={submit} className="mt-6 space-y-4">
-                {isLocalToken && supabaseConfig.configured && (
-                  <div className="rounded-md bg-yellow-50 p-4 border border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-900/50">
-                    <p className="text-sm text-yellow-800 dark:text-yellow-200">
-                      <strong>Warning:</strong> You are using a local fallback token. Account activation may fail if the token was not properly saved to the database.
-                    </p>
-                  </div>
-                )}
-                <div className="space-y-2">
-                  <Label htmlFor="pw">Create Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="pw"
-                      type={showPw ? "text" : "password"}
-                      value={pw}
-                      onChange={(e) => setPw(e.target.value)}
-                      placeholder={`At least 8 characters`}
-                      className="h-11 rounded-xl pr-11"
-                      autoComplete="new-password"
-                      autoFocus
-                      required
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-1 top-1 h-9 w-9"
-                      onClick={() => setShowPw((v) => !v)}
-                      aria-label={showPw ? "Hide password" : "Show password"}
-                    >
-                      {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </Button>
-                  </div>
-                  {pw && (
-                    <div className="mt-2 space-y-2">
-                      <div className="flex gap-1 h-1.5">
-                        {[1, 2, 3, 4, 5].map((i) => (
-                          <div
-                            key={i}
-                            className={`flex-1 rounded-full ${
-                              strength >= i
-                                ? strength <= 2
-                                  ? "bg-red-500"
-                                  : strength <= 4
-                                    ? "bg-yellow-500"
-                                    : "bg-emerald-500"
-                                : "bg-muted"
-                            }`}
-                          />
-                        ))}
-                      </div>
-                      <ul className="text-xs text-muted-foreground space-y-1 pt-1">
-                        <li className={`flex items-center gap-1.5 ${pw.length >= 8 ? "text-emerald-600 dark:text-emerald-400" : ""}`}>
-                          <CheckCircle2 className="h-3 w-3" /> At least 8 characters
-                        </li>
-                        <li className={`flex items-center gap-1.5 ${/[A-Z]/.test(pw) && /[a-z]/.test(pw) ? "text-emerald-600 dark:text-emerald-400" : ""}`}>
-                          <CheckCircle2 className="h-3 w-3" /> Uppercase & lowercase letters
-                        </li>
-                        <li className={`flex items-center gap-1.5 ${/[0-9]/.test(pw) ? "text-emerald-600 dark:text-emerald-400" : ""}`}>
-                          <CheckCircle2 className="h-3 w-3" /> At least one number
-                        </li>
-                        <li className={`flex items-center gap-1.5 ${/[^A-Za-z0-9]/.test(pw) ? "text-emerald-600 dark:text-emerald-400" : ""}`}>
-                          <CheckCircle2 className="h-3 w-3" /> At least one special character
-                        </li>
-                      </ul>
+                  {userExists && (
+                    <div className="rounded-md bg-blue-50 p-4 border border-blue-200 dark:bg-blue-900/20 dark:border-blue-900/50">
+                      <p className="text-sm text-blue-800 dark:text-blue-200">
+                        <strong>You already have an account!</strong> Please enter your existing password to log in and accept this new role.
+                      </p>
                     </div>
                   )}
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="pw2">Confirm Password</Label>
-                  <div className="relative">
-                    <Input
-                      id="pw2"
-                      type={showPw2 ? "text" : "password"}
-                      value={pw2}
-                      onChange={(e) => setPw2(e.target.value)}
-                      placeholder="Re-enter password"
-                      className="h-11 rounded-xl pr-11"
-                      autoComplete="new-password"
-                      required
-                    />
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="absolute right-1 top-1 h-9 w-9"
-                      onClick={() => setShowPw2((v) => !v)}
-                      aria-label={showPw2 ? "Hide password" : "Show password"}
-                    >
-                      {showPw2 ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                    </Button>
+                  <div className="space-y-2">
+                    <Label htmlFor="pw">{userExists ? "Current Password" : "Create Password"}</Label>
+                    <div className="relative">
+                      <Input
+                        id="pw"
+                        type={showPw ? "text" : "password"}
+                        value={pw}
+                        onChange={(e) => setPw(e.target.value)}
+                        placeholder={userExists ? "Enter your password" : "At least 8 characters"}
+                        className="h-11 rounded-xl pr-11"
+                        autoComplete={userExists ? "current-password" : "new-password"}
+                        autoFocus
+                        required
+                      />
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon"
+                        className="absolute right-1 top-1 h-9 w-9 text-muted-foreground hover:text-foreground"
+                        onClick={() => setShowPw(!showPw)}
+                      >
+                        {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                      </Button>
+                    </div>
+                    {!userExists && passwordPolicyError(pw) && pw.length > 0 && (
+                      <p className="text-[11px] font-medium text-destructive">{passwordPolicyError(pw)}</p>
+                    )}
                   </div>
-                </div>
-
-                <Button
+  
+                  {!userExists && (
+                    <div className="space-y-2">
+                      <Label htmlFor="pw2">Confirm Password</Label>
+                      <div className="relative">
+                        <Input
+                          id="pw2"
+                          type={showPw2 ? "text" : "password"}
+                          value={pw2}
+                          onChange={(e) => setPw2(e.target.value)}
+                          placeholder="Re-enter password"
+                          className="h-11 rounded-xl pr-11"
+                          autoComplete="new-password"
+                          required={!userExists}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="absolute right-1 top-1 h-9 w-9"
+                          onClick={() => setShowPw2((v) => !v)}
+                          aria-label={showPw2 ? "Hide password" : "Show password"}
+                        >
+                          {showPw2 ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                        </Button>
+                      </div>
+                      {pw && pw2 && pw !== pw2 && (
+                        <p className="text-[11px] font-medium text-destructive">Passwords do not match</p>
+                      )}
+                    </div>
+                  )}
+                  <Button
                   type="submit"
                   disabled={submitting}
                   className="h-11 w-full rounded-xl text-sm font-semibold"
                 >
-                  {submitting ? "Activating account..." : "Create Password & Activate Account"}{" "}
+                  {submitting ? (userExists ? "Accepting..." : "Activating account...") : (userExists ? "Log In & Accept Role" : "Create Password & Activate Account")}{" "}
                   <ArrowRight className="ml-1.5 h-4 w-4" />
                 </Button>
               </form>
