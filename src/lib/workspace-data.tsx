@@ -84,10 +84,12 @@ const DEFAULT_CLINIC_ID = "CL-001";
 
 export type Clinic = {
   id: string;
+  shortId?: string;
   name: string;
   city: string;
   doctors: number;
   receptionists: number;
+  clinicalAdmins: number;
   patients: number;
   plan: string;
   status: string;
@@ -246,6 +248,7 @@ export type StaffMember = {
   tempPassword?: string;
   deletedAt?: string;
   deletedBy?: string;
+  employeeNumber?: string;
   previousClinicId?: string | null;
   previousClinicName?: string | null;
   emailSent?: boolean;
@@ -1186,10 +1189,10 @@ interface WorkspaceData {
   emptyTrash: () => Promise<void>;
   setClinicAccess: (id: string, active: boolean) => Promise<void>;
   extendSubscription: (id: string, days: number, proofRef?: string) => Promise<void>;
-  createDoctor: (input: DoctorInput) => Promise<Doctor>;
-  createReceptionist: (input: ReceptionistInput) => Promise<Receptionist>;
-  inviteSuperAdmin: (input: SuperAdminInput) => Promise<StaffMember>;
-  inviteClinicAdmin: (input: ClinicAdminInput) => Promise<StaffMember>;
+  createDoctor: (input: DoctorInput) => Promise<{ data: Doctor; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }>;
+  createReceptionist: (input: ReceptionistInput) => Promise<{ data: Receptionist; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }>;
+  inviteSuperAdmin: (input: SuperAdminInput) => Promise<{ data: StaffMember; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }>;
+  inviteClinicAdmin: (input: ClinicAdminInput) => Promise<{ data: StaffMember; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }>;
   deactivateStaff: (userId: string, reason: string) => Promise<void>;
   softDeleteStaff: (userId: string) => Promise<void>;
   bulkSoftDeleteStaff: (userIds: string[]) => Promise<void>;
@@ -1532,8 +1535,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         const actor = requireUser(user, "platform.clinics.manage");
         const origin = getAppBaseUrl();
         if (repository) {
-          const { id, setupUrl, emailSent, emailId, emailError } = await repository.createClinic(input);
-          await refresh().catch(() => undefined);
+          const { id, setupUrl, emailSent, emailId, emailError, membership } = await repository.createClinic(input);
+            if (membership) {
+              dispatch({ type: "staff.invited", value: membership, actor });
+            }
+            await refresh().catch(() => undefined);
           const finalSetupUrl = setupUrl || (supabaseConfig.configured && !supabaseConfig.demoMode ? "" : `${origin}/setup?token=TOK-${id}`);
           const saved = state.clinics.find((clinic) => clinic.id === id);
           if (saved) return {
@@ -1558,6 +1564,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             city: input.city,
             doctors: 0,
             receptionists: 0,
+            clinicalAdmins: 0,
             patients: 0,
             plan: "ClinicFlow",
             status: "Active",
@@ -1630,6 +1637,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           city: input.city,
           doctors: 0,
           receptionists: 0,
+          clinicalAdmins: 0,
           patients: 0,
           plan: "ClinicFlow",
           status: "Active",
@@ -1818,148 +1826,114 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         await refresh();
       },
       createDoctor: async (input) => {
-        const actor = requireUser(user, "people.manage");
-        const targetHospitalId = input.hospitalId || actor.clinicId || state.clinics[0]?.id;
-        if (!targetHospitalId) throw new Error("A clinic workspace is required");
-        if (repository) {
-          const doctor = await repository.createDoctor({ ...input, hospitalId: targetHospitalId });
-          await refresh();
-          return doctor;
-        }
-        const doctor: Doctor = {
-          ...input,
-          id: createId("DR"),
-          clinicId: targetHospitalId,
-          patients: 0,
-          status: "Active",
-          avatarPath: undefined,
-          avatarUrl: undefined,
-          photoWarning: undefined,
-        };
-        dispatch({ type: "doctor.created", value: doctor, actor });
-        const staff: StaffMember = {
-          id: doctor.id,
-          clinicId: targetHospitalId,
-          name: doctor.name,
-          email: doctor.email,
-          phone: doctor.phone,
-          role: "doctor",
-          status: "Active",
-        };
-        dispatch({ type: "staff.invited", value: staff, actor });
-        return doctor;
-      },
-      createReceptionist: async (input) => {
-        const actor = requireUser(user, "people.manage");
-        const targetHospitalId = input.hospitalId || actor.clinicId || state.clinics[0]?.id;
-        if (!targetHospitalId) throw new Error("A clinic workspace is required");
-        if (repository) {
-          const receptionist = await repository.createReceptionist({ ...input, hospitalId: targetHospitalId });
-          await refresh();
-          return receptionist;
-        }
-        const receptionist: Receptionist = {
-          ...input,
-          id: createId("RC"),
-          clinicId: targetHospitalId,
-          status: "Active",
-        };
-        dispatch({ type: "receptionist.created", value: receptionist, actor });
-        const staff: StaffMember = {
-          id: receptionist.id,
-          clinicId: targetHospitalId,
-          name: receptionist.name,
-          email: receptionist.email,
-          phone: receptionist.phone,
-          role: "receptionist",
-          status: "Active",
-        };
-        dispatch({ type: "staff.invited", value: staff, actor });
-        return receptionist;
-      },
-      inviteSuperAdmin: async (input) => {
-        const actor = requireUser(user, "platform.clinics.manage");
-        if (actor.role !== "super_admin") {
-          throw new Error("Only a super admin can add a super admin");
-        }
-        if (repository) {
-          const membership = await repository.inviteSuperAdmin(input);
-          await refresh();
-          return membership;
-        }
-        const membership: StaffMember = {
-          id: createId("SA"),
-          clinicId: null,
-          name: input.name,
-          email: input.email,
-          phone: input.phone,
-          role: "super_admin",
-          status: "Invited",
-          tempPassword: input.tempPassword,
-        };
-        dispatch({ type: "staff.invited", value: membership, actor });
-        return membership;
-      },
-      inviteClinicAdmin: async (input) => {
-        const actor = requireUser(user, "people.manage");
-        if (actor.role !== "super_admin") {
-          throw new Error("Only a super admin can invite a clinic admin");
-        }
-        const targetHospitalId = input.hospitalId || actor.clinicId;
-        if (!targetHospitalId) throw new Error("A hospital must be selected");
-        if (repository) {
-          const membership = await repository.inviteClinicAdmin({ ...input, hospitalId: targetHospitalId });
-          await refresh();
-          return membership;
-        }
-        const origin = getAppBaseUrl();
-        const token = (globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? Math.random().toString(36).slice(2)) +
-          (globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? Math.random().toString(36).slice(2));
-        const setupUrl = `${origin}/setup?token=${token}`;
-        const clinic = state.clinics.find((c) => c.id === targetHospitalId);
-
-        let emailSent = false;
-        let emailId: string | undefined;
-        let emailError: string | undefined;
-
-        try {
-          const sendResult = await sendInvitationEmail({
-            recipientEmail: input.email,
-            recipientName: input.name,
-            clinicName: clinic?.name || "ClinicFlow Health",
+          const actor = requireUser(user, "people.manage");
+          const targetHospitalId = input.hospitalId || actor.clinicId || state.clinics[0]?.id;
+          if (!targetHospitalId) throw new Error("A clinic workspace is required");
+          if (repository) {
+            const res = await repository.createDoctor({ ...input, hospitalId: targetHospitalId });
+            await refresh();
+            return res;
+          }
+          const doctor: Doctor = {
+            ...input,
+            id: createId("DR"),
             clinicId: targetHospitalId,
-            clinicAddress: clinic?.address,
-            clinicCity: clinic?.city,
-            clinicPhone: input.phone || clinic?.phone,
-            clinicEmail: clinic?.email,
-            setupUrl,
-            roleTitle: "Clinical Admin",
-            expiresInHours: 24,
-          });
-          emailSent = sendResult.success;
-          emailId = sendResult.emailId;
-        } catch (err) {
-          emailError = err instanceof Error ? err.message : "Failed to deliver email";
-          console.error("[Invite Clinic Admin] Failed to send email:", emailError);
-        }
-
-        const membership: StaffMember = {
-          id: createId("AD"),
-          clinicId: targetHospitalId,
-          name: input.name,
-          email: input.email,
-          phone: input.phone,
-          role: "clinic_admin",
-          status: "Invited",
-          tempPassword: input.tempPassword,
-          emailSent,
-          emailId,
-          emailError,
-        };
-        dispatch({ type: "staff.invited", value: membership, actor });
-        return membership;
-      },
-      deactivateStaff: async (userId, reason) => {
+            patients: 0,
+            status: "Active",
+            avatarPath: undefined,
+            avatarUrl: undefined,
+            photoWarning: undefined,
+          };
+          dispatch({ type: "doctor.created", value: doctor, actor });
+          const staff: StaffMember = {
+            id: doctor.id,
+            clinicId: targetHospitalId,
+            name: doctor.name,
+            email: doctor.email,
+            phone: doctor.phone,
+            role: "doctor",
+            status: "Active",
+          };
+          dispatch({ type: "staff.invited", value: staff, actor });
+          return { data: doctor };
+        },
+        createReceptionist: async (input) => {
+          const actor = requireUser(user, "people.manage");
+          const targetHospitalId = input.hospitalId || actor.clinicId || state.clinics[0]?.id;
+          if (!targetHospitalId) throw new Error("A clinic workspace is required");
+          if (repository) {
+            const res = await repository.createReceptionist({ ...input, hospitalId: targetHospitalId });
+            await refresh();
+            return res;
+          }
+          const receptionist: Receptionist = {
+            ...input,
+            id: createId("RC"),
+            clinicId: targetHospitalId,
+            status: "Active",
+          };
+          dispatch({ type: "receptionist.created", value: receptionist, actor });
+          const staff: StaffMember = {
+            id: receptionist.id,
+            clinicId: targetHospitalId,
+            name: receptionist.name,
+            email: receptionist.email,
+            phone: receptionist.phone,
+            role: "receptionist",
+            status: "Active",
+          };
+          dispatch({ type: "staff.invited", value: staff, actor });
+          return { data: receptionist };
+        },
+        inviteSuperAdmin: async (input) => {
+          const actor = requireUser(user, "platform.clinics.manage");
+          if (actor.role !== "super_admin") {
+            throw new Error("Only a super admin can add a super admin");
+          }
+          if (repository) {
+            const res = await repository.inviteSuperAdmin(input);
+            await refresh();
+            return res;
+          }
+          const membership: StaffMember = {
+            id: createId("SA"),
+            clinicId: null,
+            name: input.name,
+            email: input.email,
+            phone: input.phone,
+            role: "super_admin",
+            status: "Invited",
+            tempPassword: input.tempPassword,
+          };
+          dispatch({ type: "staff.invited", value: membership, actor });
+          return { data: membership };
+        },
+        inviteClinicAdmin: async (input) => {
+          const actor = requireUser(user, "people.manage");
+          if (actor.role !== "super_admin") {
+            throw new Error("Only a super admin can invite a clinic admin");
+          }
+          const targetHospitalId = input.hospitalId || actor.clinicId;
+          if (!targetHospitalId) throw new Error("A hospital must be selected");
+          if (repository) {
+            const res = await repository.inviteClinicAdmin({ ...input, hospitalId: targetHospitalId });
+            await refresh();
+            return res;
+          }
+          const origin = getAppBaseUrl();
+          const membership: StaffMember = {
+            id: createId("CA"),
+            clinicId: targetHospitalId,
+            name: input.name,
+            email: input.email,
+            phone: input.phone,
+            role: "clinic_admin",
+            status: "Invited",
+          };
+          dispatch({ type: "staff.invited", value: membership, actor });
+          return { data: membership, setupUrl: `${origin}/setup?token=mock_local_token` };
+        },
+        deactivateStaff: async (userId, reason) => {
         const actor = requireUser(user, "people.manage");
         const target = state.staffMembers.find((member) => member.id === userId);
         if (!target) throw new Error("Staff member was not found");
@@ -2404,3 +2378,4 @@ export function useWorkspaceData() {
   if (!value) throw new Error("useWorkspaceData must be used inside WorkspaceDataProvider");
   return value;
 }
+

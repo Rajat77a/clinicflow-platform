@@ -62,6 +62,7 @@ function SetupPage() {
   const searchParams = Route.useSearch();
   const [token, setToken] = useState<string | null>(null);
   const [tokenInfo, setTokenInfo] = useState<TokenInfo | null>(null);
+  const [isLocalToken, setIsLocalToken] = useState(false);
   const [loading, setLoading] = useState(true);
   const [errorInfo, setErrorInfo] = useState<{ title: string; message: string } | null>(null);
   const [pw, setPw] = useState("");
@@ -152,6 +153,7 @@ function SetupPage() {
           working_hours: null,
           administrative_notes: null,
         });
+        setIsLocalToken(true);
         return true;
       }
       return false;
@@ -175,7 +177,7 @@ function SetupPage() {
         .then(({ data, error: rpcError }: { data: unknown; error: { message: string } | null }) => {
           if (rpcError) {
             console.error("[InviteSetup] validate_invite_token RPC error:", rpcError.message);
-            if (supabaseConfig.demoMode && tryLocalToken()) return;
+            if (tryLocalToken()) return;
             setErrorInfo({
               title: "Unable to Validate Invitation",
               message: "Unable to validate this invitation. Please try again.",
@@ -189,7 +191,7 @@ function SetupPage() {
 
           if (!row) {
             console.warn("[InviteSetup] validate_invite_token returned empty data");
-            if (supabaseConfig.demoMode && tryLocalToken()) return;
+            if (tryLocalToken()) return;
             setErrorInfo({
               title: "Link Invalid",
               message: "This invitation link is invalid.",
@@ -218,7 +220,7 @@ function SetupPage() {
           } else if (row.status === "valid" || rawStatus === "valid") {
             const email = String(row.p_email ?? row.email ?? "").trim();
             if (!email) {
-              if (supabaseConfig.demoMode && tryLocalToken()) return;
+              if (tryLocalToken()) return;
               setErrorInfo({
                 title: "Link Invalid",
                 message: "This invitation link is invalid.",
@@ -254,7 +256,7 @@ function SetupPage() {
               administrative_notes: (row.p_administrative_notes ?? row.administrative_notes ?? null) as string | null,
             });
           } else {
-            if (supabaseConfig.demoMode && tryLocalToken()) return;
+            if (tryLocalToken()) return;
             setErrorInfo({
               title: "Link Invalid",
               message: "This invitation link is invalid.",
@@ -264,7 +266,7 @@ function SetupPage() {
         .catch((err: unknown) => {
           const errorMsg = err instanceof Error ? err.message : String(err);
           console.error("[InviteSetup] validate_invite_token failure:", errorMsg);
-          if (supabaseConfig.demoMode && tryLocalToken()) return;
+          if (tryLocalToken()) return;
           setErrorInfo({
             title: "Unable to Validate Invitation",
             message: "Unable to validate this invitation. Please try again.",
@@ -274,7 +276,7 @@ function SetupPage() {
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err);
       console.error("[InviteSetup] validate_invite_token initialization error:", errorMsg);
-      if (supabaseConfig.demoMode && tryLocalToken()) return;
+      if (tryLocalToken()) return;
       setErrorInfo({
         title: "Unable to Validate Invitation",
         message: "Unable to validate this invitation. Please try again.",
@@ -299,7 +301,7 @@ function SetupPage() {
 
     setSubmitting(true);
     try {
-      if (supabaseConfig.configured) {
+      if (supabaseConfig.configured && !isLocalToken) {
         const supabase = getSupabaseBrowserClient();
         console.log(`[InviteSetup] Calling activate_invited_user RPC (token length = ${token.length})`);
 
@@ -323,10 +325,21 @@ function SetupPage() {
 
         // Establish live authenticated session via Supabase Auth
         try {
-          await supabase.auth.signInWithPassword({
+          const { error: signInError } = await supabase.auth.signInWithPassword({
             email: tokenInfo.email.trim(),
             password: pw,
           });
+          if (signInError) {
+            console.warn("[InviteSetup] Supabase auto-signin failed:", signInError);
+            toast.error("Account activated, but auto-login failed. Please sign in manually.");
+          } else {
+            await supabase.auth.getSession();
+            setIsActivated(true);
+            setTimeout(() => {
+              navigate({ to: "/" });
+            }, 3000);
+            return;
+          }
         } catch (signInErr) {
           console.warn("[InviteSetup] Supabase auto-signin notice:", signInErr);
         }
@@ -346,12 +359,27 @@ function SetupPage() {
 
       toast.success("Your account has been activated successfully.");
       setIsActivated(true);
+      setTimeout(() => {
+        navigate({ to: "/" });
+      }, 3000);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Unable to set password");
     } finally {
       setSubmitting(false);
     }
   };
+
+  const getPasswordStrength = (pass: string) => {
+    let score = 0;
+    if (pass.length >= 8) score++;
+    if (/[A-Z]/.test(pass)) score++;
+    if (/[a-z]/.test(pass)) score++;
+    if (/[0-9]/.test(pass)) score++;
+    if (/[^A-Za-z0-9]/.test(pass)) score++;
+    return score;
+  };
+
+  const strength = getPasswordStrength(pw);
 
   if (loading) {
     return (
@@ -430,7 +458,7 @@ function SetupPage() {
                   Your account has been activated successfully.
                 </h2>
                 <p className="mt-2 text-sm text-muted-foreground">
-                  Use your invited email address and newly created password to sign in.
+                  Use your invited email address and newly created password to sign in. You will be redirected shortly.
                 </p>
               </div>
 
@@ -550,6 +578,13 @@ function SetupPage() {
               </div>
 
               <form onSubmit={submit} className="mt-6 space-y-4">
+                {isLocalToken && supabaseConfig.configured && (
+                  <div className="rounded-md bg-yellow-50 p-4 border border-yellow-200 dark:bg-yellow-900/20 dark:border-yellow-900/50">
+                    <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                      <strong>Warning:</strong> You are using a local fallback token. Account activation may fail if the token was not properly saved to the database.
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="pw">Create Password</Label>
                   <div className="relative">
@@ -558,7 +593,7 @@ function SetupPage() {
                       type={showPw ? "text" : "password"}
                       value={pw}
                       onChange={(e) => setPw(e.target.value)}
-                      placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+                      placeholder={`At least 8 characters`}
                       className="h-11 rounded-xl pr-11"
                       autoComplete="new-password"
                       autoFocus
@@ -575,6 +610,40 @@ function SetupPage() {
                       {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                     </Button>
                   </div>
+                  {pw && (
+                    <div className="mt-2 space-y-2">
+                      <div className="flex gap-1 h-1.5">
+                        {[1, 2, 3, 4, 5].map((i) => (
+                          <div
+                            key={i}
+                            className={`flex-1 rounded-full ${
+                              strength >= i
+                                ? strength <= 2
+                                  ? "bg-red-500"
+                                  : strength <= 4
+                                    ? "bg-yellow-500"
+                                    : "bg-emerald-500"
+                                : "bg-muted"
+                            }`}
+                          />
+                        ))}
+                      </div>
+                      <ul className="text-xs text-muted-foreground space-y-1 pt-1">
+                        <li className={`flex items-center gap-1.5 ${pw.length >= 8 ? "text-emerald-600 dark:text-emerald-400" : ""}`}>
+                          <CheckCircle2 className="h-3 w-3" /> At least 8 characters
+                        </li>
+                        <li className={`flex items-center gap-1.5 ${/[A-Z]/.test(pw) && /[a-z]/.test(pw) ? "text-emerald-600 dark:text-emerald-400" : ""}`}>
+                          <CheckCircle2 className="h-3 w-3" /> Uppercase & lowercase letters
+                        </li>
+                        <li className={`flex items-center gap-1.5 ${/[0-9]/.test(pw) ? "text-emerald-600 dark:text-emerald-400" : ""}`}>
+                          <CheckCircle2 className="h-3 w-3" /> At least one number
+                        </li>
+                        <li className={`flex items-center gap-1.5 ${/[^A-Za-z0-9]/.test(pw) ? "text-emerald-600 dark:text-emerald-400" : ""}`}>
+                          <CheckCircle2 className="h-3 w-3" /> At least one special character
+                        </li>
+                      </ul>
+                    </div>
+                  )}
                 </div>
 
                 <div className="space-y-2">

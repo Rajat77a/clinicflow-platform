@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -10,11 +10,19 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth, type Role } from "@/lib/auth";
 import { useWorkspaceData, type StaffMember } from "@/lib/workspace-data";
-import { UserMinus, UserPlus, Eye, Building2, ShieldCheck, Stethoscope, UserCog, Mail, Phone, Trash2, RotateCw, Send, CheckSquare, AlertTriangle } from "lucide-react";
+import { UserMinus, UserPlus, Eye, Building2, ShieldCheck, Stethoscope, UserCog, Mail, Phone, Trash2, RotateCw, Send, CheckSquare, AlertTriangle, CheckCircle2, Check, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export const Route = createFileRoute("/app/users")({ component: UsersPage });
+
+const TEST_EMAILS = [
+  "reception@clinicflow.test",
+  "clinic.admin@clinicflow.test",
+  "doctor@clinicflow.test",
+  "superadmin@clinicflow.test",
+];
 
 const roleLabels: Record<Role, string> = {
   super_admin: "Super Admin",
@@ -43,6 +51,7 @@ function UsersPage() {
   const { user } = useAuth();
   const {
     staffMembers,
+    binStaffMembers,
     clinics,
     inviteSuperAdmin,
     inviteClinicAdmin,
@@ -52,13 +61,83 @@ function UsersPage() {
     softDeleteStaff,
     bulkSoftDeleteStaff,
     resendStaffInvitation,
+    refresh,
   } = useWorkspaceData();
+
+  const allUsers = useMemo(() => {
+    const map = new Map<string, StaffMember>();
+    
+    // Add active staff members
+    staffMembers.forEach(m => map.set(m.id, m));
+    
+    // Add inactive/expired staff members (excluding deleted ones)
+    binStaffMembers.forEach(m => {
+      if (!m.deletedAt && !map.has(m.id)) {
+        map.set(m.id, m);
+      }
+    });
+
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [staffMembers, binStaffMembers]);
+
+  useEffect(() => {
+    let mounted = true;
+    const supabase = getSupabaseBrowserClient();
+    
+    const channel = supabase
+      .channel("public:staff_memberships")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "staff_memberships" },
+        () => {
+          if (mounted) refresh();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "invite_tokens" },
+        () => {
+          if (mounted) refresh();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "platform_admins" },
+        () => {
+          if (mounted) refresh();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      mounted = false;
+      supabase.removeChannel(channel);
+    };
+  }, [refresh]);
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [roleFilter, setRoleFilter] = useState<Role | "all">("all");
 
-  const [superAdminDialogOpen, setSuperAdminDialogOpen] = useState(false);
+  const displayedUsers = useMemo(() => {
+    if (roleFilter === "all") return allUsers;
+    return allUsers.filter((u) => u.role === roleFilter);
+  }, [allUsers, roleFilter]);
+
+  const [createdStaffInfo, setCreatedStaffInfo] = useState<{
+    roleTitle: string;
+    staffName: string;
+    staffEmail: string;
+    setupUrl?: string;
+    emailSent?: boolean;
+    emailId?: string;
+    emailError?: string;
+  } | null>(null);
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const superAdminDialogOpenState = useState(false);
+  const [superAdminDialogOpen, setSuperAdminDialogOpen] = superAdminDialogOpenState;
   const [clinicAdminDialogOpen, setClinicAdminDialogOpen] = useState(false);
   const [inviteStaffDialogOpen, setInviteStaffDialogOpen] = useState(false);
   const [selectedProfile, setSelectedProfile] = useState<StaffMember | null>(null);
@@ -76,6 +155,13 @@ function UsersPage() {
     hospitalId: string;
     specialty: string;
     shift: string;
+    gender: string;
+    qualification: string;
+    medicalRegistrationNumber: string;
+    experienceYears: number;
+    consultationFee: number;
+    workingHours: string;
+    notes: string;
   }>({
     role: "doctor",
     name: "",
@@ -83,7 +169,14 @@ function UsersPage() {
     phone: "",
     hospitalId: clinics[0]?.id || "",
     specialty: "General Medicine",
-    shift: "Morning (9–5)",
+    shift: "Morning (9 AM - 5 PM)",
+    gender: "other",
+    qualification: "",
+    medicalRegistrationNumber: "",
+    experienceYears: 0,
+    consultationFee: 500,
+    workingHours: "9:00 AM - 5:00 PM",
+    notes: "",
   });
 
   const [deactivationTarget, setDeactivationTarget] = useState<StaffMember | null>(null);
@@ -92,15 +185,18 @@ function UsersPage() {
 
   const clinicMap = useMemo(() => new Map(clinics.map((c) => [c.id, c])), [clinics]);
 
-  const canDeactivate = (member: StaffMember) => (
-    member.status !== "Inactive"
-    && member.id !== user?.userId
-    && member.role !== "super_admin"
-    && (
-      user?.role === "super_admin"
-      || (user?.role === "clinic_admin" && member.role !== "clinic_admin")
-    )
-  );
+  const canDeactivate = (member: StaffMember) => {
+    if (TEST_EMAILS.includes(member.email.toLowerCase())) return false;
+    return (
+      member.status !== "Inactive"
+      && member.id !== user?.userId
+      && member.role !== "super_admin"
+      && (
+        user?.role === "super_admin"
+        || (user?.role === "clinic_admin" && member.role !== "clinic_admin")
+      )
+    );
+  };
 
   const submitSuperAdmin = async () => {
     if (!superAdminForm.name.trim() || !superAdminForm.email.trim()) {
@@ -110,7 +206,7 @@ function UsersPage() {
     setIsSending(true);
     try {
       const tempPassword = generateTempPassword();
-      await inviteSuperAdmin({
+      const res = await inviteSuperAdmin({
         name: superAdminForm.name.trim(),
         email: superAdminForm.email.trim(),
         phone: superAdminForm.phone.trim(),
@@ -119,6 +215,18 @@ function UsersPage() {
       toast.success(`Super Admin added · invitation sent to ${superAdminForm.email.trim()}`);
       setSuperAdminDialogOpen(false);
       setSuperAdminForm({ name: "", email: "", phone: "" });
+      
+      if (res) {
+        setCreatedStaffInfo({
+          roleTitle: "Super Admin",
+          staffName: res.data.name,
+          staffEmail: res.data.email,
+          setupUrl: res.setupUrl,
+          emailSent: res.emailSent,
+          emailId: res.emailId,
+          emailError: res.emailError,
+        });
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to add the super admin");
     } finally {
@@ -141,7 +249,7 @@ function UsersPage() {
     }
     setIsSending(true);
     try {
-      await inviteClinicAdmin({
+      const res = await inviteClinicAdmin({
         name: clinicAdminForm.name.trim(),
         email: clinicAdminForm.email.trim(),
         phone: clinicAdminForm.phone.trim(),
@@ -150,6 +258,18 @@ function UsersPage() {
       toast.success(`Clinic Admin invited · 24-hour setup link sent to ${clinicAdminForm.email.trim()}`);
       setClinicAdminDialogOpen(false);
       setClinicAdminForm({ name: "", email: "", phone: "", hospitalId: "" });
+      
+      if (res) {
+        setCreatedStaffInfo({
+          roleTitle: "Clinic Admin",
+          staffName: res.data.name,
+          staffEmail: res.data.email,
+          setupUrl: res.setupUrl,
+          emailSent: res.emailSent,
+          emailId: res.emailId,
+          emailError: res.emailError,
+        });
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to invite the clinic admin");
     } finally {
@@ -172,61 +292,83 @@ function UsersPage() {
       return;
     }
 
-    setIsSending(true);
-    try {
-      if (inviteStaffForm.role === "doctor") {
-        await createDoctor({
-          name: inviteStaffForm.name.trim(),
-          email: inviteStaffForm.email.trim(),
-          phone: inviteStaffForm.phone.trim(),
-          specialty: inviteStaffForm.specialty.trim() || "General Medicine",
-          qualification: "MBBS",
-          medicalRegistrationNumber: `REG-${Math.floor(100000 + Math.random() * 900000)}`,
-          experienceYears: 5,
+          setIsSending(true);
+      try {
+        let res;
+        let roleTitle = "";
+
+        if (inviteStaffForm.role === "doctor") {
+          res = await createDoctor({
+            name: inviteStaffForm.name.trim(),
+            email: inviteStaffForm.email.trim(),
+            phone: inviteStaffForm.phone.trim(),
+            specialty: inviteStaffForm.specialty.trim() || "General Medicine",
+            qualification: inviteStaffForm.qualification.trim() || "MBBS",
+            medicalRegistrationNumber: inviteStaffForm.medicalRegistrationNumber.trim() || `REG-${Math.floor(100000 + Math.random() * 900000)}`,
+            experienceYears: inviteStaffForm.experienceYears || 0,
+            gender: inviteStaffForm.gender as any || "other",
+            consultationFee: inviteStaffForm.consultationFee || 500,
+            workingHours: inviteStaffForm.workingHours.trim() || "9:00 AM - 5:00 PM",
+            notes: inviteStaffForm.notes.trim(),
+            hospitalId: inviteStaffForm.hospitalId,
+          });
+          roleTitle = "Doctor";
+        } else if (inviteStaffForm.role === "receptionist") {
+          res = await createReceptionist({
+            name: inviteStaffForm.name.trim(),
+            email: inviteStaffForm.email.trim(),
+            phone: inviteStaffForm.phone.trim(),
+            shift: inviteStaffForm.shift.trim() || "Morning (9 AM - 5 PM)",
+            hospitalId: inviteStaffForm.hospitalId,
+          });
+          roleTitle = "Receptionist";
+        } else if (inviteStaffForm.role === "clinic_admin") {
+          res = await inviteClinicAdmin({
+            name: inviteStaffForm.name.trim(),
+            email: inviteStaffForm.email.trim(),
+            phone: inviteStaffForm.phone.trim(),
+            hospitalId: inviteStaffForm.hospitalId,
+          });
+          roleTitle = "Clinic Admin";
+        } else if (inviteStaffForm.role === "super_admin") {
+          res = await inviteSuperAdmin({
+            name: inviteStaffForm.name.trim(),
+            email: inviteStaffForm.email.trim(),
+            phone: inviteStaffForm.phone.trim(),
+            tempPassword: generateTempPassword(),
+          });
+          roleTitle = "Super Admin";
+        }
+
+        if (res) {
+          setCreatedStaffInfo({
+            roleTitle,
+            staffName: res.data.name,
+            staffEmail: res.data.email,
+            setupUrl: res.setupUrl,
+            emailSent: res.emailSent,
+            emailId: res.emailId,
+            emailError: res.emailError,
+          });
+        }
+
+        setInviteStaffDialogOpen(false);
+        setInviteStaffForm({
+          role: "doctor",
+          name: "",
+          email: "",
+          phone: "",
+          hospitalId: clinics[0]?.id || "",
+          specialty: "General Medicine",
+          shift: "Morning (9 AM - 5 PM)",
           gender: "other",
+          qualification: "",
+          medicalRegistrationNumber: "",
+          experienceYears: 0,
           consultationFee: 500,
           workingHours: "9:00 AM - 5:00 PM",
           notes: "",
-          hospitalId: inviteStaffForm.hospitalId,
         });
-        toast.success(`Doctor ${inviteStaffForm.name.trim()} assigned to clinic and invited`);
-      } else if (inviteStaffForm.role === "receptionist") {
-        await createReceptionist({
-          name: inviteStaffForm.name.trim(),
-          email: inviteStaffForm.email.trim(),
-          phone: inviteStaffForm.phone.trim(),
-          shift: inviteStaffForm.shift.trim() || "Morning (9–5)",
-          hospitalId: inviteStaffForm.hospitalId,
-        });
-        toast.success(`Receptionist ${inviteStaffForm.name.trim()} assigned to clinic and invited`);
-      } else if (inviteStaffForm.role === "clinic_admin") {
-        await inviteClinicAdmin({
-          name: inviteStaffForm.name.trim(),
-          email: inviteStaffForm.email.trim(),
-          phone: inviteStaffForm.phone.trim(),
-          hospitalId: inviteStaffForm.hospitalId,
-        });
-        toast.success(`Clinical Admin ${inviteStaffForm.name.trim()} assigned to clinic and invited`);
-      } else if (inviteStaffForm.role === "super_admin") {
-        await inviteSuperAdmin({
-          name: inviteStaffForm.name.trim(),
-          email: inviteStaffForm.email.trim(),
-          phone: inviteStaffForm.phone.trim(),
-          tempPassword: generateTempPassword(),
-        });
-        toast.success(`Super Admin ${inviteStaffForm.name.trim()} invited`);
-      }
-
-      setInviteStaffDialogOpen(false);
-      setInviteStaffForm({
-        role: "doctor",
-        name: "",
-        email: "",
-        phone: "",
-        hospitalId: clinics[0]?.id || "",
-        specialty: "General Medicine",
-        shift: "Morning (9–5)",
-      });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to invite user");
     } finally {
@@ -265,6 +407,7 @@ function UsersPage() {
   const canManageUsers = isSuperAdmin || user?.role === "clinic_admin";
 
   const canDeleteMember = useCallback((member: StaffMember) => {
+    if (TEST_EMAILS.includes(member.email.toLowerCase())) return false;
     if (member.id === user?.userId) return false;
     if (user?.role === "super_admin") return true;
     if (user?.role === "clinic_admin") {
@@ -274,8 +417,8 @@ function UsersPage() {
   }, [user]);
 
   const deletableStaff = useMemo(
-    () => staffMembers.filter(canDeleteMember),
-    [staffMembers, canDeleteMember],
+    () => allUsers.filter(canDeleteMember),
+    [allUsers, canDeleteMember],
   );
 
   const allSelected =
@@ -347,7 +490,7 @@ function UsersPage() {
                   Add / Invite User
                 </Button>
               </DialogTrigger>
-              <DialogContent className="max-w-md">
+              <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
                   <DialogTitle>Invite User & Assign Clinic</DialogTitle>
                   <DialogDescription>
@@ -433,14 +576,85 @@ function UsersPage() {
                   )}
 
                   {inviteStaffForm.role === "doctor" && (
-                    <div className="space-y-1.5">
-                      <Label>Medical Specialty</Label>
-                      <Input
-                        value={inviteStaffForm.specialty}
-                        onChange={(e) => setInviteStaffForm({ ...inviteStaffForm, specialty: e.target.value })}
-                        className="h-11 rounded-xl"
-                        placeholder="e.g. Cardiology, Pediatrics"
-                      />
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="space-y-1.5 md:col-span-2">
+                        <Label>Medical Specialty</Label>
+                        <Input
+                          value={inviteStaffForm.specialty}
+                          onChange={(e) => setInviteStaffForm({ ...inviteStaffForm, specialty: e.target.value })}
+                          className="h-11 rounded-xl"
+                          placeholder="e.g. Cardiology, Pediatrics"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Gender</Label>
+                        <Select value={inviteStaffForm.gender} onValueChange={(value) => setInviteStaffForm({ ...inviteStaffForm, gender: value })}>
+                          <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="male">Male</SelectItem>
+                            <SelectItem value="female">Female</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Qualification</Label>
+                        <Input
+                          value={inviteStaffForm.qualification}
+                          onChange={(e) => setInviteStaffForm({ ...inviteStaffForm, qualification: e.target.value })}
+                          className="h-11 rounded-xl"
+                          placeholder="e.g. MBBS, MD"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Medical Registration No.</Label>
+                        <Input
+                          value={inviteStaffForm.medicalRegistrationNumber}
+                          onChange={(e) => setInviteStaffForm({ ...inviteStaffForm, medicalRegistrationNumber: e.target.value })}
+                          className="h-11 rounded-xl"
+                          placeholder="e.g. MCI-123456"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Experience (years)</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={inviteStaffForm.experienceYears}
+                          onChange={(e) => setInviteStaffForm({ ...inviteStaffForm, experienceYears: Number(e.target.value) })}
+                          className="h-11 rounded-xl"
+                          placeholder="e.g. 5"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Consultation Fee (₹)</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          value={inviteStaffForm.consultationFee}
+                          onChange={(e) => setInviteStaffForm({ ...inviteStaffForm, consultationFee: Number(e.target.value) })}
+                          className="h-11 rounded-xl"
+                          placeholder="e.g. 500"
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Working Hours</Label>
+                        <Input
+                          value={inviteStaffForm.workingHours}
+                          onChange={(e) => setInviteStaffForm({ ...inviteStaffForm, workingHours: e.target.value })}
+                          className="h-11 rounded-xl"
+                          placeholder="e.g. 9:00 AM - 5:00 PM"
+                        />
+                      </div>
+                      <div className="space-y-1.5 md:col-span-2">
+                        <Label>Notes</Label>
+                        <Textarea
+                          value={inviteStaffForm.notes}
+                          onChange={(e) => setInviteStaffForm({ ...inviteStaffForm, notes: e.target.value })}
+                          className="rounded-xl"
+                          placeholder="Available on weekends, etc."
+                        />
+                      </div>
                     </div>
                   )}
 
@@ -520,7 +734,7 @@ function UsersPage() {
                       <SelectContent>
                         {clinics.map((clinic) => (
                           <SelectItem key={clinic.id} value={clinic.id}>
-                            {clinic.name} ({clinic.id})
+                            {clinic.name} ({clinic.shortId || clinic.id})
                           </SelectItem>
                         ))}
                       </SelectContent>
@@ -591,6 +805,21 @@ function UsersPage() {
         ) : undefined}
       />
 
+      <div className="flex justify-end mb-4">
+        <Select value={roleFilter} onValueChange={(v: any) => setRoleFilter(v)}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filter by role" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Roles</SelectItem>
+            <SelectItem value="super_admin">Super Admin</SelectItem>
+            <SelectItem value="clinic_admin">Clinical Admin</SelectItem>
+            <SelectItem value="doctor">Doctor</SelectItem>
+            <SelectItem value="receptionist">Receptionist</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Bulk Selection Toolbar */}
       {canManageUsers && selectedIds.size > 0 && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-destructive/20 bg-destructive/5 px-4 py-3 text-sm shadow-soft">
@@ -646,7 +875,7 @@ function UsersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {staffMembers.map((member) => {
+            {displayedUsers.map((member) => {
               const assignedClinic = member.clinicId ? clinicMap.get(member.clinicId) : null;
               return (
                 <TableRow key={member.id} className="hover:bg-muted/30">
@@ -669,7 +898,7 @@ function UsersPage() {
                       </div>
                       <div>
                         <div className="font-semibold text-foreground">{member.name}</div>
-                        <div className="font-mono text-xs text-muted-foreground">{member.id}</div>
+                        <div className="font-mono text-xs text-muted-foreground">{member.employeeNumber || member.id}</div>
                       </div>
                     </div>
                   </TableCell>
@@ -693,7 +922,7 @@ function UsersPage() {
                         <span>{member.previousClinicName}</span>
                       </div>
                     ) : (
-                      <span className="italic text-muted-foreground text-xs">Not Assigned</span>
+                      <span className="italic text-muted-foreground text-xs">Unassigned</span>
                     )}
                   </TableCell>
                   <TableCell>
@@ -765,7 +994,7 @@ function UsersPage() {
                 </TableRow>
               );
             })}
-            {staffMembers.length === 0 && (
+            {allUsers.length === 0 && (
               <TableRow>
                 <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
                   No staff memberships are visible for this account.
@@ -853,7 +1082,7 @@ function UsersPage() {
                     {clinic ? (
                       <div className="rounded-lg border bg-background p-2.5 space-y-1">
                         <div className="font-semibold text-sm text-foreground">{clinic.name}</div>
-                        <div className="font-mono text-[11px] text-primary">Clinic ID: {clinic.id}</div>
+                        <div className="font-mono text-[11px] text-primary">Clinic ID: {clinic.shortId || clinic.id}</div>
                         {clinic.city && (
                           <div className="text-muted-foreground">Location: {clinic.city}</div>
                         )}
@@ -1016,6 +1245,94 @@ function UsersPage() {
             >
               <Trash2 className="h-4 w-4" />
               {isBulkDeleting ? "Deleting..." : `Delete Selected (${selectedIds.size})`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Staff Created / Setup Link Dialog */}
+      <Dialog open={Boolean(createdStaffInfo)} onOpenChange={(open) => { if (!open) setCreatedStaffInfo(null); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle className={`flex items-center gap-2 ${createdStaffInfo?.emailError ? "text-amber-600" : "text-emerald-600"}`}>
+              {createdStaffInfo?.emailError ? (
+                <>
+                  <AlertTriangle className="h-5 w-5 text-amber-600" /> User Created (Email Delivery Action Required)
+                </>
+              ) : (
+                <>
+                  <ShieldCheck className="h-5 w-5" /> User Created &amp; Invitation Delivered
+                </>
+              )}
+            </DialogTitle>
+            <DialogDescription className="space-y-2 pt-2 text-left">
+              <p>
+                <strong>{createdStaffInfo?.staffName}</strong> has been added as a {createdStaffInfo?.roleTitle}.
+              </p>
+              {createdStaffInfo?.emailError ? (
+                <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-destructive">
+                  <div className="flex items-center gap-2 font-medium text-xs">
+                    <AlertTriangle className="h-4 w-4 shrink-0" />
+                    <span>Email service alert: <strong>{createdStaffInfo.emailError}</strong></span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    The automated email could not be delivered. Ensure RESEND_API_KEY and a verified EMAIL_FROM are configured in server settings. In the meantime, you can manually copy and share the setup link below.
+                  </p>
+                </div>
+              ) : (
+                <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/50 p-3 text-emerald-950 dark:bg-emerald-950/20 dark:text-emerald-200">
+                  <div className="flex items-center gap-2 font-medium text-xs">
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <span>Invitation email sent successfully to: <strong>{createdStaffInfo?.staffEmail}</strong></span>
+                  </div>
+                  <p className="mt-1 text-[11px] text-muted-foreground">
+                    Confirmed by Resend{createdStaffInfo?.emailId ? ` (ID: ${createdStaffInfo.emailId})` : ""}. The user has been sent their 24-hour setup link to activate their account.
+                  </p>
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2 text-left">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-semibold text-muted-foreground">24-Hour Password Generation Link</Label>
+              <span className="text-[11px] font-semibold text-amber-600 bg-amber-50 dark:bg-amber-950/30 px-2 py-0.5 rounded-full">
+                Valid for 24 Hours
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <Input
+                readOnly
+                value={createdStaffInfo?.setupUrl ?? ""}
+                className="h-10 font-mono text-xs bg-muted/50 rounded-xl"
+              />
+              <Button type="button" size="sm" onClick={() => {
+                if (createdStaffInfo?.setupUrl) {
+                  navigator.clipboard.writeText(createdStaffInfo.setupUrl);
+                  setCopiedLink(true);
+                  toast.success("Link copied!");
+                  setTimeout(() => setCopiedLink(false), 2000);
+                }
+              }} className="shrink-0 gap-1.5">
+                {copiedLink ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                {copiedLink ? "Copied" : "Copy Link"}
+              </Button>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0 mt-4">
+            {createdStaffInfo?.setupUrl && (
+              <Button
+                variant="outline"
+                type="button"
+                className="w-full sm:w-auto"
+                onClick={() => window.open(createdStaffInfo.setupUrl, "_blank")}
+              >
+                Open Setup Link in New Tab
+              </Button>
+            )}
+            <Button onClick={() => setCreatedStaffInfo(null)} className="w-full sm:w-auto">
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

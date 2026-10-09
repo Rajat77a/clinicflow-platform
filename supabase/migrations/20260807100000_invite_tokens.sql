@@ -50,7 +50,7 @@ returns text
 language sql
 volatile
 as $$
-  select encode(gen_random_bytes(32), 'hex')
+  select encode(extensions.gen_random_bytes(32), 'hex')
 $$;
 
 -- Mark a token as used and return all invite data

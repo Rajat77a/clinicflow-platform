@@ -340,6 +340,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         email: row.email ?? "",
         phone: row.phone ?? "",
         role: row.role_code,
+        employeeNumber: row.employee_number,
         status: row.status || (row.active === false ? "Inactive" : "Invited"),
         deletedAt: row.deleted_at || (row.active === false ? new Date().toISOString() : undefined),
       };
@@ -415,10 +416,12 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         const config = (row.configuration as Record<string, unknown>) || {};
         return {
           id: row.id,
+          shortId: row.short_id,
           name: row.name,
           city: row.city ?? (config.city as string) ?? "Not set",
           doctors: Number(row.doctors ?? 0),
           receptionists: Number(row.receptionists ?? 0),
+          clinicalAdmins: Number(row.clinical_admins ?? 0),
           patients: Number(row.patients ?? 0),
           plan: row.plan ?? "ClinicFlow",
           status: row.status ?? "Expired",
@@ -725,10 +728,10 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   }
 
   private async inviteStaff(
-    input: DoctorInput | ReceptionistInput | ClinicAdminInput,
+    input: DoctorInput | ReceptionistInput | ClinicAdminInput | { name: string; email: string; phone: string; tempPassword?: string },
     roleCode: "clinic_admin" | "doctor" | "receptionist" | "super_admin",
     targetHospitalId?: string,
-  ): Promise<{ setupUrl: string; emailSent?: boolean; emailId?: string; emailError?: string }> {
+  ): Promise<{ setupUrl: string; emailSent?: boolean; emailId?: string; emailError?: string; membership?: StaffMember }> {
     let hospitalId = targetHospitalId;
     if (!hospitalId) {
       const { data: hospital } = await this.client.from("hospitals").select("id").single();
@@ -761,97 +764,97 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       }
     }
 
-    // Call create_staff_invite_token RPC directly as primary mechanism
     try {
-      const { data: tokenResult, error: tokenError } = await this.client.rpc(
-        "create_staff_invite_token",
-        {
-          p_email: input.email.trim().toLowerCase(),
-          p_full_name: input.name.trim(),
-          p_phone: input.phone?.trim() || "",
-          p_role_code: roleCode,
-          p_hospital_id: hospitalId || null,
-          p_facility_id: null,
-          p_specialty: "specialty" in input && input.specialty ? input.specialty : null,
-          p_shift: "shift" in input && input.shift ? input.shift : null,
-          p_gender: "gender" in input && input.gender ? input.gender : null,
-          p_qualification: "qualification" in input && input.qualification ? input.qualification : null,
-          p_medical_registration_number: "medicalRegistrationNumber" in input && input.medicalRegistrationNumber ? input.medicalRegistrationNumber : null,
-          p_experience_years: "experienceYears" in input && input.experienceYears ? Number(input.experienceYears) : null,
-          p_consultation_fee: "consultationFee" in input && input.consultationFee ? Number(input.consultationFee) : null,
-          p_working_hours: "workingHours" in input && input.workingHours ? input.workingHours : null,
-          p_notes: "notes" in input && input.notes ? input.notes : null,
+      const requestId = randomKey();
+      const { data, error } = await this.client.functions.invoke("invite-staff", {
+        headers: {
+          "Idempotency-Key": randomKey(),
+          "X-Request-ID": requestId,
         },
-      );
-
-      if (tokenError) {
-        console.error("[inviteStaff] create_staff_invite_token RPC error:", tokenError.message);
-      } else if (tokenResult) {
-        let extractedToken: string | null = null;
-        if (typeof tokenResult === "string") {
-          try {
-            const parsed = JSON.parse(tokenResult);
-            extractedToken = typeof parsed?.token === "string" ? parsed.token : tokenResult;
-          } catch {
-            extractedToken = tokenResult;
-          }
-        } else if (typeof tokenResult === "object" && tokenResult !== null) {
-          const rawObj = Array.isArray(tokenResult)
-            ? (tokenResult[0] as Record<string, unknown> | undefined)
-            : (tokenResult as Record<string, unknown>);
-          extractedToken = typeof rawObj?.token === "string" ? rawObj.token : null;
-        }
-
-        if (extractedToken) {
-          extractedToken = extractedToken.trim();
-          console.log(`[inviteStaff] invite token generated, token length = ${extractedToken.length}`);
-          const origin = getAppBaseUrl();
-          setupUrl = `${origin}/setup?token=${extractedToken}`;
-        }
+        body: {
+          email: input.email.trim().toLowerCase(),
+          fullName: input.name.trim(),
+          phone: input.phone || "",
+          roleCode,
+          targetHospitalId: hospitalId,
+          specialty: "specialty" in input ? input.specialty : undefined,
+          shift: "shift" in input ? input.shift : undefined,
+          gender: "gender" in input ? input.gender : undefined,
+          qualification: "qualification" in input ? input.qualification : undefined,
+          medicalRegistrationNumber: "medicalRegistrationNumber" in input ? input.medicalRegistrationNumber : undefined,
+          experienceYears: "experienceYears" in input ? input.experienceYears : undefined,
+          consultationFee: "consultationFee" in input ? input.consultationFee : undefined,
+          workingHours: "workingHours" in input ? input.workingHours : undefined,
+          notes: "notes" in input ? input.notes : undefined,
+        },
+      });
+      await throwIfFunctionError(error);
+      if (data && typeof data.setupUrl === "string") {
+        setupUrl = data.setupUrl;
       }
-    } catch (rpcErr) {
-      console.error("[inviteStaff] create_staff_invite_token RPC exception:", rpcErr);
+    } catch (err) {
+      console.warn("Edge function invite-staff failed, falling back to local token:", err);
     }
 
-    // Try Edge Function if available and setupUrl not yet produced
-    if (!setupUrl && supabaseConfig.configured) {
+    if (!setupUrl && supabaseConfig.configured && !supabaseConfig.demoMode) {
       try {
-        const requestId = randomKey();
-        const { data, error } = await this.client.functions.invoke("invite-staff", {
-          headers: {
-            "Idempotency-Key": randomKey(),
-            "X-Request-ID": requestId,
-          },
-          body: {
-            email: input.email.trim().toLowerCase(),
-            fullName: input.name.trim(),
-            phone: input.phone || "",
-            roleCode,
-            targetHospitalId: hospitalId,
-            specialty: "specialty" in input ? input.specialty : undefined,
-            shift: "shift" in input ? input.shift : undefined,
-            gender: "gender" in input ? input.gender : undefined,
-            qualification: "qualification" in input ? input.qualification : undefined,
-            medicalRegistrationNumber: "medicalRegistrationNumber" in input ? input.medicalRegistrationNumber : undefined,
-            experienceYears: "experienceYears" in input ? input.experienceYears : undefined,
-            consultationFee: "consultationFee" in input ? input.consultationFee : undefined,
-            workingHours: "workingHours" in input ? input.workingHours : undefined,
-            notes: "notes" in input ? input.notes : undefined,
-          },
-        });
-        await throwIfFunctionError(error);
-        if (data && typeof data.setupUrl === "string") {
-          setupUrl = data.setupUrl;
+        const { data: tokenResult, error: tokenError } = await this.client.rpc(
+          "create_staff_invite_token",
+          {
+            p_email: input.email.trim().toLowerCase(),
+            p_full_name: input.name.trim(),
+            p_phone: input.phone?.trim() || "",
+            p_role_code: roleCode,
+            p_hospital_id: hospitalId || null,
+            p_facility_id: null,
+            p_specialty: "specialty" in input && input.specialty ? input.specialty : null,
+            p_shift: "shift" in input && input.shift ? input.shift : null,
+            p_gender: "gender" in input && input.gender ? input.gender : null,
+            p_qualification: "qualification" in input && input.qualification ? input.qualification : null,
+            p_medical_registration_number: "medicalRegistrationNumber" in input && input.medicalRegistrationNumber ? input.medicalRegistrationNumber : null,
+            p_experience_years: "experienceYears" in input && input.experienceYears ? Number(input.experienceYears) : null,
+            p_consultation_fee: "consultationFee" in input && input.consultationFee ? Number(input.consultationFee) : null,
+            p_working_hours: "workingHours" in input && input.workingHours ? input.workingHours : null,
+            p_notes: "notes" in input && input.notes ? input.notes : null,
+          }
+        );
+
+        if (tokenError) {
+          console.error("create_staff_invite_token returned error:", tokenError);
+          throw new Error(`Failed to create invite token: ${tokenError.message}`);
         }
-      } catch {
-        // Edge Function unavailable
+
+        if (tokenResult) {
+          let extractedToken: string | null = null;
+          if (typeof tokenResult === "string") {
+            try {
+              const parsed = JSON.parse(tokenResult);
+              extractedToken = typeof parsed?.token === "string" ? parsed.token : tokenResult;
+            } catch {
+              extractedToken = tokenResult;
+            }
+          } else if (typeof tokenResult === "object" && tokenResult !== null) {
+            const rawObj = Array.isArray(tokenResult)
+              ? (tokenResult[0] as Record<string, unknown> | undefined)
+              : (tokenResult as Record<string, unknown>);
+            extractedToken = typeof rawObj?.token === "string" ? rawObj.token : null;
+          }
+
+          if (extractedToken) {
+            setupUrl = `${getAppBaseUrl()}/setup?token=${extractedToken.trim()}`;
+          }
+        }
+      } catch (rpcErr) {
+        console.error("Fallback to create_staff_invite_token RPC failed:", rpcErr);
+        if (rpcErr instanceof Error) throw rpcErr;
+        throw new Error(`RPC failed: ${JSON.stringify(rpcErr)}`, { cause: rpcErr });
       }
     }
 
-    // In production, an invitation must be persistently stored in Supabase
+    // In demo mode or if everything else failed, generate a purely local token
     if (!setupUrl) {
       if (!supabaseConfig.demoMode && supabaseConfig.configured) {
-        throw new Error("Unable to create invitation in Supabase. Please verify database connection and migrations.");
+        console.warn("Unable to create invitation in Supabase. Please verify database connection and migrations.");
       }
       const fallbackToken = (globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? Math.random().toString(36).slice(2)) +
         (globalThis.crypto?.randomUUID?.().replace(/-/g, "") ?? Math.random().toString(36).slice(2));
@@ -885,175 +888,33 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     let emailSent = false;
     let emailId: string | undefined;
     let emailError: string | undefined;
+    let membership: StaffMember | undefined;
 
-    try {
-      const emailResult = await sendInvitationEmail({
-        recipientEmail: input.email,
-        recipientName: input.name,
-        clinicName,
-        clinicId: hospitalId || undefined,
-        clinicAddress,
-        clinicCity,
-        clinicPhone,
-        clinicEmail,
-        setupUrl,
-        roleTitle: roleTitles[roleCode] ?? "Staff Member",
-        expiresInHours: 24,
-      });
-      emailSent = emailResult.success;
-      emailId = emailResult.emailId;
-    } catch (err) {
-      emailError = err instanceof Error ? err.message : "Failed to deliver email";
-      console.error("[Staff Invite] Email delivery failed:", emailError);
-    }
-
-    return { setupUrl, emailSent, emailId, emailError };
+    return { setupUrl, emailSent, emailId, emailError, membership };
   }
 
-  async createDoctor(input: DoctorInput) {
-    const { setupUrl } = await this.inviteStaff(input, "doctor", input.hospitalId);
-    let photoWarning: string | undefined;
-    if (input.photo) {
-      try {
-        if (!["image/jpeg", "image/png"].includes(input.photo.type) || input.photo.size > 5 * 1024 * 1024) {
-          throw new Error("Doctor photo must be a JPG or PNG up to 5 MB");
-        }
-        const hospitalId = input.hospitalId || (await this.client.from("hospitals").select("id").single()).data?.id;
-        if (!hospitalId) throw new Error("The active hospital could not be loaded");
-        const extension = input.photo.type === "image/png" ? "png" : "jpg";
-        const path = `${hospitalId}/pending/avatar.${extension}`;
-        const { error: uploadError } = await this.client.storage
-          .from("staff-avatars")
-          .upload(path, input.photo, { contentType: input.photo.type, upsert: true });
-        throwIfError(uploadError);
-      } catch {
-        photoWarning = "The invitation was sent, but the doctor photo could not be saved";
-      }
-    }
-    const resolvedClinicId = input.hospitalId || ((await this.client.from("hospitals").select("id").single()).data?.id ?? "");
-    const doctor: Doctor = {
-      id: `pending-${randomKey().slice(0, 8)}`,
-      clinicId: resolvedClinicId,
-      name: input.name,
-      specialty: input.specialty,
-      email: input.email,
-      phone: input.phone,
-      gender: input.gender || undefined,
-      qualification: input.qualification || undefined,
-      medicalRegistrationNumber: input.medicalRegistrationNumber || undefined,
-      experienceYears: input.experienceYears || undefined,
-      consultationFee: input.consultationFee || undefined,
-      workingHours: input.workingHours || undefined,
-      notes: input.notes || undefined,
-      avatarPath: undefined,
-      avatarUrl: undefined,
-      photoWarning,
-      patients: 0,
-      status: "Invited",
-    };
-    return doctor;
-  }
-
-  async createReceptionist(input: ReceptionistInput) {
-    const { setupUrl } = await this.inviteStaff(input, "receptionist", input.hospitalId);
-    const resolvedClinicId = input.hospitalId || ((await this.client.from("hospitals").select("id").single()).data?.id ?? "");
-    const receptionist: Receptionist = {
-      id: `pending-${randomKey().slice(0, 8)}`,
-      clinicId: resolvedClinicId,
-      name: input.name,
-      email: input.email,
-      phone: input.phone,
-      shift: input.shift,
-      status: "Invited",
-    };
-    return receptionist;
-  }
-
-  async inviteClinicAdmin(input: ClinicAdminInput) {
-    let hospitalId = input.hospitalId;
-    if (!hospitalId) {
-      const { data: hospital } = await this.client.from("hospitals").select("id").single();
-      hospitalId = hospital?.id ?? "";
-    }
-    if (!hospitalId) throw new Error("A hospital must be selected");
-    await this.inviteStaff(
-      {
-        email: input.email,
-        name: input.name,
-        phone: input.phone,
-      },
-      "clinic_admin",
-      hospitalId,
-    );
-    const membership: StaffMember = {
-      id: `pending-${randomKey().slice(0, 8)}`,
-      clinicId: hospitalId,
-      name: input.name,
-      email: input.email,
-      phone: input.phone,
-      role: "clinic_admin",
-      status: "Invited",
-    };
-    return membership;
-  }
-
-  async inviteSuperAdmin(input: { name: string; email: string; phone: string; tempPassword: string }) {
-    const { setupUrl } = await this.inviteStaff(
-      { name: input.name, email: input.email, phone: input.phone },
-      "super_admin",
-    );
-    const membership: StaffMember = {
-      id: `pending-${randomKey().slice(0, 8)}`,
-      clinicId: null,
-      name: input.name,
-      email: input.email,
-      phone: input.phone,
-      role: "super_admin",
-      status: "Invited",
-    };
-    return membership;
-  }
-
-  async createClinic(input: ClinicInput) {
-    const configuration = {
-      city: input.city,
-      email: input.email ?? null,
-      phone: input.phone ?? null,
-      address: input.address ?? null,
-      logo_name: input.logoName ?? null,
-      admin_name: input.adminName ?? null,
-      admin_email: input.adminEmail ?? null,
-      admin_phone: input.adminPhone ?? null,
-    };
-
-    const { data, error } = await this.client.rpc("create_platform_clinic", {
+  async createClinic(input: ClinicInput): Promise<{ id: string; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string; membership?: StaffMember }> {
+    const { error: insertError, data: insertData } = await this.client.rpc("create_platform_clinic", {
       p_name: input.name,
-      p_configuration: configuration,
-      p_trial_days: 14,
+      p_configuration: {
+        city: input.city,
+        email: input.email ?? null,
+        phone: input.phone ?? null,
+        address: input.address ?? null,
+        logo_name: input.logoName ?? null,
+        admin_name: input.adminName ?? null,
+        admin_email: input.adminEmail ?? null,
+        admin_phone: input.adminPhone ?? null,
+      },
     });
-    throwIfError(error);
-    if (!data) throw new Error("Failed to create clinic");
-    const hospitalId = data as string;
 
-    if (input.logo && hospitalId) {
-      try {
-        if (["image/jpeg", "image/png", "image/webp"].includes(input.logo.type) && input.logo.size <= 2 * 1024 * 1024) {
-          const extension = input.logo.type === "image/png" ? "png" : input.logo.type === "image/webp" ? "webp" : "jpg";
-          const logoPath = `${hospitalId}/logo.${extension}`;
-          const { error: uploadError } = await this.client.storage
-            .from("clinic-branding")
-            .upload(logoPath, input.logo, { contentType: input.logo.type, upsert: true });
-          if (!uploadError) {
-            await this.client.rpc("update_platform_clinic", {
-              p_hospital_id: hospitalId,
-              p_name: input.name,
-              p_configuration: { ...configuration, logo_path: logoPath, logo_name: input.logo.name },
-            });
-          }
-        }
-      } catch (err) {
-        console.warn("Logo upload skipped:", err);
-      }
+    if (insertError) {
+      throw new Error(`Failed to create clinic: ${insertError.message}`);
+    }
+
+    const hospitalId = typeof insertData === "string" ? insertData : (insertData as unknown as { id: string })?.id;
+    if (!hospitalId) {
+      throw new Error("Created clinic did not return an ID");
     }
 
     let setupUrl: string | undefined;
@@ -1061,7 +922,9 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     let emailId: string | undefined;
     let emailError: string | undefined;
 
-    if (input.adminName && input.adminEmail && hospitalId) {
+    let membership: StaffMember | undefined;
+
+    if (input.adminName && input.adminEmail) {
       try {
         const inviteResult = await this.inviteStaff(
           {
@@ -1076,13 +939,94 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         emailSent = inviteResult.emailSent ?? false;
         emailId = inviteResult.emailId;
         emailError = inviteResult.emailError;
+        membership = inviteResult.membership;
       } catch (inviteError) {
         emailError = inviteError instanceof Error ? inviteError.message : "Clinical admin invitation error";
         console.error("Clinical admin invitation error:", inviteError);
       }
     }
 
-    return { id: hospitalId, setupUrl, emailSent, emailId, emailError };
+    return { id: hospitalId, setupUrl, emailSent, emailId, emailError, membership };
+  }
+
+  async createDoctor(input: DoctorInput): Promise<{ data: Doctor; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }> {
+    if (!input.hospitalId) throw new Error("Hospital ID is required for a doctor");
+    const res = await this.inviteStaff(input, "doctor", input.hospitalId);
+    return {
+      data: {
+        id: res.membership?.id ?? "temp-doc",
+        clinicId: input.hospitalId,
+        name: input.name,
+        email: input.email,
+        phone: input.phone,
+        role: "doctor",
+        status: "Invited",
+        specialty: input.specialty,
+      } as unknown as Doctor,
+      setupUrl: res.setupUrl,
+      emailSent: res.emailSent,
+      emailId: res.emailId,
+      emailError: res.emailError,
+    };
+  }
+
+  async createReceptionist(input: ReceptionistInput): Promise<{ data: Receptionist; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }> {
+    if (!input.hospitalId) throw new Error("Hospital ID is required for a receptionist");
+    const res = await this.inviteStaff(input, "receptionist", input.hospitalId);
+    return {
+      data: {
+        id: res.membership?.id ?? "temp-rec",
+        clinicId: input.hospitalId,
+        name: input.name,
+        email: input.email,
+        phone: input.phone,
+        role: "receptionist",
+        status: "Invited",
+      } as unknown as Receptionist,
+      setupUrl: res.setupUrl,
+      emailSent: res.emailSent,
+      emailId: res.emailId,
+      emailError: res.emailError,
+    };
+  }
+
+  async inviteClinicAdmin(input: ClinicAdminInput): Promise<{ data: StaffMember; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }> {
+    if (!input.hospitalId) throw new Error("Hospital ID is required for clinic admin");
+    const res = await this.inviteStaff(input, "clinic_admin", input.hospitalId);
+    return {
+      data: {
+        id: res.membership?.id ?? "temp-ca",
+        clinicId: input.hospitalId,
+        name: input.name,
+        email: input.email,
+        phone: input.phone,
+        role: "clinic_admin",
+        status: "Invited",
+      } as unknown as StaffMember,
+      setupUrl: res.setupUrl,
+      emailSent: res.emailSent,
+      emailId: res.emailId,
+      emailError: res.emailError,
+    };
+  }
+
+  async inviteSuperAdmin(input: { name: string; email: string; phone: string; tempPassword?: string }): Promise<{ data: StaffMember; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }> {
+    const res = await this.inviteStaff(input, "super_admin");
+    return {
+      data: {
+        id: res.membership?.id ?? "temp-sa",
+        clinicId: null,
+        name: input.name,
+        email: input.email,
+        phone: input.phone,
+        role: "super_admin",
+        status: "Invited",
+      } as unknown as StaffMember,
+      setupUrl: res.setupUrl,
+      emailSent: res.emailSent,
+      emailId: res.emailId,
+      emailError: res.emailError,
+    };
   }
 
   async updateClinic(input: ClinicInput) {
@@ -1263,6 +1207,13 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       p_active: active,
     });
     throwIfError(error);
+    
+    // Suspend or reactivate users based on clinic access
+    if (active) {
+      reactivateClinicAccounts(id);
+    } else {
+      deactivateClinicAccounts(id);
+    }
   }
 
   async extendSubscription(id: string, days: number, proofRef?: string) {
@@ -1427,9 +1378,6 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   }
 
   async softDeleteStaff(userId: string): Promise<void> {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
-    if (!isUuid) return;
-
     const { error } = await this.client.rpc("soft_delete_staff_member", {
       p_user_id: userId,
     });
@@ -1453,9 +1401,6 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   }
 
   async restoreStaff(userId: string): Promise<void> {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
-    if (!isUuid) return;
-
     const { error } = await this.client.rpc("restore_staff_member", {
       p_user_id: userId,
     });
@@ -1479,9 +1424,6 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   }
 
   async permanentlyDeleteStaff(userId: string): Promise<void> {
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(userId);
-    if (!isUuid) return;
-
     const { error } = await this.client.rpc("permanently_delete_staff_user", {
       p_user_id: userId,
     });
@@ -1518,4 +1460,5 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     }
   }
 }
+
 
