@@ -228,6 +228,7 @@ function SetupPage() {
               return;
             }
 
+            supabase.rpc(`check_user_exists`, { p_email: email }).then(({ data }) => { if (data) setUserExists(true); });
             setTokenInfo({
               email,
               full_name: String(row.p_full_name ?? row.full_name ?? ""),
@@ -289,12 +290,11 @@ function SetupPage() {
     e.preventDefault();
     if (!token || !tokenInfo) return;
 
-    const policyError = passwordPolicyError(pw);
-    if (policyError) {
-      toast.error(policyError);
+    if (pw.length < 8 && !userExists) {
+      toast.error("Password must be at least 8 characters");
       return;
     }
-    if (pw !== pw2) {
+    if (!userExists && pw !== pw2) {
       toast.error("Passwords do not match");
       return;
     }
@@ -303,45 +303,59 @@ function SetupPage() {
     try {
       if (supabaseConfig.configured && !isLocalToken) {
         const supabase = getSupabaseBrowserClient();
-        console.log(`[InviteSetup] Calling activate_invited_user RPC (token length = ${token.length})`);
+        console.log(`[InviteSetup] Processing invite... userExists=${userExists}`);
 
-        // Atomically activate user in Supabase auth, profiles, and staff_memberships
-        const { data: activateResult, error: activateErr } = await supabase.rpc(
-          "activate_invited_user",
-          { p_token: token, p_password: pw },
-        );
-
-        if (activateErr) {
-          console.error("[InviteSetup] activate_invited_user RPC error:", activateErr.message);
-          throw new Error(activateErr.message || "Failed to activate account");
-        }
-
-        const resultObj = activateResult as { success?: boolean; error?: string } | null;
-        if (resultObj && resultObj.success === false) {
-          throw new Error(resultObj.error || "Failed to activate account");
-        }
-
-        console.log("[InviteSetup] Account activated successfully via Supabase");
-
-        // Establish live authenticated session via Supabase Auth
-        try {
+        if (userExists) {
+          // Verify their existing password
           const { error: signInError } = await supabase.auth.signInWithPassword({
             email: tokenInfo.email.trim(),
             password: pw,
           });
           if (signInError) {
-            console.warn("[InviteSetup] Supabase auto-signin failed:", signInError);
-            toast.error("Account activated, but auto-login failed. Please sign in manually.");
-          } else {
-            await supabase.auth.getSession();
-            setIsActivated(true);
-            setTimeout(() => {
-              navigate({ to: "/" });
-            }, 3000);
+            setSubmitting(false);
+            toast.error("Incorrect password. Please enter your existing ClinicFlow password.");
             return;
           }
+          
+          // Accept the invite
+          const { error: activateErr } = await supabase.rpc("activate_invited_user", { p_token: token, p_password: null });
+          if (activateErr) throw new Error(activateErr.message || "Failed to accept invitation");
+        } else {
+          // New user
+          const { data: activateResult, error: activateErr } = await supabase.rpc(
+            "activate_invited_user",
+            { p_token: token, p_password: pw },
+          );
+
+          if (activateErr) {
+            console.error("[InviteSetup] activate_invited_user RPC error:", activateErr.message);
+            throw new Error(activateErr.message || "Failed to activate account");
+          }
+
+          const resultObj = activateResult as { success?: boolean; error?: string } | null;
+          if (resultObj && resultObj.success === false) {
+            throw new Error(resultObj.error || "Failed to activate account");
+          }
+          
+          // Establish session
+          await supabase.auth.signInWithPassword({
+            email: tokenInfo.email.trim(),
+            password: pw,
+          });
+        }
+
+        console.log("[InviteSetup] Account activated successfully via Supabase");
+
+        // Try getting session
+        try {
+          await supabase.auth.getSession();
+          setIsActivated(true);
+          setTimeout(() => {
+            navigate({ to: "/" });
+          }, 3000);
+          return;
         } catch (signInErr) {
-          console.warn("[InviteSetup] Supabase auto-signin notice:", signInErr);
+          console.warn("[InviteSetup] Supabase session notice:", signInErr);
         }
       } else {
         // Fallback exclusively for demo mode without Supabase
