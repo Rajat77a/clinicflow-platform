@@ -502,7 +502,7 @@ function SetupPage() {
                   </Link>
                 </Button>
                 <Button asChild variant="outline" className="h-11 w-full rounded-xl text-sm font-semibold">
-                  <Link to="/login" search={{ email: tokenInfo.email.trim() }}>
+                  <Link to="/login" >
                     Go to Login
                   </Link>
                 </Button>
