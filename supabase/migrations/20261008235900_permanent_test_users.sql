@@ -27,6 +27,10 @@ BEGIN
     'Main Test Facility'
   )
   on conflict (hospital_id, code) do nothing;
+  insert into public.hospital_subscriptions (hospital_id, expires_at)
+  values (v_hospital_id, now() + interval '365 days')
+  on conflict (hospital_id) do nothing;
+
 
   -- Upsert Clinic Admin
   select id into v_admin_id from auth.users where email = 'clinic.admin@clinicflow.test';
