@@ -1,4 +1,5 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { toast } from "sonner";
+import { createFileRoute, Link, notFound, useRouter } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
@@ -21,7 +22,7 @@ import { hasPermission } from "@/lib/access-control";
 import { supabaseConfig } from "@/lib/supabase/config";
 import {
   Phone, Mail, MapPin, MessageCircle, Calendar, FileText, Receipt,
-  FolderOpen, FlaskConical, Download, Send, Printer, Edit, Eye,
+  FolderOpen, FlaskConical, Download, Send, Printer, Edit, Eye, Trash2,
 } from "lucide-react";
 import { useRecordPage } from "@/lib/use-record-page";
 
@@ -39,7 +40,9 @@ function PatientProfile() {
     listPrescriptions,
     listLabReports,
     listBills,
+    softDeletePatient,
   } = useWorkspaceData();
+  const router = useRouter();
   const snapshotPatient = patients.find(candidate => candidate.id === id);
   const [loadedPatient, setLoadedPatient] = useState<Patient | null>(null);
   const [recordLoading, setRecordLoading] = useState(!snapshotPatient);
@@ -81,7 +84,22 @@ function PatientProfile() {
   const canEditRx = Boolean(user && hasPermission(user.role, "prescriptions.write"));
   const canAddLab = Boolean(user && hasPermission(user.role, "labs.write"));
   const canBook = Boolean(user && hasPermission(user.role, "appointments.create"));
+  const canDeletePatient = Boolean(user && hasPermission(user.role, "patients.delete"));
   const canUseExternalSharing = supabaseConfig.demoMode;
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleDeletePatient = async () => {
+    if (!confirm("Are you sure you want to move this patient to the trash?")) return;
+    setIsDeleting(true);
+    try {
+      await softDeletePatient(patient.id);
+      toast.success("Patient moved to trash");
+      router.navigate({ to: "/app/patients" });
+    } catch (err: any) {
+      toast.error(err.message || "Failed to delete patient");
+      setIsDeleting(false);
+    }
+  };
 
   const printRx = (rx: Prescription) => {
     printDocument(`
@@ -115,6 +133,12 @@ function PatientProfile() {
                 <Link to="/app/appointments/new" search={{ patient: patient.id }}>
                   Book follow-up
                 </Link>
+              </Button>
+            )}
+            {canDeletePatient && (
+              <Button variant="outline" className="text-destructive hover:text-destructive hover:bg-destructive/10 border-destructive/20" disabled={isDeleting} onClick={handleDeletePatient}>
+                <Trash2 className="h-4 w-4 mr-2" />
+                Trash
               </Button>
             )}
           </div>

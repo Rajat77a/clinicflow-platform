@@ -7,6 +7,7 @@ export type Permission =
   | "users.manage"
   | "patients.read"
   | "patients.create"
+  | "patients.delete"
   | "appointments.read"
   | "appointments.create"
   | "appointments.update"
@@ -41,10 +42,12 @@ const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     "settings.manage",
     "support.read",
     "notifications.read",
+    "patients.delete",
   ]),
    clinic_admin: new Set([
      "patients.read",
      "patients.create",
+     "patients.delete",
      "appointments.read",
      "appointments.create",
      "appointments.update",
