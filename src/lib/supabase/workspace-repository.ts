@@ -1241,7 +1241,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       p_date_of_birth: input.dateOfBirth,
       p_sex: patientSex(input.gender),
       p_phone: input.phone,
-      p_doctor_user_id: input.doctorId,
+      p_doctor_user_id: input.doctorId ?? null,
       p_idempotency_key: randomKey(),
       p_blood_group: input.bloodGroup ?? null,
       p_email: input.email ?? null,
