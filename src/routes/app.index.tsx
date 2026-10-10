@@ -161,7 +161,7 @@ function SuperAdminDashboard() {
     <>
       <PageHeader
         title="Installation overview"
-        description="Administrative health of this dedicated hospital installation."
+        description={`Administrative health of this dedicated hospital installation. Today is ${new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.`}
       />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <StatCard label="Hospitals" value={clinics.length} icon={<Building2 className="h-4 w-4" />} />
