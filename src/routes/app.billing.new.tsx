@@ -191,7 +191,7 @@ function NewBill() {
                 <DropdownMenuContent>
                   {patientRxs.map((rx) => (
                     <DropdownMenuItem key={rx.id} onClick={() => importFromRx(rx)}>
-                      {rx.date} - {rx.id} ({rx.medicines.length} meds)
+                      {rx.date} — Dr. {rx.doctor} {rx.diagnosis && rx.diagnosis !== "Not recorded" ? `· ${rx.diagnosis}` : ""} ({rx.medicines.length} meds)
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
