@@ -96,6 +96,7 @@ function NewPatient() {
                 <Select value={bloodGroup} onValueChange={setBloodGroup}><SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>{["A+","A-","B+","B-","AB+","AB-","O+","O-"].map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
                 </Select>
+              </Field>
             </div>
           </section>
 
