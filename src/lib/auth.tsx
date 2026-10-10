@@ -68,7 +68,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const [
       { data: profile, error: profileError },
       { data: membership, error: membershipError },
-      { data: platformAdmin },
+      { data: platformAdmin, error: platformAdminError },
     ] = await Promise.all([
       supabase.from("profiles").select("display_name, email").eq("id", authUser.id).maybeSingle(),
       supabase
@@ -83,8 +83,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         .maybeSingle(),
     ]);
 
-    if (profileError || membershipError) {
-      throw profileError ?? membershipError;
+    if (profileError || membershipError || platformAdminError) {
+      console.error("Auth hydration errors:", { profileError, membershipError, platformAdminError });
+      const errs = [];
+      if (profileError) errs.push(`Prof: ${profileError.message}`);
+      if (membershipError) errs.push(`Mem: ${membershipError.message}`);
+      if (platformAdminError) errs.push(`Plat: ${platformAdminError.message}`);
+      throw new Error(errs.join(" | "));
     }
 
     // Check if user is banned or deleted
