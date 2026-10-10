@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
-import { useWorkspaceData, type Clinic, type StaffMember, type Patient } from "@/lib/workspace-data";
+import { useWorkspaceData, type Clinic, type StaffMember } from "@/lib/workspace-data";
 import { Trash2, RotateCcw, ArrowLeft, AlertTriangle, ShieldAlert, CheckSquare, Building2, Users } from "lucide-react";
 import { toast } from "sonner";
 
@@ -41,9 +41,6 @@ function TrashBinPage() {
     permanentlyDeleteStaff,
     bulkRestoreStaff,
     bulkPermanentlyDeleteStaff,
-    binPatients,
-    restorePatient,
-    permanentlyDeletePatient,
   } = useWorkspaceData();
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
@@ -57,21 +54,17 @@ function TrashBinPage() {
   const [showBulkRestoreDialog, setShowBulkRestoreDialog] = useState(false);
   const [showBulkRestoreUsersDialog, setShowBulkRestoreUsersDialog] = useState(false);
   const [showBulkDeleteUsersDialog, setShowBulkDeleteUsersDialog] = useState(false);
-  const [selectedPatientIds, setSelectedPatientIds] = useState<Set<string>>(new Set());
-  const [restorePatientTarget, setRestorePatientTarget] = useState<Patient | null>(null);
-  const [deletePatientTarget, setDeletePatientTarget] = useState<Patient | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const isSuperAdmin = user?.role === "super_admin";
-  const isClinicAdmin = user?.role === "clinic_admin";
 
-  if (!isSuperAdmin && !isClinicAdmin) {
+  if (!isSuperAdmin) {
     return (
       <div className="flex flex-col items-center justify-center p-12 text-center">
         <ShieldAlert className="h-12 w-12 text-destructive mb-4" />
         <h2 className="text-xl font-bold">Access Denied</h2>
         <p className="text-muted-foreground mt-1 mb-4">
-          The Trash is accessible to Administrators only.
+          The Trash is accessible to Super Administrators only.
         </p>
         <Button asChild variant="outline">
           <Link to="/app">Return to Dashboard</Link>
@@ -300,17 +293,15 @@ function TrashBinPage() {
         }
       />
 
-      <Tabs defaultValue={isSuperAdmin ? "clinics" : "users"} className="w-full space-y-6">
-        <TabsList className="grid w-full max-w-md grid-cols-3">
-          {isSuperAdmin && (
-            <TabsTrigger value="clinics" className="gap-2">
-              <Building2 className="h-4 w-4" />
-              <span>Clinics</span>
-              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                {binClinics.length}
-              </Badge>
-            </TabsTrigger>
-          )}
+      <Tabs defaultValue="clinics" className="w-full space-y-6">
+        <TabsList className="grid w-full max-w-xs grid-cols-2">
+          <TabsTrigger value="clinics" className="gap-2">
+            <Building2 className="h-4 w-4" />
+            <span>Clinics</span>
+            <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+              {binClinics.length}
+            </Badge>
+          </TabsTrigger>
           <TabsTrigger value="users" className="gap-2">
             <Users className="h-4 w-4" />
             <span>Users</span>
@@ -318,17 +309,9 @@ function TrashBinPage() {
               {binStaffMembers.length}
             </Badge>
           </TabsTrigger>
-          <TabsTrigger value="patients" className="gap-2">
-            <Users className="h-4 w-4" />
-            <span>Patients</span>
-            <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-              {binPatients.length}
-            </Badge>
-          </TabsTrigger>
         </TabsList>
 
         {/* CLINICS TAB */}
-        {isSuperAdmin && (
         <TabsContent value="clinics" className="space-y-4">
           <div className="rounded-2xl border bg-card shadow-soft">
             <div className="flex items-center justify-between border-b p-4 text-sm font-medium text-muted-foreground">
@@ -498,7 +481,6 @@ function TrashBinPage() {
             </div>
           </div>
         </TabsContent>
-        )}
 
         {/* USERS TAB */}
         <TabsContent value="users" className="space-y-4">
@@ -663,86 +645,6 @@ function TrashBinPage() {
                                 variant="destructive"
                                 onClick={() => setDeleteUserTarget(member)}
                                 title={`Permanently Delete ${member.name}`}
-                              >
-                                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
-                                Delete Permanently
-                              </Button>
-                            </div>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </div>
-        </TabsContent>
-
-        {/* PATIENTS TAB */}
-        <TabsContent value="patients" className="space-y-4">
-          <div className="rounded-xl border bg-card text-card-foreground shadow-sm">
-            <div className="flex flex-col gap-4 p-6 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-center gap-2">
-                <Users className="h-4 w-4 text-destructive" />
-                <span>{binPatients.length} deleted patient{binPatients.length === 1 ? "" : "s"} in Trash</span>
-              </div>
-            </div>
-
-            <div className="overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Name</TableHead>
-                    <TableHead>MRN</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Deleted Date</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {binPatients.length === 0 ? (
-                    <TableRow>
-                      <TableCell colSpan={5} className="h-32 text-center text-muted-foreground">
-                        The Trash is empty. No deleted patients found.
-                      </TableCell>
-                    </TableRow>
-                  ) : (
-                    binPatients.map((patient) => {
-                      const deletedFormatted = patient.deletedAt
-                        ? new Date(patient.deletedAt).toLocaleDateString()
-                        : "Recently";
-
-                      return (
-                        <TableRow key={patient.id}>
-                          <TableCell className="font-medium">
-                            {patient.name}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-sm">
-                            {patient.medicalRecordNumber}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground text-sm">
-                            {patient.phone}
-                          </TableCell>
-                          <TableCell className="text-muted-foreground tabular-nums text-sm">
-                            {deletedFormatted}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1.5">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setRestorePatientTarget(patient)}
-                                title={`Restore ${patient.name}`}
-                              >
-                                <RotateCcw className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
-                                Restore
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="destructive"
-                                onClick={() => setDeletePatientTarget(patient)}
-                                title={`Permanently Delete ${patient.name}`}
                               >
                                 <Trash2 className="mr-1.5 h-3.5 w-3.5" />
                                 Delete Permanently
@@ -1051,84 +953,6 @@ function TrashBinPage() {
             </Button>
             <Button variant="destructive" onClick={handleBulkPermanentDeleteUsers} disabled={isProcessing}>
               {isProcessing ? "Deleting..." : `Permanently Delete ${selectedUserIds.size} Users`}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Restore Patient Confirmation Dialog */}
-      <Dialog open={Boolean(restorePatientTarget)} onOpenChange={(open) => { if (!open) setRestorePatientTarget(null); }}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <RotateCcw className="h-5 w-5 text-emerald-600" />
-              Restore Patient
-            </DialogTitle>
-            <DialogDescription>
-              Are you sure you want to restore <strong>{restorePatientTarget?.name}</strong>? They will regain access to their account if applicable.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0 mt-4">
-            <Button variant="outline" onClick={() => setRestorePatientTarget(null)} disabled={isProcessing}>
-              Cancel
-            </Button>
-            <Button
-              onClick={async () => {
-                if (!restorePatientTarget) return;
-                setIsProcessing(true);
-                try {
-                  await restorePatient(restorePatientTarget.id);
-                  toast.success(`Restored ${restorePatientTarget.name}`);
-                  setRestorePatientTarget(null);
-                } catch (err: any) {
-                  toast.error(err.message || "Failed to restore patient");
-                } finally {
-                  setIsProcessing(false);
-                }
-              }}
-              disabled={isProcessing}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white"
-            >
-              {isProcessing ? "Restoring..." : "Restore Patient"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Single Permanent Delete Patient Confirmation Dialog */}
-      <Dialog open={Boolean(deletePatientTarget)} onOpenChange={(open) => { if (!open) setDeletePatientTarget(null); }}>
-        <DialogContent className="max-w-md border-destructive/20">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <AlertTriangle className="h-5 w-5" />
-              Permanently Delete Patient
-            </DialogTitle>
-            <DialogDescription>
-              This action cannot be undone. This will permanently delete <strong>{deletePatientTarget?.name}</strong> and remove all their data from our servers.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter className="gap-2 sm:gap-0 mt-4">
-            <Button variant="outline" onClick={() => setDeletePatientTarget(null)} disabled={isProcessing}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={async () => {
-                if (!deletePatientTarget) return;
-                setIsProcessing(true);
-                try {
-                  await permanentlyDeletePatient(deletePatientTarget.id);
-                  toast.success(`Permanently deleted ${deletePatientTarget.name}`);
-                  setDeletePatientTarget(null);
-                } catch (err: any) {
-                  toast.error(err.message || "Failed to delete patient");
-                } finally {
-                  setIsProcessing(false);
-                }
-              }}
-              disabled={isProcessing}
-            >
-              {isProcessing ? "Deleting..." : "Delete Permanently"}
             </Button>
           </DialogFooter>
         </DialogContent>
