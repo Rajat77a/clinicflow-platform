@@ -31,30 +31,18 @@ export function ClinicStaffDirectoryModal({ clinicId, clinicName, onClose }: Sta
       setLoading(true);
       try {
         const supabase = getSupabaseBrowserClient();
-        const { data, error } = await supabase
-          .from("staff_memberships")
-          .select(`
-            role_code,
-            employee_number,
-            active,
-            profiles (
-              id,
-              display_name,
-              email
-            )
-          `)
-          .eq("hospital_id", clinicId)
-          .eq("active", true);
+        const { data, error } = await supabase.rpc("list_current_staff");
 
         if (error) throw error;
 
         if (mounted && data) {
           const mapped: StaffMember[] = data
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            .filter((m: any) => m.hospital_id === clinicId)
             .map((m: any) => ({
-              id: m.profiles?.id || "",
-              name: m.profiles?.display_name || "Unknown",
-              email: m.profiles?.email || "",
+              id: m.user_id || "",
+              name: m.display_name || "Unknown",
+              email: m.email || "",
               role: m.role_code,
               employeeNumber: m.employee_number || "-",
             }))

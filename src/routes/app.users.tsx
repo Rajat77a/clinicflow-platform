@@ -68,12 +68,12 @@ function UsersPage() {
     const map = new Map<string, StaffMember>();
     
     // Add active staff members
-    staffMembers.forEach(m => map.set(m.id, m));
+    staffMembers.forEach(m => map.set(`${m.id}-${m.role}`, m));
     
     // Add inactive/expired staff members (excluding deleted ones)
     binStaffMembers.forEach(m => {
-      if (!m.deletedAt && !map.has(m.id)) {
-        map.set(m.id, m);
+      if (!m.deletedAt && !map.has(`${m.id}-${m.role}`)) {
+        map.set(`${m.id}-${m.role}`, m);
       }
     });
 
