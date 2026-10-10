@@ -312,25 +312,40 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false);
   
   // -- ROLE SWITCHER LOGIC --
-  const [availableRoles, setAvailableRoles] = useState<string[]>([]);
+  const [availableRoles, setAvailableRoles] = useState<{role_code: string, hospital_id: string, hospital_name?: string}[]>([]);
   const [switching, setSwitching] = useState(false);
 
   useEffect(() => {
     if (user) {
-      supabase.from('staff_roles').select('role_code').eq('user_id', user.userId).then(({ data }: { data: any }) => {
-        if (data) {
-          const roles = Array.from(new Set(data.map((d: any) => d.role_code)));
-          if (!roles.includes(user.role)) roles.push(user.role);
-          setAvailableRoles(roles as string[]);
-        }
+      supabase.from('staff_roles')
+        .select('role_code, hospital_id, hospitals(name)')
+        .eq('user_id', user.userId)
+        .then(({ data }: { data: any }) => {
+          if (data) {
+            const roles = data.map((d: any) => ({
+              role_code: d.role_code,
+              hospital_id: d.hospital_id,
+              hospital_name: d.hospitals?.name
+            }));
+            
+            // Ensure current role is in list even if not in DB yet (edge cases)
+            if (!roles.some((r: any) => r.role_code === user.role && r.hospital_id === user.clinicId)) {
+              roles.push({
+                role_code: user.role,
+                hospital_id: user.clinicId || '',
+                hospital_name: user.clinic
+              });
+            }
+            setAvailableRoles(roles);
+          }
       });
     }
   }, [user]);
 
-  const switchRole = async (newRole: string) => {
-    if (newRole === user?.role) return;
+  const switchRole = async (newRole: string, newHospitalId: string) => {
+    if (newRole === user?.role && newHospitalId === user?.clinicId) return;
     setSwitching(true);
-    const { data, error } = await supabase.rpc('switch_active_role', { p_role_code: newRole });
+    const { data, error } = await supabase.rpc('switch_active_role', { p_role_code: newRole, p_hospital_id: newHospitalId });
     if (!error && data?.success) {
       window.location.reload();
     } else {
@@ -457,13 +472,16 @@ export function AppShell({ children }: { children: ReactNode }) {
                     <DropdownMenuLabel className="text-xs text-muted-foreground font-normal">Switch Role</DropdownMenuLabel>
                     {availableRoles.map(role => (
                       <DropdownMenuItem 
-                        key={role} 
+                        key={`${role.role_code}-${role.hospital_id}`} 
                         disabled={switching}
-                        onClick={() => switchRole(role)}
-                        className="flex items-center justify-between"
+                        onClick={() => switchRole(role.role_code, role.hospital_id)}
+                        className="flex flex-col items-start gap-1 cursor-pointer"
                       >
-                        <span>{ROLE_LABELS[role as Role] || role}</span>
-                        {role === user.role && <div className="h-2 w-2 rounded-full bg-green-500" />}
+                        <div className="flex w-full items-center justify-between">
+                          <span className="font-medium">{ROLE_LABELS[role.role_code as Role] || role.role_code}</span>
+                          {role.role_code === user.role && role.hospital_id === user.clinicId && <div className="h-2 w-2 rounded-full bg-green-500" />}
+                        </div>
+                        {role.hospital_name && <span className="text-[10px] text-muted-foreground">{role.hospital_name}</span>}
                       </DropdownMenuItem>
                     ))}
                   </>
