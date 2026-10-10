@@ -109,7 +109,7 @@ function PatientProfile() {
       <PageHeader title={patient.name} description={`Patient ID ${patient.medicalRecordNumber ?? patient.id}`}
         actions={
           <div className="flex flex-wrap gap-2">
-            {canEditRx && <Button asChild variant="outline"><Link to="/app/prescriptions/new">New prescription</Link></Button>}
+            {canEditRx && <Button asChild variant="outline"><Link to="/app/prescriptions/new" search={{ patient: patient.id }}>New prescription</Link></Button>}
             {canBook && (
               <Button asChild>
                 <Link to="/app/appointments/new" search={{ patient: patient.id }}>
