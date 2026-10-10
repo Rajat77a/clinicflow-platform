@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -24,7 +24,7 @@ const CATS: Cat[] = ["Consultation", "Procedure", "Medicine", "Lab", "Other"];
 function NewBill() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { patients, doctors, prescriptions, searchPatients, createBill, listPrescriptions } = useWorkspaceData();
+  const { patients, doctors, prescriptions, searchPatients, createBill } = useWorkspaceData();
   const patientOptions = toPatientOptions(patients);
   const searchPatientOptions = useCallback(
     async (query: string) =>
@@ -83,26 +83,12 @@ function NewBill() {
 
   const removeLine = (id: string) => setLines(lines.filter(l => l.id !== id));
 
-  const [loadedRxs, setLoadedRxs] = useState<Prescription[]>([]);
-  useEffect(() => {
-    if (!patient) {
-      setLoadedRxs([]);
-      return;
-    }
-    let current = true;
-    void listPrescriptions({ patientId: patient.id }).then((res) => {
-      if (current) setLoadedRxs(res.rows);
-    });
-    return () => { current = false; };
-  }, [listPrescriptions, patient]);
-
   const patientRxs = useMemo(() => {
     if (!patient) return [];
-    return loadedRxs.sort((a, b) => {
-      const dateDiff = new Date(b.date).getTime() - new Date(a.date).getTime();
-      return dateDiff !== 0 ? dateDiff : b.id.localeCompare(a.id);
-    });
-  }, [patient, loadedRxs]);
+    return prescriptions
+      .filter((p) => p.patientId === patient.id)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [patient, prescriptions]);
 
   const importFromRx = (rx: Prescription) => {
     const medLines: Line[] = rx.medicines.map((m) => ({

@@ -112,6 +112,8 @@ function AppointmentsPage() {
         <TabsList className="rounded-xl bg-muted/60 p-1">
           <TabsTrigger value="today" className="rounded-lg"><List className="mr-1.5 h-3.5 w-3.5" />Today's appointments</TabsTrigger>
           <TabsTrigger value="all" className="rounded-lg"><List className="mr-1.5 h-3.5 w-3.5" />All appointments</TabsTrigger>
+          <TabsTrigger value="calendar" className="rounded-lg"><CalendarDays className="mr-1.5 h-3.5 w-3.5" />Calendar</TabsTrigger>
+          <TabsTrigger value="upcoming" className="rounded-lg">Upcoming</TabsTrigger>
         </TabsList>
         {["today", "all"].map((tabValue) => (
           <TabsContent key={tabValue} value={tabValue} className="mt-4 rounded-2xl border bg-card shadow-soft overflow-x-auto">
@@ -149,6 +151,24 @@ function AppointmentsPage() {
           />
         </TabsContent>
         ))}
+        <TabsContent value="calendar" className="mt-4"><CalendarView appts={appointments} /></TabsContent>
+        <TabsContent value="upcoming" className="mt-4 grid gap-3 sm:grid-cols-2">
+          {upcoming.map(a => (
+            <div key={a.id} className="rounded-2xl border bg-card p-4 shadow-soft">
+              <div className="flex items-center justify-between">
+                <div className="font-semibold">{a.patient}</div>
+                <Badge variant="secondary">{a.status}</Badge>
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">{a.doctor} · {a.type}</div>
+              <div className="mt-3 text-sm">{a.date} at <span className="font-semibold">{a.time}</span></div>
+            </div>
+          ))}
+          {upcoming.length === 0 && (
+            <div className="rounded-lg border border-dashed bg-card px-4 py-8 text-center text-sm text-muted-foreground sm:col-span-2">
+              No upcoming appointments.
+            </div>
+          )}
+        </TabsContent>
       </Tabs>
 
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>

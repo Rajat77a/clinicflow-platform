@@ -204,7 +204,6 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       invoicesResult,
       auditResult,
       facilitiesResult,
-      deletedPatientsResult,
     ] = await Promise.all([
       this.client.rpc("list_visible_clinics"),
       this.client.rpc("list_active_doctors_with_counts"),
@@ -253,7 +252,6 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         .from("facilities")
         .select("id,hospital_id,code,name,timezone,phone,email,address,active")
         .order("created_at"),
-      this.listDeletedPatients(),
     ]);
 
     for (const result of [hospitalResult, doctorsResult, membershipsResult, patientsResult,
@@ -459,7 +457,6 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     return {
       clinics,
       patients,
-      binPatients: deletedPatientsResult,
       doctors,
       receptionists,
       appointments,
@@ -503,23 +500,6 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       limit,
       offset,
     };
-  }
-
-  async listDeletedPatients(): Promise<Patient[]> {
-    const [{ data, error }, doctorById] = await Promise.all([
-      this.client
-        .from("patients")
-        .select("id,hospital_id,medical_record_number,first_name,last_name,date_of_birth,sex,blood_group,phone,email,whatsapp_phone,address,emergency_contact,allergies,chronic_conditions,status,updated_at,version,deleted_at")
-        .not("deleted_at", "is", null),
-      this.loadDoctorNames(),
-    ]);
-    throwIfError(error);
-    const rows = (data ?? []) as Row[];
-    return rows.map((row) => {
-      const p = mapPatient(row, doctorById.get(row.doctor_user_id));
-      p.deletedAt = row.deleted_at;
-      return p;
-    });
   }
 
   async getPatient(id: string) {
@@ -1488,39 +1468,6 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     for (const id of userIds) {
       await this.permanentlyDeleteStaff(id);
     }
-  }
-
-  async softDeletePatient(id: string) {
-    const { error } = await this.client.rpc("soft_delete_patient", {
-      p_patient_id: id,
-    });
-    if (error) throw new Error(error.message);
-  }
-
-  async restorePatient(id: string) {
-    const { error } = await this.client.rpc("restore_patient", {
-      p_patient_id: id,
-    });
-    if (error) throw new Error(error.message);
-  }
-
-  async permanentlyDeletePatient(id: string) {
-    const { error } = await this.client.rpc("permanently_delete_patient", {
-      p_patient_id: id,
-    });
-    if (error) throw new Error(error.message);
-  }
-
-  async bulkSoftDeletePatients(ids: string[]) {
-    await Promise.all(ids.map((id) => this.softDeletePatient(id)));
-  }
-
-  async bulkRestorePatients(ids: string[]) {
-    await Promise.all(ids.map((id) => this.restorePatient(id)));
-  }
-
-  async bulkPermanentlyDeletePatients(ids: string[]) {
-    await Promise.all(ids.map((id) => this.permanentlyDeletePatient(id)));
   }
 }
 

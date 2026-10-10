@@ -129,7 +129,6 @@ export type Patient = {
   doctor: string;
   lastVisit: string;
   status: string;
-  deletedAt?: string;
   version?: number;
   medicalRecordNumber?: string;
 };
@@ -260,7 +259,6 @@ export type StaffMember = {
 export interface WorkspaceSnapshot {
   clinics: Clinic[];
   patients: Patient[];
-  binPatients: Patient[];
   doctors: Doctor[];
   receptionists: Receptionist[];
   appointments: Appointment[];
@@ -429,7 +427,6 @@ function emptySnapshot(): WorkspaceSnapshot {
   return {
     clinics: [],
     patients: [],
-    binPatients: [],
     doctors: [],
     receptionists: [],
     appointments: [],
@@ -1171,7 +1168,6 @@ interface WorkspaceData {
   auditLogs: AuditEntry[];
   staffMembers: StaffMember[];
   binStaffMembers: StaffMember[];
-  binPatients: Patient[];
   facilities: Facility[];
   refresh: () => Promise<void>;
   searchPatients: (input?: PatientSearch) => Promise<PatientPage>;
@@ -1206,9 +1202,6 @@ interface WorkspaceData {
   bulkPermanentlyDeleteStaff: (userIds: string[]) => Promise<void>;
   resendStaffInvitation: (userId: string) => Promise<void>;
   createPatient: (input: PatientInput) => Promise<Patient>;
-  softDeletePatient: (patientId: string) => Promise<void>;
-  restorePatient: (patientId: string) => Promise<void>;
-  permanentlyDeletePatient: (patientId: string) => Promise<void>;
   createAppointment: (input: AppointmentInput) => Promise<Appointment>;
   updateAppointment: (appointment: Appointment) => Promise<Appointment>;
   savePrescription: (input: PrescriptionInput) => Promise<Prescription>;
@@ -1442,9 +1435,6 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
               }
               return m;
             })
-        : [],
-      binPatients: user && hasPermission(user.role, "patients.delete")
-        ? clinicScope(state.binPatients)
         : [],
       facilities: user && hasPermission(user.role, "facilities.manage")
         ? clinicScope(state.facilities)
@@ -2188,27 +2178,6 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         });
 
         dispatch({ type: "staff.invitation_resent", userId, actor });
-      },
-      softDeletePatient: async (patientId) => {
-        requireUser(user, "patients.delete");
-        if (repository) {
-          await repository.softDeletePatient(patientId);
-          await refresh();
-        }
-      },
-      restorePatient: async (patientId) => {
-        requireUser(user, "patients.delete");
-        if (repository) {
-          await repository.restorePatient(patientId);
-          await refresh();
-        }
-      },
-      permanentlyDeletePatient: async (patientId) => {
-        requireUser(user, "patients.delete");
-        if (repository) {
-          await repository.permanentlyDeletePatient(patientId);
-          await refresh();
-        }
       },
       createPatient: async (input) => {
         const actor = requireUser(user, "patients.create");
