@@ -234,15 +234,8 @@ function NewPrescription() {
                 <Label>
                   Doctor {isLabMode ? <span className="text-xs text-muted-foreground font-normal">(optional — leave empty if not assigned)</span> : <span className="text-destructive">*</span>}
                 </Label>
-                {isDoctor && !isLabMode && doctor ? (
-                  <div className="rounded-xl border bg-muted/40 px-3 py-2.5">
-                    <div className="text-sm font-semibold">{doctor.primary}</div>
-                    <div className="text-xs text-muted-foreground">{doctor.id} · signed-in doctor</div>
-                  </div>
-                ) : (
-                  <EntityPicker options={doctorOptions} value={doctor} onChange={setDoctor}
-                    placeholder={isLabMode ? "Search doctor name (optional)…" : "Search by name, doctor ID or phone…"} />
-                )}
+                <EntityPicker options={doctorOptions} value={doctor} onChange={setDoctor}
+                  placeholder={isLabMode ? "Search doctor name (optional)…" : "Search by name, doctor ID or phone…"} />
                 {isLabMode && doctor && (
                   <button type="button" onClick={() => setDoctor(null)}
                     className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2">
