@@ -47,7 +47,6 @@ function NewPatient() {
     }
     if (!gender) return toast.error("Select a gender");
     if (!phone.trim()) return toast.error("Phone is required");
-    if (!doctorId) return toast.error("Assign a doctor");
     setSaving(true);
     try {
       const patient = await createPatient({
@@ -55,7 +54,6 @@ function NewPatient() {
         dateOfBirth,
         gender,
         phone: phone.trim(),
-        doctorId,
         bloodGroup: bloodGroup || undefined,
         email: email.trim() || undefined,
         whatsappPhone: whatsappPhone.trim() || undefined,
@@ -98,13 +96,6 @@ function NewPatient() {
                 <Select value={bloodGroup} onValueChange={setBloodGroup}><SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>{["A+","A-","B+","B-","AB+","AB-","O+","O-"].map(b => <SelectItem key={b} value={b}>{b}</SelectItem>)}</SelectContent>
                 </Select>
-              </Field>
-              <Field label="Assigned doctor" span={6}>
-                <Select value={doctorId} onValueChange={setDoctorId}>
-                  <SelectTrigger className="h-11 rounded-xl"><SelectValue placeholder="Select doctor" /></SelectTrigger>
-                  <SelectContent>{activeDoctors.map(item => <SelectItem key={item.id} value={item.id}>{item.name} · {item.specialty}</SelectItem>)}</SelectContent>
-                </Select>
-              </Field>
             </div>
           </section>
 

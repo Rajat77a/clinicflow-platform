@@ -276,7 +276,7 @@ export interface PatientInput {
   dateOfBirth: string;
   gender: string;
   phone: string;
-  doctorId: string;
+  doctorId?: string;
   bloodGroup?: string;
   email?: string;
   whatsappPhone?: string;
@@ -2187,10 +2187,12 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           return patient;
         }
         const tenantId = requireClinic(actor);
-        const doctor = state.doctors.find(
-          (item) => item.id === input.doctorId && item.clinicId === tenantId,
-        );
-        if (!doctor) throw new Error("Assigned doctor must belong to the active clinic");
+        if (input.doctorId) {
+          const doctor = state.doctors.find(
+            (item) => item.id === input.doctorId && item.clinicId === tenantId,
+          );
+          if (!doctor) throw new Error("Assigned doctor must belong to the active clinic");
+        }
         const birthDate = new Date(`${input.dateOfBirth}T00:00:00`);
         const today = new Date();
         let age = today.getFullYear() - birthDate.getFullYear();
