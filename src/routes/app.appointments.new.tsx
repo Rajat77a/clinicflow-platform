@@ -49,7 +49,7 @@ function NewAppointment() {
     user?.role === "doctor" ? activeDoctors.filter(item => item.name === user.name) : activeDoctors
   );
   const [patient, setPatient] = useState<PatientOption | null>(null);
-  const [doctor, setDoctor] = useState<DoctorOption | null>(doctorOptions[0] ?? null);
+  const [doctor, setDoctor] = useState<DoctorOption | null>(null);
   const initial = nowDefaults();
   const [date, setDate] = useState(initial.date);
   const [time, setTime] = useState(initial.time);
