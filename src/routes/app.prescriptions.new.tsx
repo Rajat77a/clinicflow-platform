@@ -64,7 +64,7 @@ function NewPrescription() {
   const [doctor, setDoctor] = useState<DoctorOption | null>(
     seed
       ? doctorOptions.find(d => d.raw.name === seed.doctor) ?? null
-      : isDoctor ? doctorOptions.find(d => d.raw.name === user?.name) ?? null : null
+      : doctorOptions.length > 0 ? doctorOptions[0] : null
   );
   const [diagnosis, setDiagnosis] = useState(seed?.diagnosis ?? "");
   const [notes, setNotes] = useState(seed?.notes ?? "");
