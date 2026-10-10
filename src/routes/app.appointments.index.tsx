@@ -69,6 +69,7 @@ function CalendarView({ appts }: { appts: Appt[] }) {
 
 function AppointmentsPage() {
   const { appointments, listAppointments, updateAppointment } = useWorkspaceData();
+  const [tab, setTab] = useState("today");
   const {
     rows,
     total,
@@ -77,7 +78,7 @@ function AppointmentsPage() {
     setOffset,
     isLoading,
     error,
-  } = useRecordPage(listAppointments);
+  } = useRecordPage(listAppointments, { date: tab === "today" ? localDateKey() : undefined });
   const [editing, setEditing] = useState<Appt | null>(null);
   const [draft, setDraft] = useState<Appt | null>(null);
   const [saving, setSaving] = useState(false);
@@ -107,13 +108,15 @@ function AppointmentsPage() {
     <>
       <PageHeader title="Appointments" description="Scheduling and check-ins."
         actions={<Button asChild><Link to="/app/appointments/new" search={{ patient: undefined }}><Plus className="mr-1.5 h-4 w-4" />Book appointment</Link></Button>} />
-      <Tabs defaultValue="list">
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList className="rounded-xl bg-muted/60 p-1">
-          <TabsTrigger value="list" className="rounded-lg"><List className="mr-1.5 h-3.5 w-3.5" />List</TabsTrigger>
+          <TabsTrigger value="today" className="rounded-lg"><List className="mr-1.5 h-3.5 w-3.5" />Today's appointments</TabsTrigger>
+          <TabsTrigger value="all" className="rounded-lg"><List className="mr-1.5 h-3.5 w-3.5" />All appointments</TabsTrigger>
           <TabsTrigger value="calendar" className="rounded-lg"><CalendarDays className="mr-1.5 h-3.5 w-3.5" />Calendar</TabsTrigger>
           <TabsTrigger value="upcoming" className="rounded-lg">Upcoming</TabsTrigger>
         </TabsList>
-        <TabsContent value="list" className="mt-4 rounded-2xl border bg-card shadow-soft overflow-x-auto">
+        {["today", "all"].map((tabValue) => (
+          <TabsContent key={tabValue} value={tabValue} className="mt-4 rounded-2xl border bg-card shadow-soft overflow-x-auto">
           <Table>
             <TableHeader><TableRow><TableHead>ID</TableHead><TableHead>Patient</TableHead><TableHead>Doctor</TableHead><TableHead>Date & time</TableHead><TableHead>Type</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow></TableHeader>
             <TableBody>
@@ -147,6 +150,7 @@ function AppointmentsPage() {
             disabled={isLoading}
           />
         </TabsContent>
+        ))}
         <TabsContent value="calendar" className="mt-4"><CalendarView appts={appointments} /></TabsContent>
         <TabsContent value="upcoming" className="mt-4 grid gap-3 sm:grid-cols-2">
           {upcoming.map(a => (

@@ -34,6 +34,7 @@ export interface RecordPageInput {
   offset?: number;
   patientId?: string;
   recordId?: string;
+  date?: string;
 }
 
 export type PatientPage = RecordPage<Patient>;

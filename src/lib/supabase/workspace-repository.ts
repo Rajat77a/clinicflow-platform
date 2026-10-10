@@ -541,6 +541,16 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       .range(offset, offset + limit - 1);
     if (input.patientId) query = query.eq("patient_id", input.patientId);
     if (input.recordId) query = query.eq("id", input.recordId);
+    if (input.date) {
+      // Input date is YYYY-MM-DD. starts_at is timestamptz.
+      // We want starts_at >= YYYY-MM-DDT00:00:00.000Z and starts_at <= YYYY-MM-DDT23:59:59.999Z
+      // Actually, assuming the date string is local timezone date, let's just use the server's filtering.
+      // Easiest is to do: starts_at.gte(input.date) and starts_at.lt(input.date + 1 day)
+      // For simplicity, let's just construct the timestamps.
+      query = query
+        .gte("starts_at", `${input.date}T00:00:00Z`)
+        .lte("starts_at", `${input.date}T23:59:59Z`);
+    }
 
     const [result, doctorById] = await Promise.all([query, this.loadDoctorNames()]);
     throwIfError(result.error);
