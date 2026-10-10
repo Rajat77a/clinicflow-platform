@@ -40,7 +40,7 @@ test("clinic roles cannot enter platform controls", () => {
 test("clinical duties remain separated by permission", () => {
   assert.equal(hasPermission("doctor", "prescriptions.write"), true);
   assert.equal(hasPermission("receptionist", "prescriptions.write"), false);
-  assert.equal(hasPermission("receptionist", "prescriptions.read"), false);
+  assert.equal(hasPermission("receptionist", "prescriptions.read"), true);
   assert.equal(hasPermission("receptionist", "labs.write"), false);
   assert.equal(hasPermission("clinic_admin", "prescriptions.write"), false);
   assert.equal(hasPermission("doctor", "billing.read"), false);
