@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { EntityPicker, toPatientOptions, type PatientOption } from "@/components/forms/entity-picker";
 import { useAuth } from "@/lib/auth";
-import { useWorkspaceData } from "@/lib/workspace-data";
+import { useWorkspaceData, type Prescription } from "@/lib/workspace-data";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { printDocument } from "@/lib/exporters";
 import { Plus, Trash2, Send, Printer, Pill } from "lucide-react";
@@ -82,14 +83,18 @@ function NewBill() {
 
   const removeLine = (id: string) => setLines(lines.filter(l => l.id !== id));
 
-  const importFromRx = () => {
-    if (!patient) { toast.error("Select a patient first"); return; }
-    const rx = prescriptions.find(p => p.patientId === patient.id);
-    if (!rx) { toast.error("No prescription found for this patient"); return; }
-    const medLines: Line[] = rx.medicines.map(m => ({
+  const patientRxs = useMemo(() => {
+    if (!patient) return [];
+    return prescriptions
+      .filter((p) => p.patientId === patient.id)
+      .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  }, [patient, prescriptions]);
+
+  const importFromRx = (rx: Prescription) => {
+    const medLines: Line[] = rx.medicines.map((m) => ({
       id: crypto.randomUUID(), category: "Medicine", name: m.name, qty: 1, unit: m.unitPrice ?? 100,
     }));
-    setLines([...lines, ...medLines]);
+    setLines((current) => [...current, ...medLines]);
     toast.success(`Imported ${medLines.length} medicines from ${rx.id}`);
   };
 
@@ -177,9 +182,20 @@ function NewBill() {
               )}
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button type="button" size="sm" variant="outline" onClick={importFromRx}>
-                <Pill className="mr-1 h-3.5 w-3.5" />Import medicines from prescription
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button type="button" size="sm" variant="outline" disabled={!patientRxs.length}>
+                    <Pill className="mr-1 h-3.5 w-3.5" />Import medicines from prescription
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent>
+                  {patientRxs.map((rx) => (
+                    <DropdownMenuItem key={rx.id} onClick={() => importFromRx(rx)}>
+                      {rx.date} - {rx.id} ({rx.medicines.length} meds)
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
               {CATS.map(c => (
                 <Button key={c} type="button" size="sm" variant="ghost" onClick={() => addLine(c)}>
                   <Plus className="mr-1 h-3.5 w-3.5" />{c}
