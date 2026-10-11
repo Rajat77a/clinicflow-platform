@@ -413,6 +413,12 @@ function UsersPage() {
   const isSuperAdmin = user?.role === "super_admin";
   const canManageUsers = isSuperAdmin || user?.role === "clinic_admin";
 
+  useEffect(() => {
+    if (!isSuperAdmin && roleFilter === "super_admin") {
+      setRoleFilter("all");
+    }
+  }, [isSuperAdmin, roleFilter]);
+
   const canDeleteMember = useCallback((member: StaffMember) => {
     if (TEST_EMAILS.includes(member.email.toLowerCase())) return false;
     if (member.id === user?.userId) return false;
@@ -860,7 +866,9 @@ function UsersPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Roles</SelectItem>
-            <SelectItem value="super_admin">Super Admin</SelectItem>
+            {isSuperAdmin && (
+              <SelectItem value="super_admin">Super Admin</SelectItem>
+            )}
             <SelectItem value="clinic_admin">Clinical Admin</SelectItem>
             <SelectItem value="doctor">Doctor</SelectItem>
             <SelectItem value="receptionist">Receptionist</SelectItem>
