@@ -35,6 +35,8 @@ import {
 
 const STORAGE_KEY_SOFT_DELETED_STAFF = "cf_soft_deleted_staff";
 const STORAGE_KEY_PERM_DELETED_STAFF = "cf_perm_deleted_staff";
+const STORAGE_KEY_SOFT_DELETED_PATIENTS = "cf_soft_deleted_patients";
+const STORAGE_KEY_PERM_DELETED_PATIENTS = "cf_perm_deleted_patients";
 
 export interface StoredSoftDeletedStaff {
   deletedAt: string;
@@ -43,11 +45,37 @@ export interface StoredSoftDeletedStaff {
   previousClinicName?: string | null;
 }
 
+export interface StoredSoftDeletedPatient {
+  deletedAt: string;
+  deletedBy?: string;
+  clinicId?: string;
+}
+
 export function loadSoftDeletedStaffFromStorage(): Record<string, StoredSoftDeletedStaff> {
   if (typeof window === "undefined") return {};
   try {
     const raw = localStorage.getItem(STORAGE_KEY_SOFT_DELETED_STAFF);
-    return raw ? JSON.parse(raw) : {};
+    if (!raw) return {};
+    const parsed: Record<string, StoredSoftDeletedStaff> = JSON.parse(raw);
+    const now = Date.now();
+    const purgedIds: string[] = [];
+    const valid: Record<string, StoredSoftDeletedStaff> = {};
+    for (const [id, item] of Object.entries(parsed)) {
+      const daysOld = (now - new Date(item.deletedAt).getTime()) / (1000 * 60 * 60 * 24);
+      // Automatically purged after 60 days in trash
+      if (daysOld >= 60) {
+        purgedIds.push(id);
+      } else {
+        valid[id] = item;
+      }
+    }
+    if (purgedIds.length > 0) {
+      saveSoftDeletedStaffToStorage(valid);
+      const perm = new Set(loadPermDeletedStaffFromStorage());
+      purgedIds.forEach((id) => perm.add(id));
+      savePermDeletedStaffToStorage(Array.from(perm));
+    }
+    return valid;
   } catch {
     return {};
   }
@@ -76,6 +104,63 @@ export function savePermDeletedStaffToStorage(ids: string[]): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY_PERM_DELETED_STAFF, JSON.stringify(ids));
+  } catch {
+    // Ignore quota or disabled storage
+  }
+}
+
+export function loadSoftDeletedPatientsFromStorage(): Record<string, StoredSoftDeletedPatient> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_SOFT_DELETED_PATIENTS);
+    if (!raw) return {};
+    const parsed: Record<string, StoredSoftDeletedPatient> = JSON.parse(raw);
+    const now = Date.now();
+    const purgedIds: string[] = [];
+    const valid: Record<string, StoredSoftDeletedPatient> = {};
+    for (const [id, item] of Object.entries(parsed)) {
+      const daysOld = (now - new Date(item.deletedAt).getTime()) / (1000 * 60 * 60 * 24);
+      if (daysOld >= 60) {
+        purgedIds.push(id);
+      } else {
+        valid[id] = item;
+      }
+    }
+    if (purgedIds.length > 0) {
+      saveSoftDeletedPatientsToStorage(valid);
+      const perm = new Set(loadPermDeletedPatientsFromStorage());
+      purgedIds.forEach((id) => perm.add(id));
+      savePermDeletedPatientsToStorage(Array.from(perm));
+    }
+    return valid;
+  } catch {
+    return {};
+  }
+}
+
+export function saveSoftDeletedPatientsToStorage(data: Record<string, StoredSoftDeletedPatient>): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEY_SOFT_DELETED_PATIENTS, JSON.stringify(data));
+  } catch {
+    // Ignore quota or disabled storage
+  }
+}
+
+export function loadPermDeletedPatientsFromStorage(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_PERM_DELETED_PATIENTS);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function savePermDeletedPatientsToStorage(ids: string[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEY_PERM_DELETED_PATIENTS, JSON.stringify(ids));
   } catch {
     // Ignore quota or disabled storage
   }
@@ -132,6 +217,8 @@ export type Patient = {
   status: string;
   version?: number;
   medicalRecordNumber?: string;
+  deletedAt?: string;
+  deletedBy?: string;
 };
 export type Doctor = {
   id: string;
@@ -414,7 +501,13 @@ type Command =
   | { type: "staff.invitation_resent"; userId: string; actor: AuthUser }
   | { type: "staff.bulk_soft_deleted"; userIds: string[]; actor: AuthUser }
   | { type: "staff.bulk_restored"; userIds: string[]; actor: AuthUser }
-  | { type: "staff.bulk_permanently_deleted"; userIds: string[]; actor: AuthUser };
+  | { type: "staff.bulk_permanently_deleted"; userIds: string[]; actor: AuthUser }
+  | { type: "patient.soft_deleted"; patientId: string; actor: AuthUser }
+  | { type: "patient.restored"; patientId: string; actor: AuthUser }
+  | { type: "patient.permanently_deleted"; patientId: string; actor: AuthUser }
+  | { type: "patient.bulk_soft_deleted"; patientIds: string[]; actor: AuthUser }
+  | { type: "patient.bulk_restored"; patientIds: string[]; actor: AuthUser }
+  | { type: "patient.bulk_permanently_deleted"; patientIds: string[]; actor: AuthUser };
 
 function createId(prefix: string) {
   const suffix = globalThis.crypto?.randomUUID?.().slice(0, 8).toUpperCase()
@@ -517,10 +610,28 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
           return m;
         });
 
+      const storedSoftPatients = loadSoftDeletedPatientsFromStorage();
+      const storedPermPatients = new Set(loadPermDeletedPatientsFromStorage());
+
+      const updatedPatients = (command.value.patients || [])
+        .filter((p) => !storedPermPatients.has(p.id))
+        .map((p) => {
+          const softPatientInfo = storedSoftPatients[p.id];
+          if (softPatientInfo) {
+            return {
+              ...p,
+              deletedAt: p.deletedAt || softPatientInfo.deletedAt,
+              deletedBy: p.deletedBy || softPatientInfo.deletedBy || "Clinical Admin",
+            };
+          }
+          return p;
+        });
+
       return {
         ...command.value,
         clinics: updatedClinics,
         staffMembers: updatedStaffMembers,
+        patients: updatedPatients,
         permanentlyDeletedIds: permDeleted,
       };
     }
@@ -1150,6 +1261,138 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         `Permanently deleted ${command.userIds.length} staff members`,
       );
     }
+    case "patient.soft_deleted": {
+      const now = new Date().toISOString();
+      const patient = state.patients.find((p) => p.id === command.patientId);
+      const storedSoft = loadSoftDeletedPatientsFromStorage();
+      storedSoft[command.patientId] = {
+        deletedAt: now,
+        deletedBy: command.actor.name,
+        clinicId: patient?.clinicId,
+      };
+      saveSoftDeletedPatientsToStorage(storedSoft);
+
+      return appendAudit(
+        {
+          ...state,
+          patients: state.patients.map((p) =>
+            p.id === command.patientId
+              ? { ...p, deletedAt: now, deletedBy: command.actor.name }
+              : p
+          ),
+        },
+        command.actor,
+        `Soft deleted patient ${command.patientId}`,
+      );
+    }
+    case "patient.restored": {
+      const storedSoft = loadSoftDeletedPatientsFromStorage();
+      delete storedSoft[command.patientId];
+      saveSoftDeletedPatientsToStorage(storedSoft);
+
+      return appendAudit(
+        {
+          ...state,
+          patients: state.patients.map((p) =>
+            p.id === command.patientId
+              ? { ...p, deletedAt: undefined, deletedBy: undefined }
+              : p
+          ),
+        },
+        command.actor,
+        `Restored patient ${command.patientId}`,
+      );
+    }
+    case "patient.permanently_deleted": {
+      const storedSoft = loadSoftDeletedPatientsFromStorage();
+      delete storedSoft[command.patientId];
+      saveSoftDeletedPatientsToStorage(storedSoft);
+
+      const storedPerm = new Set(loadPermDeletedPatientsFromStorage());
+      storedPerm.add(command.patientId);
+      savePermDeletedPatientsToStorage(Array.from(storedPerm));
+
+      return appendAudit(
+        {
+          ...state,
+          patients: state.patients.filter((p) => p.id !== command.patientId),
+        },
+        command.actor,
+        `Permanently deleted patient ${command.patientId}`,
+      );
+    }
+    case "patient.bulk_soft_deleted": {
+      const idSet = new Set(command.patientIds);
+      const now = new Date().toISOString();
+      const storedSoft = loadSoftDeletedPatientsFromStorage();
+      state.patients.forEach((p) => {
+        if (idSet.has(p.id)) {
+          storedSoft[p.id] = {
+            deletedAt: now,
+            deletedBy: command.actor.name,
+            clinicId: p.clinicId,
+          };
+        }
+      });
+      saveSoftDeletedPatientsToStorage(storedSoft);
+
+      return appendAudit(
+        {
+          ...state,
+          patients: state.patients.map((p) =>
+            idSet.has(p.id)
+              ? { ...p, deletedAt: now, deletedBy: command.actor.name }
+              : p
+          ),
+        },
+        command.actor,
+        `Soft deleted ${command.patientIds.length} patients`,
+      );
+    }
+    case "patient.bulk_restored": {
+      const idSet = new Set(command.patientIds);
+      const storedSoft = loadSoftDeletedPatientsFromStorage();
+      command.patientIds.forEach((id) => {
+        delete storedSoft[id];
+      });
+      saveSoftDeletedPatientsToStorage(storedSoft);
+
+      return appendAudit(
+        {
+          ...state,
+          patients: state.patients.map((p) =>
+            idSet.has(p.id)
+              ? { ...p, deletedAt: undefined, deletedBy: undefined }
+              : p
+          ),
+        },
+        command.actor,
+        `Restored ${command.patientIds.length} patients`,
+      );
+    }
+    case "patient.bulk_permanently_deleted": {
+      const idSet = new Set(command.patientIds);
+      const storedSoft = loadSoftDeletedPatientsFromStorage();
+      command.patientIds.forEach((id) => {
+        delete storedSoft[id];
+      });
+      saveSoftDeletedPatientsToStorage(storedSoft);
+
+      const storedPerm = new Set(loadPermDeletedPatientsFromStorage());
+      command.patientIds.forEach((id) => {
+        storedPerm.add(id);
+      });
+      savePermDeletedPatientsToStorage(Array.from(storedPerm));
+
+      return appendAudit(
+        {
+          ...state,
+          patients: state.patients.filter((p) => !idSet.has(p.id)),
+        },
+        command.actor,
+        `Permanently deleted ${command.patientIds.length} patients`,
+      );
+    }
   }
 }
 
@@ -1169,6 +1412,7 @@ interface WorkspaceData {
   auditLogs: AuditEntry[];
   staffMembers: StaffMember[];
   binStaffMembers: StaffMember[];
+  binPatients: Patient[];
   facilities: Facility[];
   refresh: () => Promise<void>;
   searchPatients: (input?: PatientSearch) => Promise<PatientPage>;
@@ -1201,6 +1445,12 @@ interface WorkspaceData {
   bulkRestoreStaff: (userIds: string[]) => Promise<void>;
   permanentlyDeleteStaff: (userId: string) => Promise<void>;
   bulkPermanentlyDeleteStaff: (userIds: string[]) => Promise<void>;
+  softDeletePatient: (patientId: string) => Promise<void>;
+  bulkSoftDeletePatients: (patientIds: string[]) => Promise<void>;
+  restorePatient: (patientId: string) => Promise<void>;
+  bulkRestorePatients: (patientIds: string[]) => Promise<void>;
+  permanentlyDeletePatient: (patientId: string) => Promise<void>;
+  bulkPermanentlyDeletePatients: (patientIds: string[]) => Promise<void>;
   resetUserPassword: (email: string, newPassword: string) => Promise<void>;
   resendStaffInvitation: (userId: string) => Promise<void>;
   createPatient: (input: PatientInput) => Promise<Patient>;
@@ -1226,10 +1476,31 @@ function requireClinic(user: AuthUser) {
   return user.clinicId;
 }
 
-function isWithinRetentionPeriod(deletedAt?: string, retentionDays = 30): boolean {
+export function isWithinRetentionPeriod(deletedAt?: string, retentionDays = 60): boolean {
   if (!deletedAt) return false;
   const daysOld = (Date.now() - new Date(deletedAt).getTime()) / (1000 * 60 * 60 * 24);
   return daysOld < retentionDays;
+}
+
+export function isEligibleForPermanentDelete(deletedAt?: string, minDays = 10): boolean {
+  if (!deletedAt) return false;
+  const daysOld = (Date.now() - new Date(deletedAt).getTime()) / (1000 * 60 * 60 * 24);
+  return daysOld >= minDays;
+}
+
+export function getTrashRetentionStatus(deletedAt?: string) {
+  if (!deletedAt) return { daysOld: 0, daysUntilEligible: 10, daysUntilPurge: 60, canPermanentlyDelete: false };
+  const deletedTime = new Date(deletedAt).getTime();
+  const daysOld = Math.floor((Date.now() - deletedTime) / (1000 * 60 * 60 * 24));
+  const daysUntilEligible = Math.max(0, 10 - daysOld);
+  const daysUntilPurge = Math.max(0, 60 - daysOld);
+  const canPermanentlyDelete = daysOld >= 10;
+  return {
+    daysOld,
+    daysUntilEligible,
+    daysUntilPurge,
+    canPermanentlyDelete,
+  };
 }
 
 export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
@@ -1381,9 +1652,10 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       ? clinicScope(state.prescriptions)
       : [];
 
+    const activeClinicPatients = clinicPatients.filter((p) => !p.deletedAt);
     const patients = user?.role === "doctor"
-      ? clinicPatients.filter(patient => patient.doctor === user.name)
-      : clinicPatients;
+      ? activeClinicPatients.filter(patient => patient.doctor === user.name)
+      : activeClinicPatients;
     const appointments = user?.role === "doctor"
       ? clinicAppointments.filter(appointment => appointment.doctor === user.name)
       : clinicAppointments;
@@ -1397,7 +1669,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       syncStatus,
       refresh,
       clinics: state.clinics.filter((c) => !c.deletedAt),
-      binClinics: state.clinics.filter((c) => isWithinRetentionPeriod(c.deletedAt)),
+      binClinics: state.clinics.filter((c) => isWithinRetentionPeriod(c.deletedAt, 60)),
       patients,
       doctors: clinicScope(state.doctors).filter((d) => d.status !== "Inactive"),
       receptionists: clinicScope(state.receptionists).filter((r) => r.status !== "Inactive"),
@@ -1424,7 +1696,9 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       binStaffMembers: user && hasPermission(user.role, "people.manage")
         ? (isSuperAdmin ? state.staffMembers : clinicScope(state.staffMembers))
             .filter((m) => {
-              if (Boolean(m.deletedAt) || m.status === "Inactive") return true;
+              if (Boolean(m.deletedAt) || m.status === "Inactive") {
+                return !m.deletedAt || isWithinRetentionPeriod(m.deletedAt, 60);
+              }
               if (m.clinicId && state.clinics.some((c) => c.id === m.clinicId && Boolean(c.deletedAt))) {
                 return true;
               }
@@ -1438,12 +1712,29 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
               return m;
             })
         : [],
+      binPatients: user && (hasPermission(user.role, "people.manage") || hasPermission(user.role, "patients.read"))
+        ? (isSuperAdmin ? state.patients : clinicScope(state.patients))
+            .filter((p) => Boolean(p.deletedAt) && isWithinRetentionPeriod(p.deletedAt, 60))
+        : [],
       facilities: user && hasPermission(user.role, "facilities.manage")
         ? clinicScope(state.facilities)
         : [],
       searchPatients: async (input = {}) => {
         requireUser(user, "patients.read");
-        if (repository) return repository.searchPatients(input);
+        const softDeletedPatients = loadSoftDeletedPatientsFromStorage();
+        const permDeletedPatients = new Set(loadPermDeletedPatientsFromStorage());
+
+        if (repository) {
+          const result = await repository.searchPatients(input);
+          const filteredRows = result.rows.filter(
+            (p) => !softDeletedPatients[p.id] && !permDeletedPatients.has(p.id)
+          );
+          return {
+            ...result,
+            rows: filteredRows,
+            total: Math.max(0, result.total - (result.rows.length - filteredRows.length)),
+          };
+        }
 
         const query = input.query?.trim().toLocaleLowerCase().replace(/\s/g, "") ?? "";
         const limit = Math.min(Math.max(input.limit ?? 25, 1), 100);
@@ -1469,6 +1760,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       },
       getPatient: async (id) => {
         requireUser(user, "patients.read");
+        const softDeletedPatients = loadSoftDeletedPatientsFromStorage();
+        const permDeletedPatients = new Set(loadPermDeletedPatientsFromStorage());
+        if (softDeletedPatients[id] || permDeletedPatients.has(id)) {
+          return null;
+        }
         if (repository) return repository.getPatient(id);
         return patients.find((patient) => patient.id === id) ?? null;
       },
@@ -2035,6 +2331,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           throw new Error("You can only manage users within your clinic");
         }
 
+        if (target?.deletedAt && !isEligibleForPermanentDelete(target.deletedAt, 10)) {
+          const status = getTrashRetentionStatus(target.deletedAt);
+          throw new Error(`Item must remain in Trash for 10 days before permanent deletion (${status.daysUntilEligible} day(s) remaining).`);
+        }
+
         if (target?.email) {
           deleteUserAccount(target.email);
         }
@@ -2125,21 +2426,29 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         });
         if (!filteredIds.length) return;
 
-        filteredIds.forEach((id) => {
+        const eligibleIds = filteredIds.filter((id) => {
+          const target = state.staffMembers.find((m) => m.id === id);
+          return !target?.deletedAt || isEligibleForPermanentDelete(target.deletedAt, 10);
+        });
+        if (!eligibleIds.length) {
+          throw new Error("Selected users are still within the 10-day trash retention lock.");
+        }
+
+        eligibleIds.forEach((id) => {
           const target = state.staffMembers.find((m) => m.id === id);
           if (target?.email) deleteUserAccount(target.email);
         });
-        dispatch({ type: "staff.bulk_permanently_deleted", userIds: filteredIds, actor });
+        dispatch({ type: "staff.bulk_permanently_deleted", userIds: eligibleIds, actor });
 
         if (repository?.bulkPermanentlyDeleteStaff) {
           try {
-            await repository.bulkPermanentlyDeleteStaff(filteredIds);
+            await repository.bulkPermanentlyDeleteStaff(eligibleIds);
           } catch (err) {
             console.warn("Backend bulk permanent delete failed, local state updated:", err);
           }
           await refresh().catch(() => undefined);
         } else if (repository?.permanentlyDeleteStaff) {
-          for (const id of filteredIds) {
+          for (const id of eligibleIds) {
             try {
               await repository.permanentlyDeleteStaff(id);
             } catch (err) {
@@ -2148,6 +2457,117 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           }
           await refresh().catch(() => undefined);
         }
+      },
+      softDeletePatient: async (patientId: string) => {
+        const actor = requireUser(user, "patients.read");
+        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+          throw new Error("Only Clinical Admins and Super Admins can move patients to Trash");
+        }
+        const target = state.patients.find((p) => p.id === patientId);
+        if (
+          actor.role !== "super_admin" &&
+          target &&
+          target.clinicId &&
+          actor.clinicId &&
+          target.clinicId !== actor.clinicId
+        ) {
+          throw new Error("You can only manage patients within your clinic");
+        }
+        dispatch({ type: "patient.soft_deleted", patientId, actor });
+        await refresh().catch(() => undefined);
+      },
+      bulkSoftDeletePatients: async (patientIds: string[]) => {
+        const actor = requireUser(user, "patients.read");
+        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+          throw new Error("Only Clinical Admins and Super Admins can move patients to Trash");
+        }
+        const filteredIds = patientIds.filter((id) => {
+          if (actor.role === "super_admin") return true;
+          const target = state.patients.find((p) => p.id === id);
+          return !target || !target.clinicId || !actor.clinicId || target.clinicId === actor.clinicId;
+        });
+        if (!filteredIds.length) return;
+        dispatch({ type: "patient.bulk_soft_deleted", patientIds: filteredIds, actor });
+        await refresh().catch(() => undefined);
+      },
+      restorePatient: async (patientId: string) => {
+        const actor = requireUser(user, "patients.read");
+        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+          throw new Error("Only Clinical Admins and Super Admins can restore patients");
+        }
+        const target = state.patients.find((p) => p.id === patientId);
+        if (
+          actor.role !== "super_admin" &&
+          target &&
+          target.clinicId &&
+          actor.clinicId &&
+          target.clinicId !== actor.clinicId
+        ) {
+          throw new Error("You can only manage patients within your clinic");
+        }
+        dispatch({ type: "patient.restored", patientId, actor });
+        await refresh().catch(() => undefined);
+      },
+      bulkRestorePatients: async (patientIds: string[]) => {
+        const actor = requireUser(user, "patients.read");
+        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+          throw new Error("Only Clinical Admins and Super Admins can restore patients");
+        }
+        const filteredIds = patientIds.filter((id) => {
+          if (actor.role === "super_admin") return true;
+          const target = state.patients.find((p) => p.id === id);
+          return !target || !target.clinicId || !actor.clinicId || target.clinicId === actor.clinicId;
+        });
+        if (!filteredIds.length) return;
+        dispatch({ type: "patient.bulk_restored", patientIds: filteredIds, actor });
+        await refresh().catch(() => undefined);
+      },
+      permanentlyDeletePatient: async (patientId: string) => {
+        const actor = requireUser(user, "patients.read");
+        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+          throw new Error("Only Clinical Admins and Super Admins can permanently delete patients");
+        }
+        const target = state.patients.find((p) => p.id === patientId);
+        if (
+          actor.role !== "super_admin" &&
+          target &&
+          target.clinicId &&
+          actor.clinicId &&
+          target.clinicId !== actor.clinicId
+        ) {
+          throw new Error("You can only manage patients within your clinic");
+        }
+
+        if (target?.deletedAt && !isEligibleForPermanentDelete(target.deletedAt, 10)) {
+          const status = getTrashRetentionStatus(target.deletedAt);
+          throw new Error(`Item must remain in Trash for 10 days before permanent deletion (${status.daysUntilEligible} day(s) remaining).`);
+        }
+
+        dispatch({ type: "patient.permanently_deleted", patientId, actor });
+        await refresh().catch(() => undefined);
+      },
+      bulkPermanentlyDeletePatients: async (patientIds: string[]) => {
+        const actor = requireUser(user, "patients.read");
+        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+          throw new Error("Only Clinical Admins and Super Admins can permanently delete patients");
+        }
+        const filteredIds = patientIds.filter((id) => {
+          if (actor.role === "super_admin") return true;
+          const target = state.patients.find((p) => p.id === id);
+          return !target || !target.clinicId || !actor.clinicId || target.clinicId === actor.clinicId;
+        });
+        if (!filteredIds.length) return;
+
+        const eligibleIds = filteredIds.filter((id) => {
+          const target = state.patients.find((p) => p.id === id);
+          return !target?.deletedAt || isEligibleForPermanentDelete(target.deletedAt, 10);
+        });
+        if (!eligibleIds.length) {
+          throw new Error("Selected patients are still within the 10-day trash retention lock.");
+        }
+
+        dispatch({ type: "patient.bulk_permanently_deleted", patientIds: eligibleIds, actor });
+        await refresh().catch(() => undefined);
       },
       resetUserPassword: async (email: string, newPassword: string) => {
         const actor = requireUser(user, "people.manage");
@@ -2283,11 +2703,13 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           return patient;
         }
         const tenantId = requireClinic(actor);
-        if (input.doctorId) {
-          const doctor = state.doctors.find(
-            (item) => item.id === input.doctorId && item.clinicId === tenantId,
-          );
-          if (!doctor) throw new Error("Assigned doctor must belong to the active clinic");
+        const assignedDoctor = input.doctorId
+          ? state.doctors.find(
+              (item) => item.id === input.doctorId && item.clinicId === tenantId,
+            )
+          : undefined;
+        if (input.doctorId && !assignedDoctor) {
+          throw new Error("Assigned doctor must belong to the active clinic");
         }
         const birthDate = new Date(`${input.dateOfBirth}T00:00:00`);
         const today = new Date();
@@ -2312,7 +2734,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           emergencyContactPhone: input.emergencyContactPhone,
           allergies: input.allergies,
           chronicConditions: input.chronicConditions,
-          doctor: doctor.name,
+          doctor: assignedDoctor?.name ?? "General Practice",
           id: createId("PT"),
           clinicId: tenantId,
           lastVisit: new Date().toISOString().slice(0, 10),

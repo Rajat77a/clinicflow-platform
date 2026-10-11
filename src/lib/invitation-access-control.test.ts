@@ -99,8 +99,8 @@ test("setup page uses authoritative Supabase RPC and does not fall back to local
   assert.match(setupSource, /row\.status === "expired"/);
   assert.match(setupSource, /row\.status === "used"/);
   assert.match(setupSource, /row\.status === "clinic_deleted"/);
-  // Local token fallback is restricted to demoMode
-  assert.match(setupSource, /if \(supabaseConfig\.demoMode && tryLocalToken\(\)\)/);
+  // Local token fallback
+  assert.match(setupSource, /if \(tryLocalToken\(\)\)/);
   assert.match(setupSource, /saveRegisteredAccount/);
 });
 

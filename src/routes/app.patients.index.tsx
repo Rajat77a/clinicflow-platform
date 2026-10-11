@@ -5,15 +5,17 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useWorkspaceData, type Patient } from "@/lib/workspace-data";
 import { useAuth } from "@/lib/auth";
 import { hasPermission } from "@/lib/access-control";
-import { ChevronLeft, ChevronRight, Search, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Search, Plus, Trash2, AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/patients/")({ component: PatientsPage });
 
 function PatientsPage() {
-  const { searchPatients } = useWorkspaceData();
+  const { searchPatients, softDeletePatient } = useWorkspaceData();
   const { user } = useAuth();
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<Patient[]>([]);
@@ -21,8 +23,37 @@ function PatientsPage() {
   const [page, setPage] = useState(0);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [patientToTrash, setPatientToTrash] = useState<Patient | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   const pageSize = 25;
   const canCreate = Boolean(user && hasPermission(user.role, "patients.create"));
+  const canDelete = Boolean(user && (user.role === "clinic_admin" || user.role === "super_admin"));
+
+  const loadPageData = () => {
+    let current = true;
+    setLoading(true);
+    setLoadError(null);
+    void searchPatients({ query, limit: pageSize, offset: page * pageSize })
+      .then((result) => {
+        if (!current) return;
+        setRows(result.rows);
+        setTotal(result.total);
+      })
+      .catch((error) => {
+        if (!current) return;
+        setRows([]);
+        setTotal(0);
+        setLoadError(error instanceof Error ? error.message : "Unable to load patients");
+      })
+      .finally(() => {
+        if (current) setLoading(false);
+      });
+
+    return () => {
+      current = false;
+    };
+  };
 
   useEffect(() => {
     let current = true;
@@ -52,6 +83,22 @@ function PatientsPage() {
     };
   }, [page, query, searchPatients]);
 
+  const handleConfirmTrash = async () => {
+    if (!patientToTrash) return;
+    setIsDeleting(true);
+    try {
+      await softDeletePatient(patientToTrash.id);
+      toast.success(`${patientToTrash.name} has been moved to Trash (held for 10 days, purged after 60 days)`);
+      setRows((prev) => prev.filter((p) => p.id !== patientToTrash.id));
+      setTotal((prev) => Math.max(0, prev - 1));
+      setPatientToTrash(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to move patient to Trash");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   const firstRow = total === 0 ? 0 : page * pageSize + 1;
   const lastRow = Math.min((page + 1) * pageSize, total);
 
@@ -80,7 +127,7 @@ function PatientsPage() {
                 <TableHead>Phone</TableHead>
                 <TableHead>Last visit</TableHead>
                 <TableHead>Status</TableHead>
-                <TableHead></TableHead>
+                <TableHead className="text-right">Actions</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -105,7 +152,20 @@ function PatientsPage() {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-right">
-                    <Button asChild size="sm" variant="ghost"><Link to="/app/patients/$id" params={{ id: p.id }}>Open</Link></Button>
+                    <div className="flex items-center justify-end gap-1">
+                      <Button asChild size="sm" variant="ghost"><Link to="/app/patients/$id" params={{ id: p.id }}>Open</Link></Button>
+                      {canDelete && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive h-8 px-2"
+                          onClick={() => setPatientToTrash(p)}
+                          title="Move to Trash"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </TableCell>
                 </TableRow>
               ))}
@@ -127,6 +187,38 @@ function PatientsPage() {
           </div>
         </div>
       </div>
+
+      {/* Move to Trash confirmation dialog */}
+      <Dialog open={Boolean(patientToTrash)} onOpenChange={(open) => { if (!open) setPatientToTrash(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5 text-destructive" /> Move Patient to Trash
+            </DialogTitle>
+            <DialogDescription className="space-y-3 pt-2 text-left">
+              <p>
+                Are you sure you want to move <strong className="text-foreground">{patientToTrash?.name}</strong> to the Trash?
+              </p>
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200 space-y-1">
+                <div className="font-medium">Trash Retention Policy:</div>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Record is retained in Trash for <strong>10 days</strong> before permanent deletion can be performed.</li>
+                  <li>After <strong>60 days</strong>, the item will be automatically purged from the system.</li>
+                  <li>Can be restored back to active patients at any time prior to permanent deletion.</li>
+                </ul>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPatientToTrash(null)} disabled={isDeleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmTrash} disabled={isDeleting}>
+              {isDeleting ? "Moving to Trash..." : "Move to Trash"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

@@ -45,6 +45,7 @@ const NAV: Record<Role, NavSection[]> = {
        { to: "/app/receptionists", label: "Receptionists", icon: UserCog },
        { to: "/app/patients", label: "Patients", icon: UsersRound },
        { to: "/app/users", label: "Users", icon: Users },
+       { to: "/app/clinics/bin", label: "Trash", icon: Trash2 },
      ]},
      { label: "Clinic", items: [
        { to: "/app/appointments", label: "Appointments", icon: CalendarDays },

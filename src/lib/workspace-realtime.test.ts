@@ -20,6 +20,7 @@ test("clinic administrators receive every hospital operation they can read", () 
     "lab_orders",
     "invoices",
     "audit_events",
+    "invite_tokens",
   ]);
 });
 
@@ -35,6 +36,8 @@ test("clinical roles subscribe only to relevant hospital records", () => {
     "hospitals",
     "patients",
     "appointments",
+    "prescriptions",
+    "lab_orders",
     "invoices",
   ]);
 });
@@ -46,6 +49,8 @@ test("platform administrators do not subscribe to clinical record tables", () =>
     "audit_events",
     "hospital_subscriptions",
     "hospital_subscription_events",
+    "platform_admins",
+    "invite_tokens",
   ]);
 });
 
@@ -109,6 +114,18 @@ test("subscriptions are hospital-filtered and removed during cleanup", async () 
       event: "*",
       schema: "public",
       table: "appointments",
+      filter: "hospital_id=eq.hospital-1",
+    },
+    {
+      event: "*",
+      schema: "public",
+      table: "prescriptions",
+      filter: "hospital_id=eq.hospital-1",
+    },
+    {
+      event: "*",
+      schema: "public",
+      table: "lab_orders",
       filter: "hospital_id=eq.hospital-1",
     },
     {

@@ -1,11 +1,11 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate, notFound } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { PaginationFooter } from "@/components/data/pagination-footer";
 import {
   useWorkspaceData,
@@ -22,7 +22,9 @@ import { supabaseConfig } from "@/lib/supabase/config";
 import {
   Phone, Mail, MapPin, MessageCircle, Calendar, FileText, Receipt,
   FolderOpen, FlaskConical, Download, Send, Printer, Edit, Eye,
+  Trash2, AlertTriangle,
 } from "lucide-react";
+import { toast } from "sonner";
 import { useRecordPage } from "@/lib/use-record-page";
 
 export const Route = createFileRoute("/app/patients/$id")({
@@ -31,6 +33,7 @@ export const Route = createFileRoute("/app/patients/$id")({
 
 function PatientProfile() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { id } = Route.useParams();
   const {
     patients,
@@ -39,12 +42,15 @@ function PatientProfile() {
     listPrescriptions,
     listLabReports,
     listBills,
+    softDeletePatient,
   } = useWorkspaceData();
   const snapshotPatient = patients.find(candidate => candidate.id === id);
   const [loadedPatient, setLoadedPatient] = useState<Patient | null>(null);
   const [recordLoading, setRecordLoading] = useState(!snapshotPatient);
   const [viewingBill, setViewingBill] = useState<Bill | null>(null);
   const [viewingLab, setViewingLab] = useState<LabReport | null>(null);
+  const [showTrashDialog, setShowTrashDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const patient = loadedPatient ?? snapshotPatient;
   const visitsPage = useRecordPage(listAppointments, { patientId: id });
   const prescriptionsPage = useRecordPage(listPrescriptions, { patientId: id });
@@ -81,7 +87,22 @@ function PatientProfile() {
   const canEditRx = Boolean(user && hasPermission(user.role, "prescriptions.write"));
   const canAddLab = Boolean(user && hasPermission(user.role, "labs.write"));
   const canBook = Boolean(user && hasPermission(user.role, "appointments.create"));
+  const canDelete = Boolean(user && (user.role === "clinic_admin" || user.role === "super_admin"));
   const canUseExternalSharing = supabaseConfig.demoMode;
+
+  const handleTrashPatient = async () => {
+    if (!patient) return;
+    setIsDeleting(true);
+    try {
+      await softDeletePatient(patient.id);
+      toast.success(`${patient.name} has been moved to Trash (held for 10 days, purged after 60 days)`);
+      setShowTrashDialog(false);
+      navigate({ to: "/app/patients" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to move patient to Trash");
+      setIsDeleting(false);
+    }
+  };
 
   const printRx = (rx: Prescription) => {
     printDocument(`
@@ -115,6 +136,15 @@ function PatientProfile() {
                 <Link to="/app/appointments/new" search={{ patient: patient.id }}>
                   Book follow-up
                 </Link>
+              </Button>
+            )}
+            {canDelete && (
+              <Button
+                variant="outline"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+                onClick={() => setShowTrashDialog(true)}
+              >
+                <Trash2 className="mr-1.5 h-4 w-4" /> Move to Trash
               </Button>
             )}
           </div>
@@ -410,6 +440,38 @@ function PatientProfile() {
               </Button>
             )}
             <Button onClick={() => setViewingLab(null)}>Close</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Move to Trash Dialog */}
+      <Dialog open={showTrashDialog} onOpenChange={setShowTrashDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5 text-destructive" /> Move Patient to Trash
+            </DialogTitle>
+            <DialogDescription className="space-y-3 pt-2 text-left">
+              <p>
+                Are you sure you want to move <strong className="text-foreground">{patient.name}</strong> to the Trash?
+              </p>
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-900 dark:text-amber-200 space-y-1">
+                <div className="font-medium">Trash Retention Policy:</div>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li>Record is retained in Trash for <strong>10 days</strong> before permanent deletion can be performed.</li>
+                  <li>After <strong>60 days</strong>, the item will be automatically purged from the system.</li>
+                  <li>Can be restored back to active patients at any time prior to permanent deletion.</li>
+                </ul>
+              </div>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowTrashDialog(false)} disabled={isDeleting}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleTrashPatient} disabled={isDeleting}>
+              {isDeleting ? "Moving to Trash..." : "Move to Trash"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
