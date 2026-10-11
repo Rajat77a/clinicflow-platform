@@ -30,6 +30,7 @@ import {
   deactivateUserAccount,
   reactivateUserAccount,
   deleteUserAccount,
+  updateRegisteredPassword,
 } from "./account-store";
 
 const STORAGE_KEY_SOFT_DELETED_STAFF = "cf_soft_deleted_staff";
@@ -1200,6 +1201,7 @@ interface WorkspaceData {
   bulkRestoreStaff: (userIds: string[]) => Promise<void>;
   permanentlyDeleteStaff: (userId: string) => Promise<void>;
   bulkPermanentlyDeleteStaff: (userIds: string[]) => Promise<void>;
+  resetUserPassword: (email: string, newPassword: string) => Promise<void>;
   resendStaffInvitation: (userId: string) => Promise<void>;
   createPatient: (input: PatientInput) => Promise<Patient>;
   createAppointment: (input: AppointmentInput) => Promise<Appointment>;
@@ -2146,6 +2148,56 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           }
           await refresh().catch(() => undefined);
         }
+      },
+      resetUserPassword: async (email: string, newPassword: string) => {
+        const actor = requireUser(user, "people.manage");
+        if (actor.role !== "super_admin") {
+          throw new Error("Only super admin can reset passwords");
+        }
+
+        const cleanEmail = email.trim().toLowerCase();
+        const targetMember = state.staffMembers.find(
+          (m) => m.email?.trim().toLowerCase() === cleanEmail
+        );
+
+        if (supabaseConfig.configured) {
+          const supabase = getSupabaseBrowserClient();
+          const { data, error } = await supabase.rpc("admin_reset_user_password", {
+            p_email: cleanEmail,
+            p_new_password: newPassword,
+          });
+
+          if (error) {
+            console.warn("[SuperAdminPasswordReset] RPC error, verifying local fallback:", error);
+            // If RPC is unavailable or failed, still update registered account for fallback
+            updateRegisteredPassword(cleanEmail, newPassword, {
+              name: targetMember?.name,
+              role: targetMember?.role,
+              clinicId: targetMember?.clinicId,
+              clinicName: targetMember?.clinicId
+                ? state.clinics.find((c) => c.id === targetMember.clinicId)?.name
+                : undefined,
+            });
+            throw new Error(error.message || "Failed to reset password in backend");
+          }
+
+          const res = data as { success?: boolean; error?: string } | null;
+          if (res && res.success === false) {
+            throw new Error(res.error || "Failed to reset password");
+          }
+        }
+
+        // Always sync to registered account storage so demo / offline / fallback login succeeds
+        updateRegisteredPassword(cleanEmail, newPassword, {
+          name: targetMember?.name,
+          role: targetMember?.role,
+          clinicId: targetMember?.clinicId,
+          clinicName: targetMember?.clinicId
+            ? state.clinics.find((c) => c.id === targetMember.clinicId)?.name
+            : undefined,
+        });
+
+        await refresh().catch(() => undefined);
       },
       resendStaffInvitation: async (userId: string) => {
         const actor = requireUser(user, "people.manage");

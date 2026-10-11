@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth, type Role } from "@/lib/auth";
 import { useWorkspaceData, type StaffMember } from "@/lib/workspace-data";
-import { UserMinus, UserPlus, Eye, Building2, ShieldCheck, Stethoscope, UserCog, Mail, Phone, Trash2, RotateCw, Send, CheckSquare, AlertTriangle, CheckCircle2, Check, Copy } from "lucide-react";
+import { UserMinus, UserPlus, Eye, EyeOff, Building2, ShieldCheck, Stethoscope, UserCog, Mail, Phone, Trash2, RotateCw, Send, CheckSquare, AlertTriangle, CheckCircle2, Check, Copy, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -60,9 +60,16 @@ function UsersPage() {
     deactivateStaff,
     softDeleteStaff,
     bulkSoftDeleteStaff,
+    resetUserPassword,
     resendStaffInvitation,
     refresh,
   } = useWorkspaceData();
+
+  const [passwordResetTarget, setPasswordResetTarget] = useState<StaffMember | null>(null);
+  const [resetNewPassword, setResetNewPassword] = useState("");
+  const [resetConfirmPassword, setResetConfirmPassword] = useState("");
+  const [showResetPassword, setShowResetPassword] = useState(false);
+  const [isResettingPassword, setIsResettingPassword] = useState(false);
 
   const allUsers = useMemo(() => {
     const map = new Map<string, StaffMember>();
@@ -473,6 +480,34 @@ function UsersPage() {
       setDeleteTarget(null);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to move user to Trash");
+    }
+  };
+
+  const handleResetPassword = async () => {
+    if (!passwordResetTarget?.email) {
+      toast.error("User does not have a valid email address");
+      return;
+    }
+    if (resetNewPassword.length < 8) {
+      toast.error("Password must be at least 8 characters long");
+      return;
+    }
+    if (resetNewPassword !== resetConfirmPassword) {
+      toast.error("Passwords do not match");
+      return;
+    }
+
+    setIsResettingPassword(true);
+    try {
+      await resetUserPassword(passwordResetTarget.email, resetNewPassword);
+      toast.success(`Password successfully updated for ${passwordResetTarget.name} (${passwordResetTarget.email}). The user can now log in with this new password.`);
+      setPasswordResetTarget(null);
+      setResetNewPassword("");
+      setResetConfirmPassword("");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to reset password");
+    } finally {
+      setIsResettingPassword(false);
     }
   };
 
@@ -955,6 +990,24 @@ function UsersPage() {
                           <span>Resend Invitation</span>
                         </Button>
                       )}
+                      {user?.role === "super_admin" && Boolean(member.email) && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          title={`Reset password for ${member.name} (${member.email})`}
+                          aria-label={`Reset password for ${member.name}`}
+                          onClick={() => {
+                            setPasswordResetTarget(member);
+                            setResetNewPassword("");
+                            setResetConfirmPassword("");
+                            setShowResetPassword(false);
+                          }}
+                          className="hover:text-primary hover:bg-primary/10"
+                        >
+                          <KeyRound className="h-4 w-4 text-amber-600 dark:text-amber-500" />
+                        </Button>
+                      )}
                       <Button
                         type="button"
                         variant="ghost"
@@ -1102,10 +1155,27 @@ function UsersPage() {
             );
           })()}
 
-          <DialogFooter className="gap-2 sm:gap-0">
+          <DialogFooter className="gap-2 sm:gap-2">
             <Button variant="outline" onClick={() => setSelectedProfile(null)}>
               Close
             </Button>
+            {selectedProfile && user?.role === "super_admin" && Boolean(selectedProfile.email) && (
+              <Button
+                variant="outline"
+                className="gap-1.5 border-amber-500/30 text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20"
+                onClick={() => {
+                  const target = selectedProfile;
+                  setSelectedProfile(null);
+                  setPasswordResetTarget(target);
+                  setResetNewPassword("");
+                  setResetConfirmPassword("");
+                  setShowResetPassword(false);
+                }}
+              >
+                <KeyRound className="h-4 w-4" />
+                Reset Password
+              </Button>
+            )}
             {selectedProfile && canDeactivate(selectedProfile) && (
               <Button
                 variant="destructive"
@@ -1335,6 +1405,119 @@ function UsersPage() {
               Close
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Super Admin Reset Password Dialog */}
+      <Dialog
+        open={Boolean(passwordResetTarget)}
+        onOpenChange={(open) => {
+          if (!open && !isResettingPassword) {
+            setPasswordResetTarget(null);
+            setResetNewPassword("");
+            setResetConfirmPassword("");
+            setShowResetPassword(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-foreground">
+              <KeyRound className="h-5 w-5 text-amber-600 dark:text-amber-500" />
+              Reset User Password
+            </DialogTitle>
+            <DialogDescription className="text-left pt-1">
+              Set a new login password for <strong>{passwordResetTarget?.name}</strong> (<code>{passwordResetTarget?.email}</code>).
+              Once set, the user can immediately log in with this password.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              handleResetPassword();
+            }}
+            className="space-y-4 py-2"
+          >
+            <div className="rounded-xl border border-amber-500/20 bg-amber-50/50 dark:bg-amber-950/20 p-3 text-xs space-y-1">
+              <div className="font-semibold text-amber-800 dark:text-amber-400">Super Admin Privilege</div>
+              <div className="text-muted-foreground">
+                Role: <Badge variant="outline" className="ml-1 text-[11px] font-semibold">{passwordResetTarget ? (roleLabels[passwordResetTarget.role] || passwordResetTarget.role) : ""}</Badge>
+              </div>
+              <div className="text-muted-foreground">
+                Email: <span className="font-medium text-foreground">{passwordResetTarget?.email}</span>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="super-admin-reset-new-password">New Password</Label>
+              <div className="relative">
+                <Input
+                  id="super-admin-reset-new-password"
+                  type={showResetPassword ? "text" : "password"}
+                  value={resetNewPassword}
+                  onChange={(e) => setResetNewPassword(e.target.value)}
+                  placeholder="Enter new password (min. 8 characters)"
+                  className="h-11 rounded-xl pr-10"
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                />
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="absolute right-1 top-1 h-9 w-9 text-muted-foreground hover:text-foreground"
+                  onClick={() => setShowResetPassword(!showResetPassword)}
+                  aria-label={showResetPassword ? "Hide password" : "Show password"}
+                >
+                  {showResetPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </Button>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="super-admin-reset-confirm-password">Confirm Password</Label>
+              <Input
+                id="super-admin-reset-confirm-password"
+                type={showResetPassword ? "text" : "password"}
+                value={resetConfirmPassword}
+                onChange={(e) => setResetConfirmPassword(e.target.value)}
+                placeholder="Confirm new password"
+                className="h-11 rounded-xl"
+                autoComplete="new-password"
+                required
+                minLength={8}
+              />
+              {resetNewPassword && resetConfirmPassword && resetNewPassword !== resetConfirmPassword && (
+                <p className="text-xs text-destructive">Passwords do not match.</p>
+              )}
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0 pt-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isResettingPassword}
+                onClick={() => {
+                  setPasswordResetTarget(null);
+                  setResetNewPassword("");
+                  setResetConfirmPassword("");
+                  setShowResetPassword(false);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={isResettingPassword || resetNewPassword.length < 8 || resetNewPassword !== resetConfirmPassword}
+                className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white"
+              >
+                <KeyRound className="h-4 w-4" />
+                {isResettingPassword ? "Updating password..." : "Set New Password"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </>
