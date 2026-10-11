@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -91,6 +91,28 @@ function TrashBinPage() {
   const isSuperAdmin = user?.role === "super_admin";
   const isClinicAdmin = user?.role === "clinic_admin";
   const canAccessTrash = isSuperAdmin || isClinicAdmin;
+
+  const [currentTab, setCurrentTab] = useState(isSuperAdmin ? "clinics" : "users");
+
+  useEffect(() => {
+    if (!isSuperAdmin && currentTab === "clinics") {
+      setCurrentTab("users");
+    }
+  }, [isSuperAdmin, currentTab]);
+
+  const visibleStaffMembers = useMemo(() => {
+    if (isSuperAdmin) return binStaffMembers;
+    return binStaffMembers.filter(
+      (m) => !m.clinicId || !user?.clinicId || m.clinicId === user.clinicId || m.previousClinicId === user.clinicId
+    );
+  }, [binStaffMembers, isSuperAdmin, user?.clinicId]);
+
+  const visiblePatients = useMemo(() => {
+    if (isSuperAdmin) return binPatients;
+    return binPatients.filter(
+      (p) => !p.clinicId || !user?.clinicId || p.clinicId === user.clinicId
+    );
+  }, [binPatients, isSuperAdmin, user?.clinicId]);
 
   if (!canAccessTrash) {
     return (
@@ -247,15 +269,15 @@ function TrashBinPage() {
   };
 
   const allUsersSelected =
-    binStaffMembers.length > 0 && binStaffMembers.every((m) => selectedUserIds.has(m.id));
+    visibleStaffMembers.length > 0 && visibleStaffMembers.every((m) => selectedUserIds.has(m.id));
   const someUsersSelected =
-    binStaffMembers.some((m) => selectedUserIds.has(m.id));
+    visibleStaffMembers.some((m) => selectedUserIds.has(m.id));
 
   const toggleSelectAllUsers = () => {
     if (allUsersSelected) {
       setSelectedUserIds(new Set());
     } else {
-      setSelectedUserIds(new Set(binStaffMembers.map((m) => m.id)));
+      setSelectedUserIds(new Set(visibleStaffMembers.map((m) => m.id)));
     }
   };
 
@@ -340,15 +362,15 @@ function TrashBinPage() {
   };
 
   const allPatientsSelected =
-    binPatients.length > 0 && binPatients.every((p) => selectedPatientIds.has(p.id));
+    visiblePatients.length > 0 && visiblePatients.every((p) => selectedPatientIds.has(p.id));
   const somePatientsSelected =
-    binPatients.some((p) => selectedPatientIds.has(p.id));
+    visiblePatients.some((p) => selectedPatientIds.has(p.id));
 
   const toggleSelectAllPatients = () => {
     if (allPatientsSelected) {
       setSelectedPatientIds(new Set());
     } else {
-      setSelectedPatientIds(new Set(binPatients.map((p) => p.id)));
+      setSelectedPatientIds(new Set(visiblePatients.map((p) => p.id)));
     }
   };
 
@@ -451,33 +473,36 @@ function TrashBinPage() {
         </div>
       </div>
 
-      <Tabs defaultValue="clinics" className="w-full space-y-6">
-        <TabsList className="grid w-full max-w-md grid-cols-3">
-          <TabsTrigger value="clinics" className="gap-2">
-            <Building2 className="h-4 w-4" />
-            <span>Clinics</span>
-            <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-              {binClinics.length}
-            </Badge>
-          </TabsTrigger>
+      <Tabs defaultValue="clinics" value={currentTab} onValueChange={setCurrentTab} className="w-full space-y-6">
+        <TabsList className={`grid w-full ${isSuperAdmin ? "max-w-md grid-cols-3" : "max-w-xs grid-cols-2"}`}>
+          {isSuperAdmin && (
+            <TabsTrigger value="clinics" className="gap-2">
+              <Building2 className="h-4 w-4" />
+              <span>Clinics</span>
+              <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+                {binClinics.length}
+              </Badge>
+            </TabsTrigger>
+          )}
           <TabsTrigger value="users" className="gap-2">
             <Users className="h-4 w-4" />
             <span>Users</span>
             <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-              {binStaffMembers.length}
+              {visibleStaffMembers.length}
             </Badge>
           </TabsTrigger>
           <TabsTrigger value="patients" className="gap-2">
             <UsersRound className="h-4 w-4" />
             <span>Patients</span>
             <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-              {binPatients.length}
+              {visiblePatients.length}
             </Badge>
           </TabsTrigger>
         </TabsList>
 
         {/* CLINICS TAB */}
-        <TabsContent value="clinics" className="space-y-4">
+        {isSuperAdmin && (
+          <TabsContent value="clinics" className="space-y-4">
           <div className="rounded-2xl border bg-card shadow-soft">
             <div className="flex items-center justify-between border-b p-4 text-sm font-medium text-muted-foreground">
               <div className="flex items-center gap-2">
@@ -646,6 +671,7 @@ function TrashBinPage() {
             </div>
           </div>
         </TabsContent>
+        )}
 
         {/* USERS TAB */}
         <TabsContent value="users" className="space-y-4">
@@ -653,15 +679,15 @@ function TrashBinPage() {
             <div className="flex items-center justify-between border-b p-4 text-sm font-medium text-muted-foreground">
               <div className="flex items-center gap-2">
                 <Users className="h-4 w-4 text-destructive" />
-                <span>{binStaffMembers.length} deleted user{binStaffMembers.length === 1 ? "" : "s"} in Trash</span>
+                <span>{visibleStaffMembers.length} deleted user{visibleStaffMembers.length === 1 ? "" : "s"} in Trash</span>
               </div>
-              {binStaffMembers.length > 0 && (
+              {visibleStaffMembers.length > 0 && (
                 <Button
                   variant="outline"
                   size="sm"
                   className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
                   onClick={() => {
-                    setSelectedUserIds(new Set(binStaffMembers.map((m) => m.id)));
+                    setSelectedUserIds(new Set(visibleStaffMembers.map((m) => m.id)));
                     setShowBulkDeleteUsersDialog(true);
                   }}
                 >
@@ -737,14 +763,14 @@ function TrashBinPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {binStaffMembers.length === 0 ? (
+                  {visibleStaffMembers.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
                         The Trash is empty. No deleted users found.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    binStaffMembers.map((member) => {
+                    visibleStaffMembers.map((member) => {
                       const deletedFormatted = member.deletedAt
                         ? new Date(member.deletedAt).toLocaleDateString(undefined, {
                             year: "numeric",
@@ -856,15 +882,15 @@ function TrashBinPage() {
             <div className="flex items-center justify-between border-b p-4 text-sm font-medium text-muted-foreground">
               <div className="flex items-center gap-2">
                 <UsersRound className="h-4 w-4 text-destructive" />
-                <span>{binPatients.length} deleted patient{binPatients.length === 1 ? "" : "s"} in Trash</span>
+                <span>{visiblePatients.length} deleted patient{visiblePatients.length === 1 ? "" : "s"} in Trash</span>
               </div>
-              {binPatients.length > 0 && (
+              {visiblePatients.length > 0 && (
                 <Button
                   variant="outline"
                   size="sm"
                   className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
                   onClick={() => {
-                    setSelectedPatientIds(new Set(binPatients.map((p) => p.id)));
+                    setSelectedPatientIds(new Set(visiblePatients.map((p) => p.id)));
                     setShowBulkDeletePatientsDialog(true);
                   }}
                 >
@@ -939,14 +965,14 @@ function TrashBinPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {binPatients.length === 0 ? (
+                  {visiblePatients.length === 0 ? (
                     <TableRow>
                       <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
                         The Trash is empty. No deleted patients found.
                       </TableCell>
                     </TableRow>
                   ) : (
-                    binPatients.map((patient) => {
+                    visiblePatients.map((patient) => {
                       const deletedFormatted = patient.deletedAt
                         ? new Date(patient.deletedAt).toLocaleDateString(undefined, {
                             year: "numeric",
