@@ -261,10 +261,16 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         .order("created_at"),
     ]);
 
-    for (const result of [hospitalResult, doctorsResult, membershipsResult, patientsResult,
-      appointmentsResult, prescriptionsResult, labOrdersResult, invoicesResult, auditResult]) {
-      throwIfError(result.error);
-    }
+    throwIfError(hospitalResult.error);
+    throwIfError(membershipsResult.error);
+    if (doctorsResult.error) console.warn("Failed to load doctors:", doctorsResult.error);
+    if (patientsResult.error) console.warn("Failed to load patients:", patientsResult.error);
+    if (appointmentsResult.error) console.warn("Failed to load appointments:", appointmentsResult.error);
+    if (prescriptionsResult.error) console.warn("Failed to load prescriptions:", prescriptionsResult.error);
+    if (labOrdersResult.error) console.warn("Failed to load lab orders:", labOrdersResult.error);
+    if (invoicesResult.error) console.warn("Failed to load invoices:", invoicesResult.error);
+    if (auditResult.error) console.warn("Failed to load audit:", auditResult.error);
+
     const clinicRows = (hospitalResult.data ?? []) as Row[];
     const hospital = clinicRows.find((row) => row.is_current) ?? clinicRows[0];
     if (!hospital) return EMPTY_SNAPSHOT;
@@ -277,10 +283,12 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
 
     const doctors: Doctor[] = ((doctorsResult.data ?? []) as Row[])
       .filter((row) => row.status !== "Inactive" && !deletedStaffIds.has(row.user_id))
-      .map((row) => ({
-      id: row.user_id,
-      clinicId: hospital.id,
-      name: row.display_name,
+      .map((row) => {
+        const staffRow = ((membershipsResult.data ?? []) as Row[]).find((m) => m.user_id === row.user_id);
+        return {
+          id: row.user_id,
+          clinicId: staffRow?.hospital_id ?? hospital.id,
+          name: row.display_name,
       specialty: row.specialty || "General Medicine",
       email: row.email || "",
       phone: row.phone || "",
@@ -296,7 +304,8 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       photoWarning: undefined,
       patients: Number(row.patient_count ?? 0),
       status: row.status || "Invited",
-    }));
+    };
+  });
     const avatarPaths = doctors
       .map((doctor) => doctor.avatarPath)
       .filter((path): path is string => Boolean(path));

@@ -224,10 +224,10 @@ function ClinicAdminDashboard() {
     return (
       clinics.find(
         (c) =>
-          (user?.clinicId && c.id === user.clinicId) ||
+          (user?.clinicId && (c.id === user.clinicId || c.shortId === user.clinicId)) ||
           (user?.clinic && c.name.toLowerCase() === user.clinic.toLowerCase())
       ) ??
-      clinics.find((c) => c.id === user?.clinicId) ??
+      clinics.find((c) => c.id === user?.clinicId || c.shortId === user?.clinicId) ??
       (clinics.length > 0 ? clinics[0] : null)
     );
   }, [clinics, user?.clinicId, user?.clinic]);

@@ -166,11 +166,17 @@ export function savePermDeletedPatientsToStorage(ids: string[]): void {
   }
 }
 
-export {
+import {
   STORAGE_KEY_INVOICE_NOTES,
   loadInvoiceNotesFromStorage,
   saveInvoiceNoteToStorage,
 } from "./invoice-notes";
+
+export {
+  STORAGE_KEY_INVOICE_NOTES,
+  loadInvoiceNotesFromStorage,
+  saveInvoiceNoteToStorage,
+};
 
 const DEFAULT_CLINIC_ID = "CL-001";
 
@@ -1649,8 +1655,18 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
   const value = useMemo<WorkspaceData>(() => {
     const clinicId = user?.clinicId;
     const isSuperAdmin = user?.role === "super_admin";
+    const userClinic = state.clinics.find(
+      (c) =>
+        (clinicId && (c.id === clinicId || c.shortId === clinicId)) ||
+        (user?.clinic && c.name?.toLowerCase() === user.clinic.toLowerCase())
+    );
+    const allowedClinicIds = new Set<string>();
+    if (clinicId) allowedClinicIds.add(clinicId);
+    if (userClinic?.id) allowedClinicIds.add(userClinic.id);
+    if (userClinic?.shortId) allowedClinicIds.add(userClinic.shortId);
+
     const clinicScope = <T extends { clinicId: string | null }>(items: T[]) =>
-      isSuperAdmin ? items : (clinicId ? items.filter(item => item.clinicId === clinicId) : items);
+      isSuperAdmin ? items : (clinicId ? items.filter(item => !item.clinicId || allowedClinicIds.has(item.clinicId) || item.clinicId === clinicId) : items);
     const clinicPatients = user && hasPermission(user.role, "patients.read")
       ? clinicScope(state.patients)
       : [];
@@ -1698,11 +1714,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         : [],
       auditLogs: isSuperAdmin
         ? state.auditLogs
-        : state.auditLogs.filter(entry => entry.clinicId === clinicId),
+        : state.auditLogs.filter(entry => !entry.clinicId || allowedClinicIds.has(entry.clinicId) || entry.clinicId === clinicId),
       staffMembers: user && hasPermission(user.role, "people.manage")
         ? clinicScope(state.staffMembers).filter((m) => {
             if (m.deletedAt || m.status === "Inactive") return false;
-            if (m.clinicId && state.clinics.some((c) => c.id === m.clinicId && Boolean(c.deletedAt))) {
+            if (m.clinicId && state.clinics.some((c) => (c.id === m.clinicId || c.shortId === m.clinicId) && Boolean(c.deletedAt))) {
               return false;
             }
             return true;
