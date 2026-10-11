@@ -441,11 +441,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               }
 
               // Non-blocking best-effort cleanup
-              void client.rpc("record_security_event", {
-                p_action: "password.changed",
-              }).catch(() => undefined);
+              try {
+                await client.rpc("record_security_event", {
+                  p_action: "password.changed",
+                });
+              } catch {
+                // ignore
+              }
 
-              void client.auth.signOut({ scope: "others" }).catch(() => undefined);
+              try {
+                await client.auth.signOut({ scope: "others" });
+              } catch {
+                // ignore
+              }
             } else if (!supabaseConfig.demoMode) {
               // Check if verification error is invalid credentials
               const verifiedLocal = verifyRegisteredAccount(user.email, currentPassword);
