@@ -1086,7 +1086,7 @@ function UsersPage() {
           if (!open) setSelectedProfile(null);
         }}
       >
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Eye className="h-5 w-5 text-primary" /> User Profile Details
@@ -1101,17 +1101,13 @@ function UsersPage() {
             const Icon = roleIcons[selectedProfile.role] || UserCog;
             return (
               <div className="space-y-4 py-1">
-                <div className="flex items-center gap-3.5 rounded-xl border bg-muted/40 p-4">
-                  <div className="grid h-12 w-12 place-items-center rounded-xl bg-primary text-primary-foreground font-bold text-base shrink-0">
+                <div className="flex items-center gap-4 rounded-2xl border bg-muted/40 p-4">
+                  <div className="grid h-12 w-12 place-items-center rounded-2xl bg-primary text-primary-foreground font-bold text-base shrink-0 shadow-xs">
                     {selectedProfile.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}
                   </div>
-                  <div>
-                    <h3 className="font-semibold text-base text-foreground">{selectedProfile.name}</h3>
-                    <div className="flex items-center gap-2 mt-1">
-                      <Badge variant="outline" className="gap-1 text-xs font-medium">
-                        <Icon className="h-3 w-3" />
-                        {roleLabels[selectedProfile.role] || selectedProfile.role}
-                      </Badge>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-2">
+                      <h3 className="font-semibold text-base text-foreground truncate">{selectedProfile.name}</h3>
                       <Badge
                         variant={
                           selectedProfile.status === "Active"
@@ -1124,51 +1120,75 @@ function UsersPage() {
                         {selectedProfile.status}
                       </Badge>
                     </div>
+                    <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                      <Badge variant="outline" className="gap-1 text-xs font-medium">
+                        <Icon className="h-3 w-3" />
+                        {roleLabels[selectedProfile.role] || selectedProfile.role}
+                      </Badge>
+                      {selectedProfile.employeeNumber && (
+                        <Badge variant="secondary" className="font-mono text-xs font-medium">
+                          ID: {selectedProfile.employeeNumber}
+                        </Badge>
+                      )}
+                    </div>
                   </div>
                 </div>
 
-                <div className="rounded-xl border divide-y text-xs bg-card">
-                  <div className="flex items-center justify-between p-3">
-                    <span className="font-medium text-muted-foreground">User ID</span>
-                    <span className="font-mono text-foreground font-semibold">{selectedProfile.id}</span>
-                  </div>
-
-                  <div className="flex items-center justify-between p-3">
-                    <span className="font-medium text-muted-foreground flex items-center gap-1.5">
-                      <Mail className="h-3.5 w-3.5" /> Email Address
+                <div className="rounded-2xl border divide-y text-xs bg-card overflow-hidden">
+                  <div className="flex items-center justify-between p-3 gap-2">
+                    <span className="font-medium text-muted-foreground shrink-0">Staff ID</span>
+                    <span className="font-mono text-foreground font-semibold">
+                      {selectedProfile.employeeNumber || selectedProfile.id}
                     </span>
-                    <span className="text-foreground font-medium">{selectedProfile.email || "Pending activation"}</span>
                   </div>
 
-                  {selectedProfile.phone && (
-                    <div className="flex items-center justify-between p-3">
-                      <span className="font-medium text-muted-foreground flex items-center gap-1.5">
-                        <Phone className="h-3.5 w-3.5" /> Phone Number
+                  {selectedProfile.employeeNumber && selectedProfile.id !== selectedProfile.employeeNumber && (
+                    <div className="flex items-center justify-between p-3 gap-2">
+                      <span className="font-medium text-muted-foreground shrink-0">System UUID</span>
+                      <span className="font-mono text-muted-foreground text-[11px] truncate max-w-[240px]" title={selectedProfile.id}>
+                        {selectedProfile.id}
                       </span>
-                      <span className="text-foreground">{selectedProfile.phone}</span>
                     </div>
                   )}
 
-                  <div className="p-3 space-y-1.5 bg-muted/20">
-                    <span className="font-medium text-muted-foreground flex items-center gap-1.5">
+                  <div className="flex items-center justify-between p-3 gap-2">
+                    <span className="font-medium text-muted-foreground flex items-center gap-1.5 shrink-0">
+                      <Mail className="h-3.5 w-3.5" /> Email Address
+                    </span>
+                    <span className="text-foreground font-medium truncate max-w-[260px]">
+                      {selectedProfile.email || "Pending activation"}
+                    </span>
+                  </div>
+
+                  {selectedProfile.phone && (
+                    <div className="flex items-center justify-between p-3 gap-2">
+                      <span className="font-medium text-muted-foreground flex items-center gap-1.5 shrink-0">
+                        <Phone className="h-3.5 w-3.5" /> Phone Number
+                      </span>
+                      <span className="text-foreground font-medium">{selectedProfile.phone}</span>
+                    </div>
+                  )}
+
+                  <div className="p-3.5 space-y-2 bg-muted/20">
+                    <span className="font-medium text-muted-foreground flex items-center gap-1.5 text-xs">
                       <Building2 className="h-3.5 w-3.5 text-primary" /> Assigned Clinic
                     </span>
                     {clinic ? (
-                      <div className="rounded-lg border bg-background p-2.5 space-y-1">
-                        <div className="font-semibold text-sm text-foreground">{clinic.name}</div>
-                        <div className="font-mono text-[11px] text-primary">Clinic ID: {clinic.shortId || clinic.id}</div>
-                        {clinic.city && (
-                          <div className="text-muted-foreground">Location: {clinic.city}</div>
-                        )}
-                        {clinic.address && (
-                          <div className="text-muted-foreground">Address: {clinic.address}</div>
-                        )}
-                        {clinic.phone && (
-                          <div className="text-muted-foreground">Contact: {clinic.phone}</div>
-                        )}
+                      <div className="rounded-xl border bg-background p-3 space-y-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="font-semibold text-sm text-foreground">{clinic.name}</div>
+                          <Badge variant="outline" className="font-mono text-[10px] text-primary border-primary/30 shrink-0">
+                            ID: {clinic.shortId || clinic.id}
+                          </Badge>
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1 text-xs text-muted-foreground">
+                          {clinic.city && <div><span className="font-medium text-foreground">City:</span> {clinic.city}</div>}
+                          {clinic.phone && <div><span className="font-medium text-foreground">Phone:</span> {clinic.phone}</div>}
+                          {clinic.address && <div className="sm:col-span-2"><span className="font-medium text-foreground">Address:</span> {clinic.address}</div>}
+                        </div>
                       </div>
                     ) : (
-                      <div className="italic text-muted-foreground pt-0.5">Not Assigned (Global Administrator)</div>
+                      <div className="italic text-muted-foreground text-xs pt-0.5">Not Assigned (Global Administrator)</div>
                     )}
                   </div>
                 </div>
@@ -1176,39 +1196,41 @@ function UsersPage() {
             );
           })()}
 
-          <DialogFooter className="gap-2 sm:gap-2">
+          <DialogFooter className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pt-2">
             <Button variant="outline" onClick={() => setSelectedProfile(null)}>
               Close
             </Button>
-            {selectedProfile && user?.role === "super_admin" && Boolean(selectedProfile.email) && (
-              <Button
-                variant="outline"
-                className="gap-1.5 border-amber-500/30 text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20"
-                onClick={() => {
-                  const target = selectedProfile;
-                  setSelectedProfile(null);
-                  setPasswordResetTarget(target);
-                  setResetNewPassword("");
-                  setResetConfirmPassword("");
-                  setShowResetPassword(false);
-                }}
-              >
-                <KeyRound className="h-4 w-4" />
-                Reset Password
-              </Button>
-            )}
-            {selectedProfile && canDeactivate(selectedProfile) && (
-              <Button
-                variant="destructive"
-                onClick={() => {
-                  const target = selectedProfile;
-                  setSelectedProfile(null);
-                  setDeactivationTarget(target);
-                }}
-              >
-                Deactivate Staff Access
-              </Button>
-            )}
+            <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap justify-end">
+              {selectedProfile && user?.role === "super_admin" && Boolean(selectedProfile.email) && (
+                <Button
+                  variant="outline"
+                  className="gap-1.5 border-amber-500/30 text-amber-600 dark:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-950/20"
+                  onClick={() => {
+                    const target = selectedProfile;
+                    setSelectedProfile(null);
+                    setPasswordResetTarget(target);
+                    setResetNewPassword("");
+                    setResetConfirmPassword("");
+                    setShowResetPassword(false);
+                  }}
+                >
+                  <KeyRound className="h-4 w-4" />
+                  Reset Password
+                </Button>
+              )}
+              {selectedProfile && canDeactivate(selectedProfile) && (
+                <Button
+                  variant="destructive"
+                  onClick={() => {
+                    const target = selectedProfile;
+                    setSelectedProfile(null);
+                    setDeactivationTarget(target);
+                  }}
+                >
+                  Deactivate Staff Access
+                </Button>
+              )}
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
