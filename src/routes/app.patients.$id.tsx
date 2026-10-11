@@ -19,10 +19,11 @@ import { sendWhatsApp } from "@/lib/whatsapp";
 import { useAuth } from "@/lib/auth";
 import { hasPermission } from "@/lib/access-control";
 import { supabaseConfig } from "@/lib/supabase/config";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Phone, Mail, MapPin, MessageCircle, Calendar, FileText, Receipt,
   FolderOpen, FlaskConical, Download, Send, Printer, Edit, Eye,
-  Trash2, AlertTriangle,
+  Trash2, AlertTriangle, Pencil, Check, X,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useRecordPage } from "@/lib/use-record-page";
@@ -42,12 +43,16 @@ function PatientProfile() {
     listPrescriptions,
     listLabReports,
     listBills,
+    updateBillNotes,
     softDeletePatient,
   } = useWorkspaceData();
   const snapshotPatient = patients.find(candidate => candidate.id === id);
   const [loadedPatient, setLoadedPatient] = useState<Patient | null>(null);
   const [recordLoading, setRecordLoading] = useState(!snapshotPatient);
   const [viewingBill, setViewingBill] = useState<Bill | null>(null);
+  const [isEditingBillNotes, setIsEditingBillNotes] = useState(false);
+  const [billNotesDraft, setBillNotesDraft] = useState("");
+  const [isSavingBillNotes, setIsSavingBillNotes] = useState(false);
   const [viewingLab, setViewingLab] = useState<LabReport | null>(null);
   const [showTrashDialog, setShowTrashDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -349,8 +354,17 @@ function PatientProfile() {
         </div>
       </div>
 
-      <Dialog open={!!viewingBill} onOpenChange={(o) => !o && setViewingBill(null)}>
-        <DialogContent className="max-w-lg">
+      <Dialog
+        open={!!viewingBill}
+        onOpenChange={(o) => {
+          if (!o) {
+            setViewingBill(null);
+            setIsEditingBillNotes(false);
+            setBillNotesDraft("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>Invoice {viewingBill?.id}</DialogTitle></DialogHeader>
           {viewingBill && (
             <div className="space-y-4 text-sm">
@@ -365,7 +379,7 @@ function PatientProfile() {
                 {viewingBill.items && viewingBill.items.length > 0 && (
                   <div>
                     <div className="mb-1.5 text-xs font-semibold uppercase text-muted-foreground">Line items</div>
-                    <div className="rounded-xl border divide-y">
+                    <div className="rounded-xl border divide-y max-h-56 overflow-y-auto">
                       {viewingBill.items.map((item, index) => (
                         <div key={`${item.category}-${item.name}-${index}`} className="flex items-center justify-between gap-3 px-3 py-2">
                           <div>
@@ -389,6 +403,79 @@ function PatientProfile() {
                   <span>Total</span>
                   <span className="tabular-nums">₹{viewingBill.amount.toFixed(2)}</span>
                 </div>
+
+                {/* Notes section with post-creation editing for Clinical Admin & Receptionist */}
+                <div className="rounded-xl border p-3 bg-muted/20 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <div className="text-xs font-semibold uppercase text-muted-foreground">Notes / Remarks</div>
+                    {(user?.role === "clinic_admin" || user?.role === "receptionist" || user?.role === "super_admin") && !isEditingBillNotes && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs px-2 gap-1 text-primary hover:text-primary"
+                        onClick={() => {
+                          setBillNotesDraft(viewingBill.notes ?? "");
+                          setIsEditingBillNotes(true);
+                        }}
+                      >
+                        <Pencil className="h-3 w-3" />
+                        {viewingBill.notes ? "Edit note" : "Add note"}
+                      </Button>
+                    )}
+                  </div>
+                  {isEditingBillNotes ? (
+                    <div className="space-y-2 pt-1">
+                      <Textarea
+                        placeholder="Add additional bill notes, remarks or payment adjustments..."
+                        value={billNotesDraft}
+                        onChange={(e) => setBillNotesDraft(e.target.value)}
+                        className="text-xs min-h-[70px] resize-none"
+                        autoFocus
+                      />
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 text-xs px-2"
+                          disabled={isSavingBillNotes}
+                          onClick={() => {
+                            setIsEditingBillNotes(false);
+                            setBillNotesDraft("");
+                          }}
+                        >
+                          Cancel
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-7 text-xs px-3"
+                          disabled={isSavingBillNotes}
+                          onClick={async () => {
+                            setIsSavingBillNotes(true);
+                            try {
+                              await updateBillNotes(viewingBill.id, billNotesDraft);
+                              setViewingBill(prev => prev ? { ...prev, notes: billNotesDraft.trim() || undefined } : null);
+                              setIsEditingBillNotes(false);
+                              toast.success("Bill notes updated successfully");
+                            } catch (err: any) {
+                              toast.error(err?.message || "Failed to update notes");
+                            } finally {
+                              setIsSavingBillNotes(false);
+                            }
+                          }}
+                        >
+                          {isSavingBillNotes ? "Saving..." : "Save note"}
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground whitespace-pre-wrap italic">
+                      {viewingBill.notes ? viewingBill.notes : "No notes added to this invoice yet."}
+                    </p>
+                  )}
+                </div>
             </div>
           )}
           <DialogFooter>
@@ -397,7 +484,10 @@ function PatientProfile() {
                 <Send className="mr-1.5 h-4 w-4" />Send on WhatsApp
               </Button>
             )}
-            <Button onClick={() => setViewingBill(null)}>Close</Button>
+            <Button onClick={() => {
+              setViewingBill(null);
+              setIsEditingBillNotes(false);
+            }}>Close</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

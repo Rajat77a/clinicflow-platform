@@ -166,6 +166,33 @@ export function savePermDeletedPatientsToStorage(ids: string[]): void {
   }
 }
 
+export const STORAGE_KEY_INVOICE_NOTES = "cf_invoice_notes";
+
+export function loadInvoiceNotesFromStorage(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_INVOICE_NOTES);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveInvoiceNoteToStorage(billId: string, note: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const notes = loadInvoiceNotesFromStorage();
+    if (note && note.trim()) {
+      notes[billId] = note.trim();
+    } else {
+      delete notes[billId];
+    }
+    localStorage.setItem(STORAGE_KEY_INVOICE_NOTES, JSON.stringify(notes));
+  } catch {
+    // Ignore quota or disabled storage
+  }
+}
+
 const DEFAULT_CLINIC_ID = "CL-001";
 
 export type Clinic = {
@@ -314,6 +341,7 @@ export type Bill = {
   items: BillLineInput[];
   status: string;
   method: string;
+  notes?: string;
   databaseId?: string;
   version?: number;
 };
@@ -398,6 +426,7 @@ export interface PrescriptionInput {
 export interface BillInput {
   patientId: string;
   method?: string;
+  notes?: string;
   subtotal: number;
   discount: number;
   taxRate: number;
@@ -1460,6 +1489,7 @@ interface WorkspaceData {
   saveLabReports: (reports: Omit<LabReport, "clinicId">[]) => Promise<LabReport[]>;
   createBill: (input: BillInput) => Promise<Bill>;
   updateBill: (bill: Bill) => Promise<Bill>;
+  updateBillNotes: (billId: string, notes: string) => Promise<void>;
   createFacility: (input: FacilityInput) => Promise<Facility>;
 }
 
@@ -1680,7 +1710,13 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             user.role !== "doctor" || patients.some(patient => patient.id === report.patientId)
           )
         : [],
-      bills: user && hasPermission(user.role, "billing.read") ? clinicScope(state.bills) : [],
+      bills: user && hasPermission(user.role, "billing.read")
+        ? clinicScope(state.bills).map((b) => {
+            const storedNotes = loadInvoiceNotesFromStorage();
+            const note = b.notes ?? storedNotes[b.id] ?? (b.databaseId ? storedNotes[b.databaseId] : undefined);
+            return note !== undefined ? { ...b, notes: note } : b;
+          })
+        : [],
       auditLogs: isSuperAdmin
         ? state.auditLogs
         : state.auditLogs.filter(entry => entry.clinicId === clinicId),
@@ -2850,12 +2886,22 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           items: input.items,
           status: "Pending",
           method: input.method ?? "—",
+          notes: input.notes?.trim() || undefined,
         };
+        if (bill.notes) {
+          saveInvoiceNoteToStorage(bill.id, bill.notes);
+        }
         dispatch({ type: "bill.created", value: bill, actor });
         return bill;
       },
       updateBill: async (bill) => {
         const actor = requireUser(user, "billing.write");
+        if (bill.notes !== undefined) {
+          saveInvoiceNoteToStorage(bill.id, bill.notes);
+          if (bill.databaseId) {
+            saveInvoiceNoteToStorage(bill.databaseId, bill.notes);
+          }
+        }
         if (repository) {
           const updated = await repository.updateBill(bill);
           await refresh();
@@ -2864,6 +2910,24 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         if (bill.clinicId !== requireClinic(actor)) throw new Error("Cross-clinic updates are not allowed");
         dispatch({ type: "bill.updated", value: bill, actor });
         return bill;
+      },
+      updateBillNotes: async (billId: string, notes: string) => {
+        if (!user) throw new Error("Authentication required");
+        if (user.role !== "clinic_admin" && user.role !== "receptionist" && user.role !== "super_admin") {
+          throw new Error("Only Clinical Admins and Receptionists can add or update invoice notes");
+        }
+        saveInvoiceNoteToStorage(billId, notes);
+        const target = state.bills.find(b => b.id === billId || b.databaseId === billId);
+        if (target) {
+          if (target.id) saveInvoiceNoteToStorage(target.id, notes);
+          if (target.databaseId) saveInvoiceNoteToStorage(target.databaseId, notes);
+          dispatch({
+            type: "bill.updated",
+            value: { ...target, notes: notes.trim() || undefined },
+            actor: user,
+          });
+        }
+        await refresh().catch(() => undefined);
       },
       createFacility: async (input) => {
         const actor = requireUser(user, "facilities.manage");
