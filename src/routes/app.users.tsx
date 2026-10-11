@@ -1252,8 +1252,11 @@ function UsersPage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>Delete User?</DialogTitle>
-            <DialogDescription>
-              This user will be moved to Trash and will no longer be active.
+            <DialogDescription className="space-y-2 pt-1 text-left">
+              <span>This user will be moved to Trash and will no longer be active.</span>
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-2.5 text-xs text-amber-900 dark:text-amber-200">
+                <strong>Retention Policy:</strong> Kept in Trash for 10 days before permanent deletion is allowed. Automatically purged after 60 days. Can be restored anytime before permanent deletion.
+              </div>
             </DialogDescription>
           </DialogHeader>
           {deleteTarget && (
@@ -1292,9 +1295,11 @@ function UsersPage() {
               <AlertTriangle className="h-6 w-6" />
             </div>
             <DialogTitle className="text-center">Delete Selected Users?</DialogTitle>
-            <DialogDescription className="text-center text-sm pt-2">
-              The selected users will be moved to the Trash Bin and their portal access will be suspended.
-              You can restore them at any time from the Trash within 30 days.
+            <DialogDescription className="text-left text-sm pt-2 space-y-2">
+              <p>The selected users will be moved to the Trash Bin and their portal access will be suspended.</p>
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 p-2.5 text-xs text-amber-900 dark:text-amber-200">
+                <strong>Retention Policy:</strong> Kept in Trash for 10 days before permanent deletion is allowed. Automatically purged after 60 days. Can be restored anytime before permanent deletion.
+              </div>
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2 sm:gap-0 mt-4">

@@ -229,7 +229,7 @@ function SetupPage() {
               return;
             }
 
-            supabase.rpc(`check_user_exists`, { p_email: email }).then(({ data }) => { if (data) setUserExists(true); });
+            supabase.rpc(`check_user_exists`, { p_email: email }).then(({ data }: { data?: unknown }) => { if (data) setUserExists(true); });
             setTokenInfo({
               email,
               full_name: String(row.p_full_name ?? row.full_name ?? ""),
@@ -503,7 +503,7 @@ function SetupPage() {
                   </Link>
                 </Button>
                 <Button asChild variant="outline" className="h-11 w-full rounded-xl text-sm font-semibold">
-                  <Link to="/login" >
+                  <Link to="/login" search={{ email: tokenInfo.email }}>
                     Go to Login
                   </Link>
                 </Button>

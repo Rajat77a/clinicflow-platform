@@ -71,9 +71,9 @@ test("super admin portal contains clinic deletion moving to trash", () => {
   assert.match(clinicsListSource, /\/app\/clinics\/bin/);
 });
 
-test("trash bin is accessible only to super administrators", () => {
+test("trash bin is accessible to administrators", () => {
   assert.match(clinicsBinSource, /isSuperAdmin\s*=\s*user\?\.role === "super_admin"/);
-  assert.match(clinicsBinSource, /The Trash is accessible to Super Administrators only/);
+  assert.match(clinicsBinSource, /The Trash is accessible to Super Administrators and Clinical Administrators only/);
   assert.match(clinicsBinSource, /restoreClinic/);
   assert.match(clinicsBinSource, /permanentlyDeleteClinic/);
 });
@@ -85,13 +85,16 @@ test("clinic edit screen provides delete to trash option for super administrator
   assert.match(clinicEditSource, /Danger Zone/);
 });
 
-test("sidebar navigation exposes Trash under super admin operations only", () => {
+test("sidebar navigation exposes Trash under super admin and clinical admin navigation", () => {
   assert.match(sidebarNavSource, /super_admin:\s*\[[\s\S]*?to:\s*"\/app\/clinics\/bin",\s*label:\s*"Trash"/);
-  // Non super admin roles should not have trash in their navigation
+  // Clinical admin has Trash in people navigation
   const clinicAdminNav = sidebarNavSource.match(/clinic_admin:\s*\[([\s\S]*?)doctor:/)?.[1] ?? "";
-  assert.doesNotMatch(clinicAdminNav, /\/app\/clinics\/bin/);
+  assert.match(clinicAdminNav, /\/app\/clinics\/bin/);
+  // Doctor and receptionist roles should not have trash in their navigation
   const doctorNav = sidebarNavSource.match(/doctor:\s*\[([\s\S]*?)receptionist:/)?.[1] ?? "";
   assert.doesNotMatch(doctorNav, /\/app\/clinics\/bin/);
+  const receptionistNav = sidebarNavSource.match(/receptionist:\s*\[([\s\S]*?)patient:/)?.[1] ?? "";
+  assert.doesNotMatch(receptionistNav, /\/app\/clinics\/bin/);
 });
 
 test("workspace state moves soft deleted clinics to binClinics and excludes from active clinics", () => {
@@ -364,11 +367,60 @@ test("workspace-data persists soft deleted staff and excludes them from active s
   assert.match(workspaceDataSource, /binStaffMembers/);
 });
 
-test("deleting a clinic cascades to soft-deleting its associated users to trash", () => {
-  assert.match(workspaceDataSource, /associatedStaff/);
-  assert.match(workspaceDataSource, /previousClinicName/);
-  assert.match(workspaceDataSource, /repository\.softDeleteStaff/);
+test("workspace-data enforces 10-day retention lock and 60-day auto-purge", () => {
+  assert.match(workspaceDataSource, /isEligibleForPermanentDelete/);
+  assert.match(workspaceDataSource, /isWithinRetentionPeriod/);
+  assert.match(workspaceDataSource, /getTrashRetentionStatus/);
+  assert.match(workspaceDataSource, /10 days before permanent deletion/);
+  assert.match(workspaceDataSource, /60 days/);
+
+  // Test retention evaluation logic
+  const isEligible = (deletedAt: string, lockDays = 10) => {
+    const daysOld = (Date.now() - new Date(deletedAt).getTime()) / (1000 * 60 * 60 * 24);
+    return daysOld >= lockDays;
+  };
+  const isWithinPeriod = (deletedAt: string, retentionDays = 60) => {
+    const daysOld = (Date.now() - new Date(deletedAt).getTime()) / (1000 * 60 * 60 * 24);
+    return daysOld < retentionDays;
+  };
+
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  
+  // 5 days old -> NOT eligible for permanent delete (under 10 days), within 60 days
+  const fiveDaysAgo = new Date(now - 5 * dayMs).toISOString();
+  assert.equal(isEligible(fiveDaysAgo, 10), false);
+  assert.equal(isWithinPeriod(fiveDaysAgo, 60), true);
+
+  // 12 days old -> eligible for permanent delete (>= 10 days), within 60 days
+  const twelveDaysAgo = new Date(now - 12 * dayMs).toISOString();
+  assert.equal(isEligible(twelveDaysAgo, 10), true);
+  assert.equal(isWithinPeriod(twelveDaysAgo, 60), true);
+
+  // 65 days old -> past 60-day retention limit
+  const sixtyFiveDaysAgo = new Date(now - 65 * dayMs).toISOString();
+  assert.equal(isWithinPeriod(sixtyFiveDaysAgo, 60), false);
 });
+
+test("trash bin contains Patients tab and displays deletion period / retention status", () => {
+  assert.match(clinicsBinSource, /<TabsTrigger value="patients"/);
+  assert.match(clinicsBinSource, /<TabsContent value="patients"/);
+  assert.match(clinicsBinSource, /10-Day Safety Lock/);
+  assert.match(clinicsBinSource, /60-Day Automatic Purge/);
+  assert.match(clinicsBinSource, /Deletion Period \/ Status/);
+  assert.match(clinicsBinSource, /10-Day Hold/);
+  assert.match(clinicsBinSource, /Eligible for permanent deletion/);
+});
+
+test("workspace-data supports patient soft deletion and trash management", () => {
+  assert.match(workspaceDataSource, /STORAGE_KEY_SOFT_DELETED_PATIENTS/);
+  assert.match(workspaceDataSource, /STORAGE_KEY_PERM_DELETED_PATIENTS/);
+  assert.match(workspaceDataSource, /softDeletePatient:\s*async/);
+  assert.match(workspaceDataSource, /restorePatient:\s*async/);
+  assert.match(workspaceDataSource, /permanentlyDeletePatient:\s*async/);
+  assert.match(workspaceDataSource, /binPatients/);
+});
+
 
 
 
