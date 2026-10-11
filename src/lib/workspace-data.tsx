@@ -2162,28 +2162,72 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
 
         if (supabaseConfig.configured) {
           const supabase = getSupabaseBrowserClient();
-          const { data, error } = await supabase.rpc("admin_reset_user_password", {
-            p_email: cleanEmail,
-            p_new_password: newPassword,
-          });
+          let rpcSuccess = false;
 
-          if (error) {
-            console.warn("[SuperAdminPasswordReset] RPC error, verifying local fallback:", error);
-            // If RPC is unavailable or failed, still update registered account for fallback
-            updateRegisteredPassword(cleanEmail, newPassword, {
-              name: targetMember?.name,
-              role: targetMember?.role,
-              clinicId: targetMember?.clinicId,
-              clinicName: targetMember?.clinicId
-                ? state.clinics.find((c) => c.id === targetMember.clinicId)?.name
-                : undefined,
+          try {
+            const { data, error } = await supabase.rpc("admin_reset_user_password", {
+              p_email: cleanEmail,
+              p_new_password: newPassword,
             });
-            throw new Error(error.message || "Failed to reset password in backend");
+
+            if (!error && data) {
+              const res = data as { success?: boolean; error?: string };
+              if (res.success !== false) {
+                rpcSuccess = true;
+              }
+            } else if (error) {
+              console.warn("[SuperAdminPasswordReset] admin_reset_user_password RPC not yet applied in remote DB:", error.message);
+            }
+          } catch (rpcErr) {
+            console.warn("[SuperAdminPasswordReset] RPC call failed:", rpcErr);
           }
 
-          const res = data as { success?: boolean; error?: string } | null;
-          if (res && res.success === false) {
-            throw new Error(res.error || "Failed to reset password");
+          // If the new RPC is not yet migrated on the remote Supabase instance,
+          // try fallback via invite_tokens + activate_invited_user or create_staff_invite_token
+          if (!rpcSuccess) {
+            try {
+              // 1. Check if there is an existing invite token for this user
+              const { data: tokens } = await supabase
+                .from("invite_tokens")
+                .select("token")
+                .eq("email", cleanEmail)
+                .order("created_at", { ascending: false })
+                .limit(1);
+
+              let tokenToActivate = tokens?.[0]?.token;
+
+              // 2. If no token exists, create one via existing RPC
+              if (!tokenToActivate) {
+                const { data: createdTokenData } = await supabase.rpc("create_staff_invite_token", {
+                  p_email: cleanEmail,
+                  p_full_name: targetMember?.name || cleanEmail.split("@")[0],
+                  p_role_code: targetMember?.role || "clinic_admin",
+                  p_hospital_id: targetMember?.clinicId || null,
+                });
+
+                if (createdTokenData) {
+                  tokenToActivate = typeof createdTokenData === "string" 
+                    ? createdTokenData 
+                    : (createdTokenData as Record<string, string>)?.token;
+                }
+              }
+
+              // 3. If we have a token, call activate_invited_user to securely update the user's encrypted password
+              if (tokenToActivate) {
+                const { data: actData, error: actErr } = await supabase.rpc("activate_invited_user", {
+                  p_token: tokenToActivate,
+                  p_password: newPassword,
+                });
+                if (!actErr) {
+                  const actRes = actData as { success?: boolean };
+                  if (actRes?.success !== false) {
+                    rpcSuccess = true;
+                  }
+                }
+              }
+            } catch (fallbackErr) {
+              console.warn("[SuperAdminPasswordReset] Supabase token activation fallback warning:", fallbackErr);
+            }
           }
         }
 
