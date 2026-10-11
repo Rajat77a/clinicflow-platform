@@ -27,6 +27,8 @@ import type {
   StaffMember,
   WorkspaceSnapshot,
   AuditEntry,
+  saveInvoiceNoteToStorage,
+  loadInvoiceNotesFromStorage,
 } from "../workspace-data";
 import { getSupabaseBrowserClient } from "./client";
 import { normalizePageInput } from "../record-page";
@@ -158,6 +160,8 @@ function relatedPatientName(row: Row) {
 
 function mapBill(row: Row, patientName?: string): Bill {
   const payment = ((row.payments ?? []) as Row[]).find((item) => item.status === "confirmed");
+  const storedNotes = loadInvoiceNotesFromStorage();
+  const note = storedNotes[row.invoice_number] ?? (row.id ? storedNotes[row.id] : undefined);
   return {
     id: row.invoice_number,
     databaseId: row.id,
@@ -169,6 +173,7 @@ function mapBill(row: Row, patientName?: string): Bill {
     subtotal: Number(row.subtotal),
     tax: Number(row.tax),
     discount: Number(row.discount),
+    notes: note,
     items: ((row.invoice_items ?? []) as Row[])
       .sort((left, right) => Number(left.position) - Number(right.position))
       .map((item) => ({
@@ -1338,11 +1343,20 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     const page = await this.listBills({ recordId: data as string, limit: 1 });
     const bill = page.rows[0];
     if (!bill) throw new Error("Saved invoice is not visible to the current role");
+    if (input.notes) {
+      saveInvoiceNoteToStorage(bill.id, input.notes);
+      if (bill.databaseId) saveInvoiceNoteToStorage(bill.databaseId, input.notes);
+      bill.notes = input.notes;
+    }
     return bill;
   }
 
   async updateBill(bill: Bill) {
     if (!bill.databaseId) throw new Error("Invoice database identifier is missing");
+    if (bill.notes !== undefined) {
+      saveInvoiceNoteToStorage(bill.id, bill.notes);
+      saveInvoiceNoteToStorage(bill.databaseId, bill.notes);
+    }
     if (bill.status !== "Paid") {
       throw new Error("Use the payment workflow to close an invoice");
     }
@@ -1355,6 +1369,9 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     const page = await this.listBills({ recordId: bill.databaseId, limit: 1 });
     const updated = page.rows[0];
     if (!updated) throw new Error("Updated invoice is not visible to the current role");
+    if (bill.notes !== undefined) {
+      updated.notes = bill.notes;
+    }
     return updated;
   }
 

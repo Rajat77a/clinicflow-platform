@@ -26,6 +26,10 @@ const billingSource = await readFile(
   new URL("../routes/app.billing.new.tsx", import.meta.url),
   "utf8",
 );
+const billingIndexSource = await readFile(
+  new URL("../routes/app.billing.index.tsx", import.meta.url),
+  "utf8",
+);
 const authSource = await readFile(new URL("./auth.tsx", import.meta.url), "utf8");
 const loginSource = await readFile(new URL("../routes/login.tsx", import.meta.url), "utf8");
 const repositorySource = await readFile(
@@ -113,4 +117,18 @@ test("clinical admin dashboard displays remaining subscription days and plan sta
 
 test("role filter hides super admin option from clinical admins", () => {
   assert.match(usersSource, /\{isSuperAdmin\s*&&\s*\(\s*<SelectItem value="super_admin">Super Admin<\/SelectItem>/);
+});
+
+test("bill viewing dialog is scrollable and allows notes to be added and edited", () => {
+  // Check scrollable classes on invoice dialogs
+  assert.match(patientSource, /max-h-\[90vh\]\s+overflow-y-auto/);
+  assert.match(billingIndexSource, /max-h-\[90vh\]\s+overflow-y-auto/);
+
+  // Check notes section and edit capability for clinical admin and receptionist
+  assert.match(patientSource, /updateBillNotes/);
+  assert.match(patientSource, /Notes \/ Remarks/);
+  assert.match(billingIndexSource, /updateBillNotes/);
+  assert.match(billingIndexSource, /Notes \/ Remarks/);
+  assert.match(workspaceSource, /updateBillNotes/);
+  assert.match(workspaceSource, /cf_invoice_notes/);
 });
