@@ -38,6 +38,7 @@ const repositorySource = await readFile(
 );
 const dashboardSource = await readFile(new URL("../routes/app.index.tsx", import.meta.url), "utf8");
 const workspaceSource = await readFile(new URL("./workspace-data.tsx", import.meta.url), "utf8");
+const notesSource = await readFile(new URL("./invoice-notes.ts", import.meta.url), "utf8");
 const usersSource = await readFile(new URL("../routes/app.users.tsx", import.meta.url), "utf8");
 const offboardingMigration = await readFile(
   new URL("../../supabase/migrations/20260730100000_safe_staff_offboarding.sql", import.meta.url),
@@ -130,5 +131,5 @@ test("bill viewing dialog is scrollable and allows notes to be added and edited"
   assert.match(billingIndexSource, /updateBillNotes/);
   assert.match(billingIndexSource, /Notes \/ Remarks/);
   assert.match(workspaceSource, /updateBillNotes/);
-  assert.match(workspaceSource, /cf_invoice_notes/);
+  assert.match(notesSource, /cf_invoice_notes/);
 });

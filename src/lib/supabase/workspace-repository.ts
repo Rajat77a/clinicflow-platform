@@ -27,9 +27,11 @@ import type {
   StaffMember,
   WorkspaceSnapshot,
   AuditEntry,
+} from "../workspace-data";
+import {
   saveInvoiceNoteToStorage,
   loadInvoiceNotesFromStorage,
-} from "../workspace-data";
+} from "../invoice-notes";
 import { getSupabaseBrowserClient } from "./client";
 import { normalizePageInput } from "../record-page";
 import { throwIfFunctionError } from "./function-error";
