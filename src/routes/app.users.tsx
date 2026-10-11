@@ -840,7 +840,20 @@ function UsersPage() {
         ) : undefined}
       />
 
-      <div className="flex justify-end mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+        {canManageUsers && (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={toggleSelectAll}
+            className="gap-2"
+          >
+            <CheckSquare className="h-4 w-4" />
+            {allSelected ? "Deselect All Users" : "Select All Users"}
+          </Button>
+        )}
+        <div className="flex-1" />
         <Select value={roleFilter} onValueChange={(v: any) => setRoleFilter(v)}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Filter by role" />

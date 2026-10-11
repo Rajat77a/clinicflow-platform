@@ -97,6 +97,7 @@ const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
 };
 
 const ROUTE_RULES: ReadonlyArray<{ matches: RegExp; permission: Permission }> = [
+  { matches: /^\/app\/clinics\/bin(?:\/|$)/, permission: "users.manage" },
   { matches: /^\/app\/clinics(?:\/|$)/, permission: "platform.clinics.manage" },
   { matches: /^\/app\/subscriptions(?:\/|$)/, permission: "platform.subscriptions.manage" },
   { matches: /^\/app\/payments(?:\/|$)/, permission: "platform.payments.manage" },
