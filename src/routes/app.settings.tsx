@@ -10,8 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth";
 import { MIN_PASSWORD_LENGTH, passwordPolicyError } from "@/lib/password-policy";
 const SUBSCRIPTION_PRICE = 499;
-import { supabaseConfig } from "@/lib/supabase/config";
 import { toast } from "sonner";
+import { Eye, EyeOff, Lock, KeyRound } from "lucide-react";
 
 export const Route = createFileRoute("/app/settings")({ component: SettingsPage });
 
@@ -21,26 +21,37 @@ function SettingsPage() {
   return <ClinicSettings />;
 }
 
-function ProductionAccountSettings() {
+export function ChangePasswordCard() {
   const { user, changePassword } = useAuth();
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
-  const [confirmation, setConfirmation] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showCurrent, setShowCurrent] = useState(false);
+  const [showNew, setShowNew] = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  const submitPassword = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+
+    if (!currentPassword) {
+      toast.error("Please enter your current password");
+      return;
+    }
+
     const policyError = passwordPolicyError(newPassword);
     if (policyError) {
       toast.error(policyError);
       return;
     }
-    if (newPassword !== confirmation) {
-      toast.error("Passwords do not match");
+
+    if (newPassword !== confirmPassword) {
+      toast.error("New passwords do not match");
       return;
     }
+
     if (currentPassword === newPassword) {
-      toast.error("Choose a password different from your current password");
+      toast.error("New password must be different from current password");
       return;
     }
 
@@ -49,96 +60,124 @@ function ProductionAccountSettings() {
       await changePassword(currentPassword, newPassword);
       setCurrentPassword("");
       setNewPassword("");
-      setConfirmation("");
-      toast.success("Password updated and other sessions revoked");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Unable to update password");
+      setConfirmPassword("");
+      toast.success("Password changed successfully. You can now use your new password to sign in.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to change password");
     } finally {
       setIsSaving(false);
     }
   };
 
   return (
-    <>
-      <PageHeader
-        title="Account security"
-        description="Review your assigned hospital identity and protect your account."
-      />
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="rounded-lg border bg-card p-6">
-          <h2 className="font-display text-base font-semibold">Assigned identity</h2>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="account-name">Full name</Label>
-              <Input id="account-name" value={user?.name ?? ""} disabled />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="account-email">Work email</Label>
-              <Input id="account-email" value={user?.email ?? ""} disabled />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="account-role">Role</Label>
-              <Input
-                id="account-role"
-                value={user?.role.replace("_", " ") ?? ""}
-                disabled
-              />
-            </div>
-            <div className="space-y-1.5 sm:col-span-2">
-              <Label htmlFor="account-hospital">Hospital</Label>
-              <Input id="account-hospital" value={user?.clinic ?? ""} disabled />
-            </div>
-          </div>
-        </section>
-
-        <form className="rounded-lg border bg-card p-6" onSubmit={submitPassword}>
-          <h2 className="font-display text-base font-semibold">Change password</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Updating your password revokes your other signed-in sessions.
+    <form onSubmit={handleSubmit} className="rounded-2xl border bg-card p-6 shadow-soft space-y-4">
+      <div className="flex items-center gap-2">
+        <div className="grid h-9 w-9 place-items-center rounded-xl bg-primary/10 text-primary">
+          <KeyRound className="h-5 w-5" />
+        </div>
+        <div>
+          <h3 className="font-display text-base font-semibold">Change Password</h3>
+          <p className="text-xs text-muted-foreground">
+            Update your account password. Once changed, use your new password on next sign-in.
           </p>
-          <div className="mt-4 space-y-3">
-            <div className="space-y-1.5">
-              <Label htmlFor="current-password">Current password</Label>
-              <Input
-                id="current-password"
-                type="password"
-                autoComplete="current-password"
-                value={currentPassword}
-                onChange={(event) => setCurrentPassword(event.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="new-password">New password</Label>
-              <Input
-                id="new-password"
-                type="password"
-                autoComplete="new-password"
-                minLength={MIN_PASSWORD_LENGTH}
-                value={newPassword}
-                onChange={(event) => setNewPassword(event.target.value)}
-                required
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="confirm-password">Confirm new password</Label>
-              <Input
-                id="confirm-password"
-                type="password"
-                autoComplete="new-password"
-                minLength={MIN_PASSWORD_LENGTH}
-                value={confirmation}
-                onChange={(event) => setConfirmation(event.target.value)}
-                required
-              />
-            </div>
-          </div>
-          <Button className="mt-4" type="submit" disabled={isSaving}>
-            {isSaving ? "Updating..." : "Update password"}
-          </Button>
-        </form>
+        </div>
       </div>
-    </>
+
+      <div className="space-y-3 pt-1">
+        {/* Current Password */}
+        <div className="space-y-1.5">
+          <Label htmlFor="current-password">Current password</Label>
+          <div className="relative">
+            <Input
+              id="current-password"
+              type={showCurrent ? "text" : "password"}
+              className="h-11 rounded-xl pr-11"
+              placeholder="Enter current password"
+              value={currentPassword}
+              onChange={(e) => setCurrentPassword(e.target.value)}
+              autoComplete="current-password"
+              required
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute right-1 top-1 h-9 w-9 text-muted-foreground hover:text-foreground"
+              onClick={() => setShowCurrent(!showCurrent)}
+              aria-label={showCurrent ? "Hide current password" : "Show current password"}
+              title={showCurrent ? "Hide current password" : "Show current password"}
+            >
+              {showCurrent ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </Button>
+          </div>
+        </div>
+
+        {/* New Password */}
+        <div className="space-y-1.5">
+          <Label htmlFor="new-password">New password</Label>
+          <div className="relative">
+            <Input
+              id="new-password"
+              type={showNew ? "text" : "password"}
+              className="h-11 rounded-xl pr-11"
+              placeholder={`At least ${MIN_PASSWORD_LENGTH} characters`}
+              minLength={MIN_PASSWORD_LENGTH}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              autoComplete="new-password"
+              required
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute right-1 top-1 h-9 w-9 text-muted-foreground hover:text-foreground"
+              onClick={() => setShowNew(!showNew)}
+              aria-label={showNew ? "Hide new password" : "Show new password"}
+              title={showNew ? "Hide new password" : "Show new password"}
+            >
+              {showNew ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </Button>
+          </div>
+        </div>
+
+        {/* Confirm New Password */}
+        <div className="space-y-1.5">
+          <Label htmlFor="confirm-new-password">Confirm new password</Label>
+          <div className="relative">
+            <Input
+              id="confirm-new-password"
+              type={showConfirm ? "text" : "password"}
+              className="h-11 rounded-xl pr-11"
+              placeholder="Re-enter new password"
+              minLength={MIN_PASSWORD_LENGTH}
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              autoComplete="new-password"
+              required
+            />
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="absolute right-1 top-1 h-9 w-9 text-muted-foreground hover:text-foreground"
+              onClick={() => setShowConfirm(!showConfirm)}
+              aria-label={showConfirm ? "Hide confirmation password" : "Show confirmation password"}
+              title={showConfirm ? "Hide confirmation password" : "Show confirmation password"}
+            >
+              {showConfirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <div className="pt-2">
+        <Button type="submit" disabled={isSaving} className="rounded-xl font-medium">
+          <Lock className="mr-2 h-4 w-4" />
+          {isSaving ? "Updating password..." : "Update password"}
+        </Button>
+      </div>
+    </form>
   );
 }
 
@@ -181,14 +220,7 @@ function PlatformSettings() {
         </TabsContent>
 
         <TabsContent value="security" className="mt-4 grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border bg-card p-6 shadow-soft space-y-4">
-            <h3 className="font-display text-base font-semibold">Change password</h3>
-            <div className="space-y-1.5"><Label>Current password</Label><Input type="password" className="h-11 rounded-xl" /></div>
-            <div className="space-y-1.5"><Label>New password</Label><Input type="password" className="h-11 rounded-xl" /></div>
-            <div className="space-y-1.5"><Label>Confirm new password</Label><Input type="password" className="h-11 rounded-xl" /></div>
-            <div className="space-y-1.5"><Label>Email OTP confirmation</Label><Input inputMode="numeric" maxLength={6} className="h-11 rounded-xl" placeholder="6-digit OTP" /></div>
-            <Button onClick={() => toast.success("Password updated after OTP confirmation")}>Update password</Button>
-          </div>
+          <ChangePasswordCard />
           <div className="rounded-2xl border bg-card p-6 shadow-soft space-y-3">
             <h3 className="font-display text-base font-semibold">Session protection</h3>
             <div className="flex items-center justify-between rounded-xl bg-muted/40 p-3">
@@ -380,12 +412,7 @@ function ClinicSettings() {
         </TabsContent>
 
         <TabsContent value="security" className="mt-4 grid gap-4 lg:grid-cols-2">
-          <div className="rounded-2xl border bg-card p-6 shadow-soft space-y-4">
-            <h3 className="font-display text-base font-semibold">Password</h3>
-            <div className="space-y-1.5"><Label>Current password</Label><Input type="password" className="h-11 rounded-xl" /></div>
-            <div className="space-y-1.5"><Label>New password</Label><Input type="password" className="h-11 rounded-xl" /></div>
-            <Button>Update password</Button>
-          </div>
+          <ChangePasswordCard />
           <div className="rounded-2xl border bg-card p-6 shadow-soft space-y-3">
             <h3 className="font-display text-base font-semibold">Two-factor auth</h3>
             <p className="text-sm text-muted-foreground">Protect your account with a second factor.</p>

@@ -423,37 +423,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           let verified = false;
           if (supabaseConfig.configured) {
-            try {
-              const client = getSupabaseBrowserClient();
-              const { error: verificationError } = await client.auth.signInWithPassword({
-                email: user.email,
-                password: currentPassword,
+            const client = getSupabaseBrowserClient();
+            // 1. Verify current password with Supabase
+            const { error: verificationError } = await client.auth.signInWithPassword({
+              email: user.email,
+              password: currentPassword,
+            });
+
+            if (!verificationError) {
+              verified = true;
+              // 2. Update to new password in Supabase
+              const { error: updateError } = await client.auth.updateUser({
+                password: newPassword,
               });
-              if (!verificationError) {
-                verified = true;
-                const { error: updateError } = await client.auth.updateUser({
-                  password: newPassword,
-                });
-                if (updateError) throw updateError;
-                await client.rpc("record_security_event", {
-                  p_action: "password.changed",
-                });
-                const { error: revokeError } = await client.auth.signOut({ scope: "others" });
-                if (revokeError) {
-                  throw new Error("Password changed, but other sessions could not be revoked");
-                }
+              if (updateError) {
+                throw new Error(updateError.message || "Failed to update password");
               }
-            } catch (sbErr) {
-              if (verified) throw sbErr;
+
+              // Non-blocking best-effort cleanup
+              void client.rpc("record_security_event", {
+                p_action: "password.changed",
+              }).catch(() => undefined);
+
+              void client.auth.signOut({ scope: "others" }).catch(() => undefined);
+            } else if (!supabaseConfig.demoMode) {
+              // Check if verification error is invalid credentials
+              const verifiedLocal = verifyRegisteredAccount(user.email, currentPassword);
+              if (!verifiedLocal) {
+                throw new Error(verificationError.message || "Current password is incorrect");
+              }
             }
           }
 
           if (!verified) {
-            const ok = updateRegisteredPassword(user.email, newPassword);
-            if (!ok && !supabaseConfig.demoMode) {
+            const verifiedLocal = verifyRegisteredAccount(user.email, currentPassword);
+            if (!verifiedLocal && !supabaseConfig.demoMode) {
               throw new Error("Current password is incorrect");
             }
           }
+
+          // Always synchronize local/offline registered account storage
+          updateRegisteredPassword(user.email, newPassword);
         },
         completePasswordSetup: () => setPasswordSetupRequired(false),
       }}
