@@ -38,7 +38,16 @@ export function ClinicStaffDirectoryModal({ clinicId, clinicName, onClose }: Sta
         if (mounted && data) {
           const mapped: StaffMember[] = data
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            .filter((m: any) => m.hospital_id === clinicId)
+            .filter((m: any) => {
+              if (m.hospital_id !== clinicId) return false;
+              // Only include members with active status (who have generated passwords and can log in)
+              // Exclude "Invited", "Expired", "Inactive", or soft-deleted members
+              if (m.status !== "Active") return false;
+              if (m.deleted_at) return false;
+              if (m.active === false) return false;
+              return true;
+            })
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             .map((m: any) => ({
               id: m.user_id || "",
               name: m.display_name || "Unknown",
