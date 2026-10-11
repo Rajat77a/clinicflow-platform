@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   Activity,
@@ -6,6 +7,7 @@ import {
   Calendar,
   CheckCircle2,
   ClipboardCheck,
+  Clock,
   FileText,
   IndianRupee,
   Receipt,
@@ -32,6 +34,7 @@ import { PageHeader } from "@/components/layout/page-header";
 import { StatCard } from "@/components/layout/stat-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 import {
   useWorkspaceData,
   type Appointment,
@@ -204,7 +207,7 @@ function SuperAdminDashboard() {
 
 function ClinicAdminDashboard() {
   const { user } = useAuth();
-  const { appointments, patients, doctors, bills, prescriptions } = useWorkspaceData();
+  const { appointments, patients, doctors, bills, prescriptions, clinics } = useWorkspaceData();
   const todayDate = localDateKey();
   const currentMonth = todayDate.slice(0, 7);
   const today = appointments
@@ -216,6 +219,46 @@ function ClinicAdminDashboard() {
   const collectedThisMonth = bills
     .filter(bill => bill.status === "Paid" && bill.date.startsWith(currentMonth))
     .reduce((sum, bill) => sum + bill.amount, 0);
+
+  const currentClinic = useMemo(() => {
+    return (
+      clinics.find(
+        (c) =>
+          (user?.clinicId && c.id === user.clinicId) ||
+          (user?.clinic && c.name.toLowerCase() === user.clinic.toLowerCase())
+      ) ??
+      clinics.find((c) => c.id === user?.clinicId) ??
+      (clinics.length > 0 ? clinics[0] : null)
+    );
+  }, [clinics, user?.clinicId, user?.clinic]);
+
+  const subscriptionDaysLeft = useMemo(() => {
+    if (!currentClinic?.expires || currentClinic.expires === "Not set") return null;
+    const expiresDate = currentClinic.expires.includes("T")
+      ? new Date(currentClinic.expires)
+      : new Date(`${currentClinic.expires}T23:59:59`);
+    if (isNaN(expiresDate.getTime())) return null;
+    return Math.ceil((expiresDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+  }, [currentClinic?.expires]);
+
+  const subscriptionStatValue = useMemo(() => {
+    if (subscriptionDaysLeft === null) {
+      return currentClinic?.status ? `${currentClinic.status}` : "Active";
+    }
+    if (subscriptionDaysLeft < 0) {
+      return `Expired (${Math.abs(subscriptionDaysLeft)}d)`;
+    }
+    if (subscriptionDaysLeft === 0) {
+      return "Expires today";
+    }
+    return `${subscriptionDaysLeft} day${subscriptionDaysLeft === 1 ? "" : "s"}`;
+  }, [subscriptionDaysLeft, currentClinic?.status]);
+
+  const subscriptionStatTone = useMemo<"primary" | "warning" | "destructive">(() => {
+    if (subscriptionDaysLeft !== null && subscriptionDaysLeft <= 3) return "destructive";
+    if (subscriptionDaysLeft !== null && subscriptionDaysLeft <= 7) return "warning";
+    return "primary";
+  }, [subscriptionDaysLeft]);
 
   return (
     <>
@@ -229,7 +272,92 @@ function ClinicAdminDashboard() {
           </>
         }
       />
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+
+      {currentClinic && (
+        <div
+          className={cn(
+            "mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm shadow-soft transition-all",
+            subscriptionDaysLeft !== null && subscriptionDaysLeft <= 3
+              ? "border-destructive/30 bg-destructive/10 text-destructive dark:bg-destructive/20"
+              : subscriptionDaysLeft !== null && subscriptionDaysLeft <= 7
+              ? "border-amber-500/30 bg-amber-500/10 text-amber-900 dark:text-amber-200"
+              : "border-primary/20 bg-primary/5 text-foreground"
+          )}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className={cn(
+                "grid h-8 w-8 place-items-center rounded-xl",
+                subscriptionDaysLeft !== null && subscriptionDaysLeft <= 3
+                  ? "bg-destructive/20 text-destructive"
+                  : subscriptionDaysLeft !== null && subscriptionDaysLeft <= 7
+                  ? "bg-amber-500/20 text-amber-700 dark:text-amber-300"
+                  : "bg-primary/15 text-primary"
+              )}
+            >
+              <Clock className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 font-semibold">
+                <span>Subscription Status</span>
+                <Badge
+                  variant={
+                    subscriptionDaysLeft !== null && subscriptionDaysLeft <= 3
+                      ? "destructive"
+                      : subscriptionDaysLeft !== null && subscriptionDaysLeft <= 7
+                      ? "secondary"
+                      : "outline"
+                  }
+                  className="text-xs"
+                >
+                  {currentClinic.plan || "ClinicFlow"} · {currentClinic.status || "Active"}
+                </Badge>
+              </div>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {subscriptionDaysLeft === null ? (
+                  <span>Subscription active for <strong>{currentClinic.name}</strong>.</span>
+                ) : subscriptionDaysLeft < 0 ? (
+                  <span className="font-medium text-destructive">
+                    Subscription expired {Math.abs(subscriptionDaysLeft)} day(s) ago on {currentClinic.expires}. Please contact the Super Admin for renewal.
+                  </span>
+                ) : subscriptionDaysLeft === 0 ? (
+                  <span className="font-medium text-destructive">
+                    Subscription expires today ({currentClinic.expires}). Renewal required.
+                  </span>
+                ) : (
+                  <span>
+                    Your clinic has{" "}
+                    <strong className="font-semibold text-foreground tabular-nums">
+                      {subscriptionDaysLeft} day{subscriptionDaysLeft === 1 ? "" : "s"} left
+                    </strong>{" "}
+                    on the subscription plan (Renewal date: {currentClinic.expires}).
+                  </span>
+                )}
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge
+              variant={
+                subscriptionDaysLeft !== null && subscriptionDaysLeft <= 3
+                  ? "destructive"
+                  : subscriptionDaysLeft !== null && subscriptionDaysLeft <= 7
+                  ? "secondary"
+                  : "outline"
+              }
+              className="px-2.5 py-1 text-xs tabular-nums"
+            >
+              {subscriptionDaysLeft === null
+                ? "Active Plan"
+                : subscriptionDaysLeft < 0
+                ? "Expired"
+                : `${subscriptionDaysLeft} day${subscriptionDaysLeft === 1 ? "" : "s"} remaining`}
+            </Badge>
+          </div>
+        </div>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <StatCard label="Today's appointments" value={today.length} icon={<Calendar className="h-4 w-4" />} />
         <StatCard label="New patients" value={newPatients} tone="info" icon={<UserPlus className="h-4 w-4" />} />
         <StatCard label="Upcoming follow-ups" value={followUps} tone="warning" icon={<ClipboardCheck className="h-4 w-4" />} />
@@ -240,6 +368,12 @@ function ClinicAdminDashboard() {
           icon={<IndianRupee className="h-4 w-4" />}
         />
         <StatCard label="Active doctors" value={activeDoctors} icon={<Stethoscope className="h-4 w-4" />} />
+        <StatCard
+          label="Subscription days left"
+          value={subscriptionStatValue}
+          tone={subscriptionStatTone}
+          icon={<Clock className="h-4 w-4" />}
+        />
       </div>
 
       <div className="mt-6 grid gap-4 lg:grid-cols-3">

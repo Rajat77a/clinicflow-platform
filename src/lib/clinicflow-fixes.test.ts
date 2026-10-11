@@ -32,6 +32,7 @@ const repositorySource = await readFile(
   new URL("./supabase/workspace-repository.ts", import.meta.url),
   "utf8",
 );
+const dashboardSource = await readFile(new URL("../routes/app.index.tsx", import.meta.url), "utf8");
 const workspaceSource = await readFile(new URL("./workspace-data.tsx", import.meta.url), "utf8");
 const usersSource = await readFile(new URL("../routes/app.users.tsx", import.meta.url), "utf8");
 const offboardingMigration = await readFile(
@@ -101,4 +102,11 @@ test("staff offboarding revokes access without deleting hospital history", () =>
   assert.match(offboardingMigration, /update public\.patient_care_teams[\s\S]*active = false/);
   assert.doesNotMatch(offboardingMigration, /delete from public\./i);
   assert.match(offboardingMigration, /'staff\.deactivated'/);
+});
+
+test("clinical admin dashboard displays remaining subscription days and plan status", () => {
+  assert.match(dashboardSource, /Subscription days left/);
+  assert.match(dashboardSource, /subscriptionDaysLeft/);
+  assert.match(dashboardSource, /currentClinic/);
+  assert.match(dashboardSource, /Subscription Status/);
 });
