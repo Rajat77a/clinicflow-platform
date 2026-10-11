@@ -110,3 +110,7 @@ test("clinical admin dashboard displays remaining subscription days and plan sta
   assert.match(dashboardSource, /currentClinic/);
   assert.match(dashboardSource, /Subscription Status/);
 });
+
+test("role filter hides super admin option from clinical admins", () => {
+  assert.match(usersSource, /\{isSuperAdmin\s*&&\s*\(\s*<SelectItem value="super_admin">Super Admin<\/SelectItem>/);
+});
