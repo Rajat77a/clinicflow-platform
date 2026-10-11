@@ -100,10 +100,25 @@ export function verifyRegisteredAccount(email: string, password: string): Regist
   return null;
 }
 
-export function updateRegisteredPassword(email: string, newPassword: string): boolean {
+export function updateRegisteredPassword(
+  email: string,
+  newPassword: string,
+  extra?: { name?: string; role?: Role; clinicId?: string | null; clinicName?: string }
+): boolean {
   const account = getRegisteredAccount(email);
-  if (!account) return false;
+  if (!account) {
+    saveRegisteredAccount({
+      email,
+      password: newPassword,
+      name: extra?.name || email.split("@")[0],
+      role: extra?.role || "clinic_admin",
+      clinicId: extra?.clinicId ?? null,
+      clinicName: extra?.clinicName || "ClinicFlow Health",
+    });
+    return true;
+  }
   account.password = newPassword;
+  account.active = true;
   account.updatedAt = new Date().toISOString();
   saveRegisteredAccount(account);
   return true;
