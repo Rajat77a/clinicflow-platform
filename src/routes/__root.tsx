@@ -36,12 +36,31 @@ function NotFoundComponent() {
   );
 }
 
+if (typeof window !== "undefined") {
+  window.addEventListener("vite:preloadError", () => {
+    const key = "cf_preload_reload";
+    const last = sessionStorage.getItem(key);
+    const now = Date.now();
+    if (!last || now - Number(last) > 10000) {
+      sessionStorage.setItem(key, String(now));
+      window.location.reload();
+    }
+  });
+}
+
+function isDynamicChunkError(error: unknown, message: string): boolean {
+  const text = (message + " " + (error instanceof Error ? error.stack || "" : "")).toLowerCase();
+  return (
+    text.includes("failed to fetch dynamically imported module") ||
+    text.includes("importing a module script failed") ||
+    text.includes("error loading dynamically imported module") ||
+    text.includes("loading chunk") ||
+    text.includes("chunkloaderror")
+  );
+}
+
 function ErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
   const router = useRouter();
-
-  useEffect(() => {
-    console.error("ClinicFlow Route Error caught by __root:", error);
-  }, [error]);
 
   const errorMessage =
     error instanceof Error
@@ -50,7 +69,33 @@ function ErrorComponent({ error, reset }: { error: unknown; reset: () => void })
       ? error
       : (error as { message?: string })?.message || "An unexpected error occurred.";
 
+  const isChunkError = isDynamicChunkError(error, errorMessage);
   const errorStack = error instanceof Error ? error.stack : null;
+
+  useEffect(() => {
+    console.error("ClinicFlow Route Error caught by __root:", error);
+
+    // If this is a stale dynamic module chunk error from a new deployment, auto-reload once
+    if (isChunkError && typeof window !== "undefined") {
+      const retryKey = "cf_chunk_reload_" + window.location.pathname;
+      const lastRetry = sessionStorage.getItem(retryKey);
+      const now = Date.now();
+      if (!lastRetry || now - Number(lastRetry) > 15000) {
+        sessionStorage.setItem(retryKey, String(now));
+        window.location.reload();
+      }
+    }
+  }, [error, isChunkError]);
+
+  const handleReload = () => {
+    if (typeof window !== "undefined") {
+      // Force a hard reload to fetch fresh HTML and new chunk hashes
+      window.location.reload();
+    } else {
+      router.invalidate();
+      reset();
+    }
+  };
 
   const handleResetSession = () => {
     try {
@@ -74,22 +119,24 @@ function ErrorComponent({ error, reset }: { error: unknown; reset: () => void })
           </svg>
         </div>
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          This page didn't load
+          {isChunkError ? "New Version Available" : "This page didn't load"}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Something went wrong while rendering this page. You can try refreshing, return home, or reset your local session.
+          {isChunkError
+            ? "A new update has been published. Your browser was trying to load an older cached module. Please reload to use the latest version."
+            : "Something went wrong while rendering this page. You can try refreshing, return home, or reset your local session."}
         </p>
 
         {errorMessage && (
           <div className="mt-4 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-left text-xs text-destructive">
             <div className="font-semibold uppercase tracking-wider text-[10px] text-destructive/80 mb-1">
-              Error details
+              {isChunkError ? "Deployment status" : "Error details"}
             </div>
             <div className="font-mono break-words">{errorMessage}</div>
           </div>
         )}
 
-        {errorStack && (
+        {errorStack && !isChunkError && (
           <details className="mt-3 text-left">
             <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground select-none">
               View technical stack trace
@@ -102,10 +149,10 @@ function ErrorComponent({ error, reset }: { error: unknown; reset: () => void })
 
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
-            onClick={() => { router.invalidate(); reset(); }}
+            onClick={handleReload}
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 shadow-sm"
           >
-            Try again
+            {isChunkError ? "Update & Reload" : "Try again"}
           </button>
           <a
             href="/"
