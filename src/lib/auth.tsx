@@ -122,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error("This user account has been deactivated or deleted");
     }
 
-    const isPlatformAdmin = Boolean(platformAdminData?.some((pa) => pa.active !== false));
+    const isPlatformAdmin = Boolean(platformAdminData?.some((pa: { active?: boolean }) => pa.active !== false));
     const isSuperAdmin =
       isPlatformAdmin ||
       memberships.some((m) => m.role_code === "super_admin") ||

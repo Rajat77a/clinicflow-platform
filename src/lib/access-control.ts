@@ -122,8 +122,14 @@ const ROUTE_RULES: ReadonlyArray<{ matches: RegExp; permission: Permission }> = 
   { matches: /^\/app\/notifications(?:\/|$)/, permission: "notifications.read" },
 ];
 
+export function normalizeRole(role: string): Role {
+  if (role === "clinical_admin" || role === "admin") return "clinic_admin";
+  return role as Role;
+}
+
 export function hasPermission(role: Role, permission: Permission) {
-  return ROLE_PERMISSIONS[role].has(permission);
+  const norm = normalizeRole(role);
+  return ROLE_PERMISSIONS[norm]?.has(permission) ?? false;
 }
 
 export function permissionForPath(pathname: string): Permission | null {
