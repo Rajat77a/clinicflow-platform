@@ -4,6 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
 import { useWorkspaceData } from "@/lib/workspace-data";
+import { getAllRegisteredAccounts } from "@/lib/account-store";
 
 interface StaffDirectoryModalProps {
   clinicId: string | null;
@@ -20,7 +21,7 @@ interface StaffMember {
 }
 
 export function ClinicStaffDirectoryModal({ clinicId, clinicName, onClose }: StaffDirectoryModalProps) {
-  const { staffMembers } = useWorkspaceData();
+  const { staffMembers, doctors, receptionists } = useWorkspaceData();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -67,21 +68,78 @@ export function ClinicStaffDirectoryModal({ clinicId, clinicName, onClose }: Sta
 
       // Fallback to workspace staff members
       if (mounted) {
-        const fallback = staffMembers
+        const staffMap = new Map<string, StaffMember>();
+        staffMembers
           .filter((m) => {
             const matchesClinic =
               m.clinicId === clinicId ||
               (m.previousClinicName && m.previousClinicName.toLowerCase() === clinicName.toLowerCase());
             return matchesClinic && m.status === "Active" && !m.deletedAt;
           })
-          .map((m) => ({
-            id: m.id,
-            name: m.name,
-            email: m.email,
-            role: m.role,
-            employeeNumber: m.employeeNumber || "-",
-          }));
-        setStaff(fallback);
+          .forEach((m) => {
+            staffMap.set(m.email?.toLowerCase() || m.id, {
+              id: m.id,
+              name: m.name,
+              email: m.email,
+              role: m.role,
+              employeeNumber: m.employeeNumber || "-",
+            });
+          });
+
+        doctors
+          .filter((d) => (d.clinicId === clinicId || (!d.clinicId && clinicId === "00000000-0000-0000-0000-000000000001")) && d.status === "Active")
+          .forEach((d) => {
+            const key = d.email?.toLowerCase() || d.id;
+            if (!staffMap.has(key)) {
+              staffMap.set(key, {
+                id: d.id,
+                name: d.name,
+                email: d.email,
+                role: "doctor",
+                employeeNumber: "-",
+              });
+            }
+          });
+
+        receptionists
+          .filter((r) => (r.clinicId === clinicId || (!r.clinicId && clinicId === "00000000-0000-0000-0000-000000000001")) && r.status === "Active")
+          .forEach((r) => {
+            const key = r.email?.toLowerCase() || r.id;
+            if (!staffMap.has(key)) {
+              staffMap.set(key, {
+                id: r.id,
+                name: r.name,
+                email: r.email,
+                role: "receptionist",
+                employeeNumber: "-",
+              });
+            }
+          });
+
+        // Registered accounts matching clinic
+        const regAccounts = getAllRegisteredAccounts();
+        regAccounts
+          .filter(
+            (acc) =>
+              (acc.clinicId === clinicId ||
+                (acc.clinicName && acc.clinicName.toLowerCase() === clinicName.toLowerCase())) &&
+              acc.active !== false &&
+              acc.role !== "super_admin",
+          )
+          .forEach((acc) => {
+            const key = acc.email.toLowerCase();
+            if (!staffMap.has(key)) {
+              staffMap.set(key, {
+                id: acc.userId,
+                name: acc.name,
+                email: acc.email,
+                role: acc.role,
+                employeeNumber: "-",
+              });
+            }
+          });
+
+        setStaff(Array.from(staffMap.values()));
         setLoading(false);
       }
     }

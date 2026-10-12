@@ -14,6 +14,7 @@ import { UserMinus, UserPlus, Eye, EyeOff, Building2, ShieldCheck, Stethoscope, 
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { getAllRegisteredAccounts } from "@/lib/account-store";
 
 export const Route = createFileRoute("/app/users")({ component: UsersPage });
 
@@ -53,6 +54,8 @@ function UsersPage() {
     staffMembers,
     binStaffMembers,
     clinics,
+    doctors,
+    receptionists,
     inviteSuperAdmin,
     inviteClinicAdmin,
     createDoctor,
@@ -75,17 +78,84 @@ function UsersPage() {
     const map = new Map<string, StaffMember>();
     
     // Add active staff members
-    staffMembers.forEach(m => map.set(`${m.id}-${m.role}`, m));
+    staffMembers.forEach(m => {
+      const key = m.email ? m.email.toLowerCase() : `${m.id}-${m.role}`;
+      map.set(key, m);
+    });
     
     // Add inactive/expired staff members (excluding deleted ones)
     binStaffMembers.forEach(m => {
-      if (!m.deletedAt && !map.has(`${m.id}-${m.role}`)) {
-        map.set(`${m.id}-${m.role}`, m);
+      if (!m.deletedAt) {
+        const key = m.email ? m.email.toLowerCase() : `${m.id}-${m.role}`;
+        if (!map.has(key)) {
+          map.set(key, m);
+        }
+      }
+    });
+
+    // Add doctors if missing
+    doctors?.forEach(d => {
+      const key = d.email ? d.email.toLowerCase() : `${d.id}-doctor`;
+      if (!map.has(key)) {
+        map.set(key, {
+          id: d.id,
+          clinicId: d.clinicId,
+          name: d.name,
+          email: d.email,
+          phone: d.phone,
+          role: "doctor",
+          status: (d.status as any) || "Active",
+          employeeNumber: undefined,
+          deletedAt: undefined,
+        });
+      }
+    });
+
+    // Add receptionists if missing
+    receptionists?.forEach(r => {
+      const key = r.email ? r.email.toLowerCase() : `${r.id}-receptionist`;
+      if (!map.has(key)) {
+        map.set(key, {
+          id: r.id,
+          clinicId: r.clinicId,
+          name: r.name,
+          email: r.email,
+          phone: r.phone,
+          role: "receptionist",
+          status: (r.status as any) || "Active",
+          employeeNumber: undefined,
+          deletedAt: undefined,
+        });
+      }
+    });
+
+    // Add registered accounts so all test clinic and registered users are always visible
+    const registered = getAllRegisteredAccounts();
+    const isSuperAdminUser = user?.role === "super_admin";
+    registered.forEach(acc => {
+      const key = acc.email.toLowerCase();
+      const inScope =
+        isSuperAdminUser ||
+        !user?.clinicId ||
+        acc.clinicId === user.clinicId ||
+        (acc.clinicName && user?.clinic && acc.clinicName.toLowerCase() === user.clinic.toLowerCase());
+      if (inScope && !map.has(key)) {
+        map.set(key, {
+          id: acc.userId,
+          clinicId: acc.clinicId,
+          name: acc.name,
+          email: acc.email,
+          phone: "",
+          role: acc.role,
+          status: acc.active !== false ? "Active" : "Inactive",
+          employeeNumber: undefined,
+          previousClinicName: acc.clinicName,
+        });
       }
     });
 
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [staffMembers, binStaffMembers]);
+  }, [staffMembers, binStaffMembers, doctors, receptionists, user?.role, user?.clinicId, user?.clinic]);
 
   useEffect(() => {
     let mounted = true;

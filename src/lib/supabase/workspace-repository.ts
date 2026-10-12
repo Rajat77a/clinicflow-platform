@@ -458,12 +458,13 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
 
     // Merge registered accounts so Super Admin and Clinic Admin always see registered staff users
     const registeredAccounts = getAllRegisteredAccounts();
-    const existingStaffEmails = new Set(staffMembers.map((m) => m.email.toLowerCase()).filter(Boolean));
-    const existingStaffIds = new Set(staffMembers.map((m) => m.id));
 
     for (const acc of registeredAccounts) {
       const emailLower = acc.email.toLowerCase();
-      if (!existingStaffEmails.has(emailLower) && !existingStaffIds.has(acc.userId)) {
+      const existing = staffMembers.find(
+        (m) => (m.email && m.email.toLowerCase() === emailLower) || m.id === acc.userId,
+      );
+      if (!existing) {
         staffMembers.push({
           id: acc.userId,
           clinicId: acc.clinicId,
@@ -475,8 +476,18 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
           employeeNumber: undefined,
           previousClinicName: acc.clinicName,
         });
-        existingStaffEmails.add(emailLower);
-        existingStaffIds.add(acc.userId);
+      } else {
+        // Ensure registered/test accounts retain their proper clinicId and Active status
+        if (!existing.clinicId && acc.clinicId) {
+          existing.clinicId = acc.clinicId;
+        }
+        if (acc.clinicName && !existing.previousClinicName) {
+          existing.previousClinicName = acc.clinicName;
+        }
+        if (acc.active !== false) {
+          existing.status = "Active";
+          existing.deletedAt = undefined;
+        }
       }
     }
 
