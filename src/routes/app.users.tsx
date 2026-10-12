@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth, type Role } from "@/lib/auth";
-import { useWorkspaceData, type StaffMember } from "@/lib/workspace-data";
+import { useWorkspaceData, type StaffMember, type Clinic } from "@/lib/workspace-data";
 import { UserMinus, UserPlus, Eye, EyeOff, Building2, ShieldCheck, Stethoscope, UserCog, Mail, Phone, Trash2, RotateCw, Send, CheckSquare, AlertTriangle, CheckCircle2, Check, Copy, KeyRound, Download } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -190,7 +190,15 @@ function UsersPage() {
   const [deactivationReason, setDeactivationReason] = useState("");
   const [isDeactivating, setIsDeactivating] = useState(false);
 
-  const clinicMap = useMemo(() => new Map(clinics.map((c) => [c.id, c])), [clinics]);
+  const clinicMap = useMemo(() => {
+    const map = new Map<string, Clinic>();
+    for (const c of clinics) {
+      map.set(c.id, c);
+      if (c.shortId) map.set(c.shortId, c);
+      map.set(c.name.toLowerCase(), c);
+    }
+    return map;
+  }, [clinics]);
 
   const canDeactivate = (member: StaffMember) => {
     if (TEST_EMAILS.includes(member.email.toLowerCase())) return false;
@@ -953,7 +961,9 @@ function UsersPage() {
           </TableHeader>
           <TableBody>
             {displayedUsers.map((member) => {
-              const assignedClinic = member.clinicId ? clinicMap.get(member.clinicId) : null;
+              const assignedClinic = member.clinicId
+                ? (clinicMap.get(member.clinicId) || (member.previousClinicName ? clinicMap.get(member.previousClinicName.toLowerCase()) : null))
+                : (member.previousClinicName ? clinicMap.get(member.previousClinicName.toLowerCase()) : null);
               return (
                 <TableRow key={member.id} className="hover:bg-muted/30">
                   {canManageUsers && (
