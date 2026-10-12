@@ -450,6 +450,15 @@ test("invited user expiration lifecycle: Expired at 24h and auto-deleted from ro
   assert.match(usersSource, /evaluateStaffInviteStatus\(m\)/);
 });
 
+test("clinical admin portal deletes and does not show expired invited users in any place", () => {
+  // In workspace-data evaluateStaffInviteStatus, clinical admin immediately auto-deletes expired invites
+  assert.match(workspaceDataSource, /isClinicalAdmin\s*&&\s*elapsedHours\s*>=\s*24/);
+  // In workspace-data doctors and receptionists filtering, expired invited staff are excluded for clinical admin
+  assert.match(workspaceDataSource, /isClinicalAdmin\s*&&\s*\(evalResult\.isExpired\s*\|\|\s*evalResult\.status === "Expired"\)/);
+  // In app.users, expired invited staff are excluded for clinical admin
+  assert.match(usersSource, /isClinicalAdmin\s*&&\s*\(evalResult\.isExpired\s*\|\|\s*evalResult\.status === "Expired"\s*\|\|\s*m\.status === "Expired"\)/);
+});
+
 
 
 

@@ -71,6 +71,8 @@ function UsersPage() {
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
 
+  const isClinicalAdmin = user?.role === "clinic_admin";
+
   const allUsers = useMemo(() => {
     const map = new Map<string, StaffMember>();
     
@@ -78,6 +80,7 @@ function UsersPage() {
     staffMembers.forEach(m => {
       const evalResult = evaluateStaffInviteStatus(m);
       if (evalResult.shouldAutoDelete) return;
+      if (isClinicalAdmin && (evalResult.isExpired || evalResult.status === "Expired" || m.status === "Expired")) return;
       const effectiveMember = evalResult.status === "Expired" && m.status !== "Expired"
         ? { ...m, status: "Expired" as const }
         : m;
@@ -88,6 +91,7 @@ function UsersPage() {
     binStaffMembers.forEach(m => {
       const evalResult = evaluateStaffInviteStatus(m);
       if (evalResult.shouldAutoDelete) return;
+      if (isClinicalAdmin && (evalResult.isExpired || evalResult.status === "Expired" || m.status === "Expired")) return;
       if (!m.deletedAt && !map.has(`${m.id}-${m.role}`)) {
         const effectiveMember = evalResult.status === "Expired" && m.status !== "Expired"
           ? { ...m, status: "Expired" as const }
@@ -97,7 +101,7 @@ function UsersPage() {
     });
 
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [staffMembers, binStaffMembers]);
+  }, [staffMembers, binStaffMembers, isClinicalAdmin]);
 
   useEffect(() => {
     let mounted = true;
