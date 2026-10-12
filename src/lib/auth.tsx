@@ -47,19 +47,7 @@ function isAuthUser(value: unknown): value is AuthUser {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    if (typeof window === "undefined") return null;
-    try {
-      const stored = localStorage.getItem("cf_user");
-      if (stored) {
-        const parsed = JSON.parse(stored);
-        if (isAuthUser(parsed)) return parsed;
-      }
-    } catch {
-      // ignore
-    }
-    return null;
-  });
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [isReady, setIsReady] = useState(false);
   const authenticatedUserId = user?.userId;
   const [passwordSetupRequired, setPasswordSetupRequired] = useState(() => {
@@ -134,7 +122,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       throw new Error("This user account has been deactivated or deleted");
     }
 
-    const isPlatformAdmin = Boolean(platformAdminData?.some((pa: { active?: boolean }) => pa.active !== false));
+    const isPlatformAdmin = Boolean(platformAdminData?.some((pa) => pa.active !== false));
     const isSuperAdmin =
       isPlatformAdmin ||
       memberships.some((m) => m.role_code === "super_admin") ||
@@ -192,35 +180,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error("This user account has been deactivated or deleted");
       }
     } else if (!isSuperAdmin) {
-      const regAccount = authUser.email ? getRegisteredAccount(authUser.email) : null;
-      if (regAccount) {
-        membership = {
-          hospital_id: regAccount.clinicId || "00000000-0000-0000-0000-000000000001",
-          facility_id: null,
-          department_id: null,
-          role_code: regAccount.role,
-          active: regAccount.active !== false,
-          deleted_at: null,
-          status: "Active",
-        };
-      } else {
-        const lowerEmail = authUser.email?.toLowerCase() || "";
-        let inferredRole: Role = "clinic_admin";
-        if (lowerEmail.includes("doctor") || lowerEmail.startsWith("dr.")) inferredRole = "doctor";
-        else if (lowerEmail.includes("reception")) inferredRole = "receptionist";
-        else if (lowerEmail.includes("super")) inferredRole = "super_admin";
-        else inferredRole = (authUser.user_metadata?.role as Role) || "clinic_admin";
-
-        membership = {
-          hospital_id: authUser.user_metadata?.hospital_id || authUser.user_metadata?.clinic_id || "00000000-0000-0000-0000-000000000001",
-          facility_id: null,
-          department_id: null,
-          role_code: inferredRole,
-          active: true,
-          deleted_at: null,
-          status: "Active",
-        };
-      }
+      await supabase.auth.signOut();
+      setUser(null);
+      throw new Error("Your account is not assigned to this hospital");
     }
 
     let effectiveRole: Role = isSuperAdmin ? "super_admin" : (membership?.role_code as Role);
@@ -255,7 +217,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authUser.email ||
       "Hospital user";
 
-    const authenticatedUser: AuthUser = {
+    setUser({
       userId: authUser.id,
       name,
       email: profile?.email || authUser.email || "",
@@ -265,16 +227,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       departmentId: membership?.department_id ?? null,
       clinic,
       clinicLogo,
-    };
-
-    setUser(authenticatedUser);
-    if (typeof window !== "undefined") {
-      try {
-        localStorage.setItem("cf_user", JSON.stringify(authenticatedUser));
-      } catch {
-        // ignore
-      }
-    }
+    });
   }, []);
 
   useEffect(() => {
@@ -306,27 +259,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (data.user) {
             await hydrateSupabaseUser(data.user);
           } else {
-            const stored = localStorage.getItem("cf_user");
-            if (stored) {
-              const parsed = JSON.parse(stored);
-              if (isAuthUser(parsed)) {
-                setUser(parsed);
-                return;
+            if (!supabaseConfig.configured || supabaseConfig.demoMode) {
+              const stored = localStorage.getItem("cf_user");
+              if (stored) {
+                const parsed = JSON.parse(stored);
+                if (isAuthUser(parsed)) {
+                  setUser(parsed);
+                  return;
+                }
               }
             }
             setUser(null);
           }
         } catch {
-          const stored = localStorage.getItem("cf_user");
-          if (stored) {
-            try {
-              const parsed = JSON.parse(stored);
-              if (isAuthUser(parsed)) {
-                setUser(parsed);
-                return;
+          if (!supabaseConfig.configured || supabaseConfig.demoMode) {
+            const stored = localStorage.getItem("cf_user");
+            if (stored) {
+              try {
+                const parsed = JSON.parse(stored);
+                if (isAuthUser(parsed)) {
+                  setUser(parsed);
+                  return;
+                }
+              } catch {
+                // ignore
               }
-            } catch {
-              // ignore
             }
           }
           setUser(null);
@@ -338,14 +295,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: listener } = supabase.auth.onAuthStateChange(
       (event: AuthChangeEvent, session: Session | null) => {
         if (event === "PASSWORD_RECOVERY") setPasswordSetupRequired(true);
-        if (event === "SIGNED_OUT") {
-          setPasswordSetupRequired(false);
-          persist(null);
-          return;
-        }
-        if (session?.user) {
-          queueMicrotask(() => {
-            void hydrateSupabaseUser(session.user).catch(() => {
+        if (event === "SIGNED_OUT") setPasswordSetupRequired(false);
+        queueMicrotask(() => {
+          void hydrateSupabaseUser(session?.user ?? null).catch(() => {
+            if (!supabaseConfig.configured || supabaseConfig.demoMode) {
               const stored = localStorage.getItem("cf_user");
               if (stored) {
                 try {
@@ -358,10 +311,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   // ignore
                 }
               }
-              setUser(null);
-            });
+            }
+            setUser(null);
           });
-        }
+        });
       },
     );
 
@@ -384,7 +337,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       expired = true;
       void getSupabaseBrowserClient()
         .auth.signOut()
-        .finally(() => persist(null));
+        .finally(() => setUser(null));
     };
     const resetTimeout = () => {
       if (expired) return;
@@ -415,8 +368,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(u);
 
     if (typeof window !== "undefined") {
-      if (u) {
-        localStorage.setItem("cf_user", JSON.stringify(u));
+      if (!supabaseConfig.configured || supabaseConfig.demoMode) {
+        if (u) {
+          localStorage.setItem("cf_user", JSON.stringify(u));
+        } else {
+          localStorage.removeItem("cf_user");
+        }
       } else {
         localStorage.removeItem("cf_user");
       }
@@ -432,8 +389,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         passwordSetupRequired,
         login: async (email, password) => {
           const cleanEmail = email.trim();
-          const isMockTestAccount = cleanEmail.endsWith(".test") || cleanEmail.endsWith(".io");
-          if (supabaseConfig.configured && !isMockTestAccount) {
+          if (supabaseConfig.configured) {
             const { data, error } = await getSupabaseBrowserClient().auth.signInWithPassword({
               email: cleanEmail,
               password,
@@ -449,62 +405,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
 
           // Verify against registered accounts in demo mode or when Supabase is unconfigured
-          const verified = verifyRegisteredAccount(cleanEmail, password);
-          if (verified) {
-            const authUser: AuthUser = {
-              userId: verified.userId,
-              name: verified.name,
-              email: verified.email,
-              role: verified.role,
-              clinicId: verified.clinicId,
-              facilityId: null,
-              departmentId: null,
-              clinic: verified.clinicName,
-              clinicLogo: verified.clinicName
-                .split(/\s+/)
-                .map((part) => part[0])
-                .join("")
-                .slice(0, 2)
-                .toUpperCase() || "CF",
-            };
-            persist(authUser);
-            return;
+          if (!supabaseConfig.configured || supabaseConfig.demoMode) {
+            const verified = verifyRegisteredAccount(cleanEmail, password);
+            if (verified) {
+              const authUser: AuthUser = {
+                userId: verified.userId,
+                name: verified.name,
+                email: verified.email,
+                role: verified.role,
+                clinicId: verified.clinicId,
+                facilityId: null,
+                departmentId: null,
+                clinic: verified.clinicName,
+                clinicLogo: verified.clinicName
+                  .split(/\s+/)
+                  .map((part) => part[0])
+                  .join("")
+                  .slice(0, 2)
+                  .toUpperCase() || "CF",
+              };
+              persist(authUser);
+              return;
+            }
           }
 
-          // Fallback portal login with correct role assignment for each portal
-          const lowerEmail = cleanEmail.toLowerCase();
-          let fallbackRole: Role = "clinic_admin";
-          let fallbackClinicId: string | null = "00000000-0000-0000-0000-000000000001";
-          let fallbackClinic = "ClinicFlow Test Hospital";
-
-          if (lowerEmail.includes("super")) {
-            fallbackRole = "super_admin";
-            fallbackClinicId = null;
-            fallbackClinic = "ClinicFlow Platform";
-          } else if (lowerEmail.includes("doctor") || lowerEmail.startsWith("dr.")) {
-            fallbackRole = "doctor";
-          } else if (lowerEmail.includes("reception")) {
-            fallbackRole = "receptionist";
-          } else {
-            fallbackRole = "clinic_admin";
-          }
-
-          if (
-            supabaseConfig.demoMode ||
-            !supabaseConfig.configured ||
-            lowerEmail.endsWith(".test") ||
-            lowerEmail.endsWith(".io") ||
-            password.length >= 6
-          ) {
+          // In demo mode, allow fallback demo login
+          if (supabaseConfig.demoMode) {
             const demoUser: AuthUser = {
               userId: `usr-${cleanEmail.replace(/[^a-zA-Z0-9]/g, "-")}`,
-              name: cleanEmail.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "User",
+              name: cleanEmail.split("@")[0].replace(/[._-]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()) || "Clinical Admin",
               email: cleanEmail,
-              role: fallbackRole,
-              clinicId: fallbackClinicId,
+              role: cleanEmail.includes("super") ? "super_admin" : "clinic_admin",
+              clinicId: "demo-clinic-1",
               facilityId: null,
               departmentId: null,
-              clinic: fallbackClinic,
+              clinic: "ClinicFlow Health",
               clinicLogo: "CF",
             };
             persist(demoUser);

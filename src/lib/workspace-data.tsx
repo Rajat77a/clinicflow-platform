@@ -345,10 +345,8 @@ export type StaffMember = {
   email: string;
   phone: string;
   role: AuthUser["role"];
-  status: "Active" | "Invited" | "Expired" | "Inactive";
+  status: "Active" | "Invited" | "Inactive";
   tempPassword?: string;
-  invitedAt?: string;
-  expiresAt?: string;
   deletedAt?: string;
   deletedBy?: string;
   employeeNumber?: string;
@@ -514,7 +512,7 @@ type Command =
   | { type: "staff.soft_deleted"; userId: string; actor: AuthUser }
   | { type: "staff.restored"; userId: string; actor: AuthUser }
   | { type: "staff.permanently_deleted"; userId: string; actor: AuthUser }
-  | { type: "staff.invitation_resent"; userId: string; actor: AuthUser; invitedAt?: string; expiresAt?: string }
+  | { type: "staff.invitation_resent"; userId: string; actor: AuthUser }
   | { type: "staff.bulk_soft_deleted"; userIds: string[]; actor: AuthUser }
   | { type: "staff.bulk_restored"; userIds: string[]; actor: AuthUser }
   | { type: "staff.bulk_permanently_deleted"; userIds: string[]; actor: AuthUser }
@@ -1158,20 +1156,7 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         {
           ...state,
           staffMembers: state.staffMembers.map((m) =>
-            m.id === command.userId
-              ? {
-                  ...m,
-                  status: "Invited",
-                  invitedAt: command.invitedAt || new Date().toISOString(),
-                  expiresAt: command.expiresAt || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-                }
-              : m
-          ),
-          doctors: state.doctors.map((d) =>
-            d.id === command.userId ? { ...d, status: "Invited" } : d
-          ),
-          receptionists: state.receptionists.map((r) =>
-            r.id === command.userId ? { ...r, status: "Invited" } : r
+            m.id === command.userId ? { ...m, status: "Invited" } : m
           ),
         },
         command.actor,
@@ -1481,12 +1466,7 @@ interface WorkspaceData {
   permanentlyDeletePatient: (patientId: string) => Promise<void>;
   bulkPermanentlyDeletePatients: (patientIds: string[]) => Promise<void>;
   resetUserPassword: (email: string, newPassword: string) => Promise<void>;
-  resendStaffInvitation: (userId: string) => Promise<{
-    setupUrl: string;
-    emailSent?: boolean;
-    emailId?: string;
-    emailError?: string;
-  }>;
+  resendStaffInvitation: (userId: string) => Promise<void>;
   createPatient: (input: PatientInput) => Promise<Patient>;
   createAppointment: (input: AppointmentInput) => Promise<Appointment>;
   updateAppointment: (appointment: Appointment) => Promise<Appointment>;
@@ -1502,7 +1482,6 @@ const WorkspaceCtx = createContext<WorkspaceData | null>(null);
 
 function requireUser(user: AuthUser | null, permission: Permission) {
   if (!user) throw new Error("An authenticated user is required");
-  if (user.role === "super_admin") return user;
   if (!hasPermission(user.role, permission)) throw new Error(`Missing permission: ${permission}`);
   return user;
 }
@@ -1537,120 +1516,6 @@ export function getTrashRetentionStatus(deletedAt?: string) {
     daysUntilPurge,
     canPermanentlyDelete,
   };
-}
-
-export const INVITE_META_KEY = "cf_invite_metadata";
-
-export type InviteRecord = {
-  userId: string;
-  email: string;
-  role: string;
-  hospitalId?: string | null;
-  invitedAt: string;
-  expiresAt: string;
-};
-
-export function loadInviteMetadata(): Record<string, InviteRecord> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = localStorage.getItem(INVITE_META_KEY);
-    return raw ? JSON.parse(raw) : {};
-  } catch {
-    return {};
-  }
-}
-
-export function saveInviteRecord(record: InviteRecord) {
-  if (typeof window === "undefined") return;
-  try {
-    const meta = loadInviteMetadata();
-    if (record.email) meta[record.email.toLowerCase()] = record;
-    if (record.userId) meta[record.userId] = record;
-    localStorage.setItem(INVITE_META_KEY, JSON.stringify(meta));
-  } catch {
-    // ignore
-  }
-}
-
-export function removeInviteRecord(userIdOrEmail: string) {
-  if (typeof window === "undefined") return;
-  try {
-    const meta = loadInviteMetadata();
-    delete meta[userIdOrEmail.toLowerCase()];
-    delete meta[userIdOrEmail];
-    localStorage.setItem(INVITE_META_KEY, JSON.stringify(meta));
-  } catch {
-    // ignore
-  }
-}
-
-export function evaluateInviteState(member: {
-  id: string;
-  email?: string;
-  status: string;
-  invitedAt?: string;
-  expiresAt?: string;
-}): { status: "Active" | "Invited" | "Expired" | "Inactive"; shouldDeleteFromRole: boolean; expiresAt?: string } {
-  if (member.status === "Active" || member.status === "Inactive") {
-    return { status: member.status as "Active" | "Inactive", shouldDeleteFromRole: false };
-  }
-
-  const emailLower = member.email?.toLowerCase();
-  if (
-    emailLower &&
-    (emailLower.endsWith(".test") ||
-      emailLower.endsWith(".io") ||
-      emailLower === "reception@clinicflow.test" ||
-      emailLower === "clinic.admin@clinicflow.test" ||
-      emailLower === "doctor@clinicflow.test" ||
-      emailLower === "superadmin@clinicflow.test")
-  ) {
-    return { status: "Active", shouldDeleteFromRole: false };
-  }
-
-  const now = Date.now();
-  const inviteMeta = loadInviteMetadata();
-  const record = (member.email ? inviteMeta[member.email.toLowerCase()] : null) || inviteMeta[member.id];
-
-  let expiresAtStr = member.expiresAt || record?.expiresAt;
-  if (!expiresAtStr && typeof window !== "undefined") {
-    try {
-      const rawTokens = localStorage.getItem("cf_local_tokens");
-      if (rawTokens) {
-        const tokens = JSON.parse(rawTokens);
-        for (const t of Object.values(tokens) as any[]) {
-          if (member.email && t.email?.toLowerCase() === member.email.toLowerCase()) {
-            expiresAtStr = t.expiresAt;
-            break;
-          }
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  if (!expiresAtStr && (member.invitedAt || record?.invitedAt)) {
-    const invitedTime = new Date(member.invitedAt || record!.invitedAt).getTime();
-    expiresAtStr = new Date(invitedTime + 24 * 60 * 60 * 1000).toISOString();
-  }
-
-  if (!expiresAtStr) {
-    return { status: "Invited", shouldDeleteFromRole: false };
-  }
-
-  const expireTime = new Date(expiresAtStr).getTime();
-  const oneHourAfterExpire = expireTime + 60 * 60 * 1000;
-
-  if (now > oneHourAfterExpire) {
-    return { status: "Expired", shouldDeleteFromRole: true, expiresAt: expiresAtStr };
-  }
-
-  if (now > expireTime) {
-    return { status: "Expired", shouldDeleteFromRole: false, expiresAt: expiresAtStr };
-  }
-
-  return { status: "Invited", shouldDeleteFromRole: false, expiresAt: expiresAtStr };
 }
 
 export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
@@ -1802,13 +1667,13 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
 
     const clinicScope = <T extends { clinicId: string | null }>(items: T[]) =>
       isSuperAdmin ? items : (clinicId ? items.filter(item => !item.clinicId || allowedClinicIds.has(item.clinicId) || item.clinicId === clinicId) : items);
-    const clinicPatients = (isSuperAdmin || (user && hasPermission(user.role, "patients.read")))
+    const clinicPatients = user && hasPermission(user.role, "patients.read")
       ? clinicScope(state.patients)
       : [];
-    const clinicAppointments = (isSuperAdmin || (user && hasPermission(user.role, "appointments.read")))
+    const clinicAppointments = user && hasPermission(user.role, "appointments.read")
       ? clinicScope(state.appointments)
       : [];
-    const clinicPrescriptions = (isSuperAdmin || (user && hasPermission(user.role, "prescriptions.read")))
+    const clinicPrescriptions = user && hasPermission(user.role, "prescriptions.read")
       ? clinicScope(state.prescriptions)
       : [];
 
@@ -1823,40 +1688,6 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       ? clinicPrescriptions.filter(prescription => prescription.doctor === user.name)
       : clinicPrescriptions;
 
-    const doctors = clinicScope(state.doctors)
-      .filter((d) => d.status !== "Inactive")
-      .map((d) => {
-        const evalRes = evaluateInviteState(d);
-        if (evalRes.shouldDeleteFromRole) return null;
-        return evalRes.status !== d.status ? { ...d, status: evalRes.status } : d;
-      })
-      .filter((d): d is Doctor => d !== null);
-
-    const receptionists = clinicScope(state.receptionists)
-      .filter((r) => r.status !== "Inactive")
-      .map((r) => {
-        const evalRes = evaluateInviteState(r);
-        if (evalRes.shouldDeleteFromRole) return null;
-        return evalRes.status !== r.status ? { ...r, status: evalRes.status } : r;
-      })
-      .filter((r): r is Receptionist => r !== null);
-
-    const staffMembers = (user && hasPermission(user.role, "people.manage")
-      ? clinicScope(state.staffMembers).filter((m) => {
-          if (m.deletedAt || m.status === "Inactive") return false;
-          if (m.clinicId && state.clinics.some((c) => (c.id === m.clinicId || c.shortId === m.clinicId) && Boolean(c.deletedAt))) {
-            return false;
-          }
-          return true;
-        })
-      : [])
-      .map((m) => {
-        const evalRes = evaluateInviteState(m);
-        if (evalRes.shouldDeleteFromRole) return null;
-        return evalRes.status !== m.status ? { ...m, status: evalRes.status } : m;
-      })
-      .filter((m): m is StaffMember => m !== null);
-
     return {
       isLoading,
       error,
@@ -1865,16 +1696,16 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       clinics: state.clinics.filter((c) => !c.deletedAt),
       binClinics: state.clinics.filter((c) => isWithinRetentionPeriod(c.deletedAt, 60)),
       patients,
-      doctors,
-      receptionists,
+      doctors: clinicScope(state.doctors).filter((d) => d.status !== "Inactive"),
+      receptionists: clinicScope(state.receptionists).filter((r) => r.status !== "Inactive"),
       appointments,
       prescriptions,
-      labReports: (isSuperAdmin || (user && (hasPermission(user.role, "labs.write") || hasPermission(user.role, "prescriptions.read"))))
+      labReports: user && (hasPermission(user.role, "labs.write") || hasPermission(user.role, "prescriptions.read"))
         ? clinicScope(state.labReports).filter(report =>
-            user?.role !== "doctor" || patients.some(patient => patient.id === report.patientId)
+            user.role !== "doctor" || patients.some(patient => patient.id === report.patientId)
           )
         : [],
-      bills: (isSuperAdmin || (user && hasPermission(user.role, "billing.read")))
+      bills: user && hasPermission(user.role, "billing.read")
         ? clinicScope(state.bills).map((b) => {
             const storedNotes = loadInvoiceNotesFromStorage();
             const note = b.notes ?? storedNotes[b.id] ?? (b.databaseId ? storedNotes[b.databaseId] : undefined);
@@ -1884,7 +1715,15 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       auditLogs: isSuperAdmin
         ? state.auditLogs
         : state.auditLogs.filter(entry => !entry.clinicId || allowedClinicIds.has(entry.clinicId) || entry.clinicId === clinicId),
-      staffMembers,
+      staffMembers: user && hasPermission(user.role, "people.manage")
+        ? clinicScope(state.staffMembers).filter((m) => {
+            if (m.deletedAt || m.status === "Inactive") return false;
+            if (m.clinicId && state.clinics.some((c) => (c.id === m.clinicId || c.shortId === m.clinicId) && Boolean(c.deletedAt))) {
+              return false;
+            }
+            return true;
+          })
+        : [],
       binStaffMembers: user && hasPermission(user.role, "people.manage")
         ? (isSuperAdmin ? state.staffMembers : clinicScope(state.staffMembers))
             .filter((m) => {
@@ -1904,11 +1743,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
               return m;
             })
         : [],
-      binPatients: (isSuperAdmin || (user && (hasPermission(user.role, "people.manage") || hasPermission(user.role, "patients.read"))))
+      binPatients: user && (hasPermission(user.role, "people.manage") || hasPermission(user.role, "patients.read"))
         ? (isSuperAdmin ? state.patients : clinicScope(state.patients))
             .filter((p) => Boolean(p.deletedAt) && isWithinRetentionPeriod(p.deletedAt, 60))
         : [],
-      facilities: (isSuperAdmin || (user && hasPermission(user.role, "facilities.manage")))
+      facilities: user && hasPermission(user.role, "facilities.manage")
         ? clinicScope(state.facilities)
         : [],
       searchPatients: async (input = {}) => {
@@ -2010,16 +1849,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         const scoped = actor.role === "super_admin"
           ? state.auditLogs
           : state.auditLogs.filter((entry) => entry.clinicId === clinicId);
-        if (repository) {
-          try {
-            const res = await repository.listAuditLogs(input);
-            if (res && Array.isArray(res.rows) && res.rows.length > 0) {
-              return res;
-            }
-          } catch (err) {
-            console.warn("repository.listAuditLogs error, falling back to local audit logs:", err);
-          }
-        }
+        if (repository) return repository.listAuditLogs(input);
         const query = input.query?.trim().toLocaleLowerCase() ?? "";
         return localRecordPage(
           query
@@ -2338,21 +2168,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             id: createId("DR"),
             clinicId: targetHospitalId,
             patients: 0,
-            status: "Invited",
+            status: "Active",
             avatarPath: undefined,
             avatarUrl: undefined,
             photoWarning: undefined,
           };
-          const docInvitedAt = new Date().toISOString();
-          const docExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-          saveInviteRecord({
-            userId: doctor.id,
-            email: doctor.email,
-            role: "doctor",
-            hospitalId: targetHospitalId,
-            invitedAt: docInvitedAt,
-            expiresAt: docExpiresAt,
-          });
           dispatch({ type: "doctor.created", value: doctor, actor });
           const staff: StaffMember = {
             id: doctor.id,
@@ -2361,9 +2181,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             email: doctor.email,
             phone: doctor.phone,
             role: "doctor",
-            status: "Invited",
-            invitedAt: docInvitedAt,
-            expiresAt: docExpiresAt,
+            status: "Active",
           };
           dispatch({ type: "staff.invited", value: staff, actor });
           return { data: doctor };
@@ -2381,18 +2199,8 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             ...input,
             id: createId("RC"),
             clinicId: targetHospitalId,
-            status: "Invited",
+            status: "Active",
           };
-          const recInvitedAt = new Date().toISOString();
-          const recExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-          saveInviteRecord({
-            userId: receptionist.id,
-            email: receptionist.email,
-            role: "receptionist",
-            hospitalId: targetHospitalId,
-            invitedAt: recInvitedAt,
-            expiresAt: recExpiresAt,
-          });
           dispatch({ type: "receptionist.created", value: receptionist, actor });
           const staff: StaffMember = {
             id: receptionist.id,
@@ -2401,9 +2209,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             email: receptionist.email,
             phone: receptionist.phone,
             role: "receptionist",
-            status: "Invited",
-            invitedAt: recInvitedAt,
-            expiresAt: recExpiresAt,
+            status: "Active",
           };
           dispatch({ type: "staff.invited", value: staff, actor });
           return { data: receptionist };
@@ -2418,8 +2224,6 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             await refresh();
             return res;
           }
-          const saInvitedAt = new Date().toISOString();
-          const saExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
           const membership: StaffMember = {
             id: createId("SA"),
             clinicId: null,
@@ -2429,17 +2233,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             role: "super_admin",
             status: "Invited",
             tempPassword: input.tempPassword,
-            invitedAt: saInvitedAt,
-            expiresAt: saExpiresAt,
           };
-          saveInviteRecord({
-            userId: membership.id,
-            email: membership.email,
-            role: "super_admin",
-            hospitalId: null,
-            invitedAt: saInvitedAt,
-            expiresAt: saExpiresAt,
-          });
           dispatch({ type: "staff.invited", value: membership, actor });
           return { data: membership };
         },
@@ -2456,8 +2250,6 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             return res;
           }
           const origin = getAppBaseUrl();
-          const caInvitedAt = new Date().toISOString();
-          const caExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
           const membership: StaffMember = {
             id: createId("CA"),
             clinicId: targetHospitalId,
@@ -2466,17 +2258,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             phone: input.phone,
             role: "clinic_admin",
             status: "Invited",
-            invitedAt: caInvitedAt,
-            expiresAt: caExpiresAt,
           };
-          saveInviteRecord({
-            userId: membership.id,
-            email: membership.email,
-            role: "clinic_admin",
-            hospitalId: targetHospitalId,
-            invitedAt: caInvitedAt,
-            expiresAt: caExpiresAt,
-          });
           dispatch({ type: "staff.invited", value: membership, actor });
           return { data: membership, setupUrl: `${origin}/setup?token=mock_local_token` };
         },
@@ -2928,74 +2710,21 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         const clinicId = target.clinicId || target.previousClinicId;
         const clinic = clinicId ? state.clinics.find((c) => c.id === clinicId) : null;
 
-        const invitedAt = new Date().toISOString();
-        const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-
-        saveInviteRecord({
-          userId: target.id,
-          email: target.email,
-          role: target.role,
-          hospitalId: clinicId,
-          invitedAt,
-          expiresAt,
-        });
-
-        registerLocalInviteToken({
-          token,
-          email: target.email.trim().toLowerCase(),
-          name: target.name,
-          phone: target.phone || clinic?.phone,
+        await sendInvitationEmail({
+          recipientEmail: target.email,
+          recipientName: target.name,
           clinicName: clinic?.name || "ClinicFlow Health",
-          clinicId: clinic?.id || target.clinicId || "",
+          clinicId: clinic?.id,
           clinicAddress: clinic?.address,
           clinicCity: clinic?.city,
           clinicPhone: target.phone || clinic?.phone,
           clinicEmail: clinic?.email,
-          roleCode: target.role,
-          expiresAt,
-          used: false,
-        });
-
-        let emailSent = false;
-        let emailId: string | undefined;
-        let emailError: string | undefined;
-
-        try {
-          const emailRes = await sendInvitationEmail({
-            recipientEmail: target.email,
-            recipientName: target.name,
-            clinicName: clinic?.name || "ClinicFlow Health",
-            clinicId: clinic?.id,
-            clinicAddress: clinic?.address,
-            clinicCity: clinic?.city,
-            clinicPhone: target.phone || clinic?.phone,
-            clinicEmail: clinic?.email,
-            setupUrl,
-            roleTitle: target.role === "doctor" ? "Doctor" : target.role === "receptionist" ? "Receptionist" : target.role === "super_admin" ? "Super Admin" : "Clinical Admin",
-            expiresInHours: 24,
-          });
-          emailSent = emailRes.success;
-          emailId = emailRes.emailId;
-        } catch (err) {
-          emailError = err instanceof Error ? err.message : "Failed to send invitation email";
-        }
-
-        dispatch({
-          type: "staff.invitation_resent",
-          userId,
-          actor,
-          invitedAt,
-          expiresAt,
-        });
-
-        await refresh().catch(() => undefined);
-
-        return {
           setupUrl,
-          emailSent,
-          emailId,
-          emailError,
-        };
+          roleTitle: target.role === "doctor" ? "Doctor" : target.role === "receptionist" ? "Receptionist" : "Clinical Admin",
+          expiresInHours: 24,
+        });
+
+        dispatch({ type: "staff.invitation_resent", userId, actor });
       },
       createPatient: async (input) => {
         const actor = requireUser(user, "patients.create");

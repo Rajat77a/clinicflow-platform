@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useState, useMemo, useCallback, useEffect } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Badge } from "@/components/ui/badge";
@@ -9,12 +9,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth, type Role } from "@/lib/auth";
-import { useWorkspaceData, type StaffMember, type Clinic } from "@/lib/workspace-data";
-import { UserMinus, UserPlus, Eye, EyeOff, Building2, ShieldCheck, Stethoscope, UserCog, Mail, Phone, Trash2, RotateCw, Send, CheckSquare, AlertTriangle, CheckCircle2, Check, Copy, KeyRound, Download } from "lucide-react";
+import { useWorkspaceData, type StaffMember } from "@/lib/workspace-data";
+import { UserMinus, UserPlus, Eye, EyeOff, Building2, ShieldCheck, Stethoscope, UserCog, Mail, Phone, Trash2, RotateCw, Send, CheckSquare, AlertTriangle, CheckCircle2, Check, Copy, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { getAllRegisteredAccounts } from "@/lib/account-store";
 
 export const Route = createFileRoute("/app/users")({ component: UsersPage });
 
@@ -54,8 +53,6 @@ function UsersPage() {
     staffMembers,
     binStaffMembers,
     clinics,
-    doctors,
-    receptionists,
     inviteSuperAdmin,
     inviteClinicAdmin,
     createDoctor,
@@ -78,84 +75,17 @@ function UsersPage() {
     const map = new Map<string, StaffMember>();
     
     // Add active staff members
-    staffMembers.forEach(m => {
-      const key = m.email ? m.email.toLowerCase() : `${m.id}-${m.role}`;
-      map.set(key, m);
-    });
+    staffMembers.forEach(m => map.set(`${m.id}-${m.role}`, m));
     
     // Add inactive/expired staff members (excluding deleted ones)
     binStaffMembers.forEach(m => {
-      if (!m.deletedAt) {
-        const key = m.email ? m.email.toLowerCase() : `${m.id}-${m.role}`;
-        if (!map.has(key)) {
-          map.set(key, m);
-        }
-      }
-    });
-
-    // Add doctors if missing
-    doctors?.forEach(d => {
-      const key = d.email ? d.email.toLowerCase() : `${d.id}-doctor`;
-      if (!map.has(key)) {
-        map.set(key, {
-          id: d.id,
-          clinicId: d.clinicId,
-          name: d.name,
-          email: d.email,
-          phone: d.phone,
-          role: "doctor",
-          status: (d.status as any) || "Active",
-          employeeNumber: undefined,
-          deletedAt: undefined,
-        });
-      }
-    });
-
-    // Add receptionists if missing
-    receptionists?.forEach(r => {
-      const key = r.email ? r.email.toLowerCase() : `${r.id}-receptionist`;
-      if (!map.has(key)) {
-        map.set(key, {
-          id: r.id,
-          clinicId: r.clinicId,
-          name: r.name,
-          email: r.email,
-          phone: r.phone,
-          role: "receptionist",
-          status: (r.status as any) || "Active",
-          employeeNumber: undefined,
-          deletedAt: undefined,
-        });
-      }
-    });
-
-    // Add registered accounts so all test clinic and registered users are always visible
-    const registered = getAllRegisteredAccounts();
-    const isSuperAdminUser = user?.role === "super_admin";
-    registered.forEach(acc => {
-      const key = acc.email.toLowerCase();
-      const inScope =
-        isSuperAdminUser ||
-        !user?.clinicId ||
-        acc.clinicId === user.clinicId ||
-        (acc.clinicName && user?.clinic && acc.clinicName.toLowerCase() === user.clinic.toLowerCase());
-      if (inScope && !map.has(key)) {
-        map.set(key, {
-          id: acc.userId,
-          clinicId: acc.clinicId,
-          name: acc.name,
-          email: acc.email,
-          phone: "",
-          role: acc.role,
-          status: acc.active !== false ? "Active" : "Inactive",
-          employeeNumber: undefined,
-          previousClinicName: acc.clinicName,
-        });
+      if (!m.deletedAt && !map.has(`${m.id}-${m.role}`)) {
+        map.set(`${m.id}-${m.role}`, m);
       }
     });
 
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [staffMembers, binStaffMembers, doctors, receptionists, user?.role, user?.clinicId, user?.clinic]);
+  }, [staffMembers, binStaffMembers]);
 
   useEffect(() => {
     let mounted = true;
@@ -260,15 +190,7 @@ function UsersPage() {
   const [deactivationReason, setDeactivationReason] = useState("");
   const [isDeactivating, setIsDeactivating] = useState(false);
 
-  const clinicMap = useMemo(() => {
-    const map = new Map<string, Clinic>();
-    for (const c of clinics) {
-      map.set(c.id, c);
-      if (c.shortId) map.set(c.shortId, c);
-      map.set(c.name.toLowerCase(), c);
-    }
-    return map;
-  }, [clinics]);
+  const clinicMap = useMemo(() => new Map(clinics.map((c) => [c.id, c])), [clinics]);
 
   const canDeactivate = (member: StaffMember) => {
     if (TEST_EMAILS.includes(member.email.toLowerCase())) return false;
@@ -479,22 +401,7 @@ function UsersPage() {
   const handleResendInvitation = async (member: StaffMember) => {
     setResendingId(member.id);
     try {
-      const res = await resendStaffInvitation(member.id);
-      const roleTitles: Record<string, string> = {
-        doctor: "Doctor",
-        receptionist: "Receptionist",
-        clinic_admin: "Clinical Admin",
-        super_admin: "Super Admin",
-      };
-      setCreatedStaffInfo({
-        roleTitle: roleTitles[member.role] || member.role,
-        staffName: member.name,
-        staffEmail: member.email,
-        setupUrl: res?.setupUrl,
-        emailSent: res?.emailSent,
-        emailId: res?.emailId,
-        emailError: res?.emailError,
-      });
+      await resendStaffInvitation(member.id);
       toast.success(`Invitation sent successfully to ${member.email}.`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to resend invitation");
@@ -953,12 +860,6 @@ function UsersPage() {
           </Button>
         )}
         <div className="flex-1" />
-        <Button asChild variant="outline" size="sm" className="gap-2">
-          <Link to="/app/downloads">
-            <Download className="h-4 w-4" />
-            Download Center
-          </Link>
-        </Button>
         <Select value={roleFilter} onValueChange={(v: any) => setRoleFilter(v)}>
           <SelectTrigger className="w-[180px]">
             <SelectValue placeholder="Filter by role" />
@@ -1031,9 +932,7 @@ function UsersPage() {
           </TableHeader>
           <TableBody>
             {displayedUsers.map((member) => {
-              const assignedClinic = member.clinicId
-                ? (clinicMap.get(member.clinicId) || (member.previousClinicName ? clinicMap.get(member.previousClinicName.toLowerCase()) : null))
-                : (member.previousClinicName ? clinicMap.get(member.previousClinicName.toLowerCase()) : null);
+              const assignedClinic = member.clinicId ? clinicMap.get(member.clinicId) : null;
               return (
                 <TableRow key={member.id} className="hover:bg-muted/30">
                   {canManageUsers && (
@@ -1089,14 +988,7 @@ function UsersPage() {
                           ? "secondary"
                           : member.status === "Inactive"
                           ? "destructive"
-                          : member.status === "Expired"
-                          ? "destructive"
                           : "outline"
-                      }
-                      className={
-                        member.status === "Expired"
-                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 font-medium"
-                          : ""
                       }
                     >
                       {member.status}
@@ -1104,7 +996,7 @@ function UsersPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      {(member.status === "Invited" || member.status === "Expired") && (
+                      {member.status === "Invited" && (
                         <Button
                           type="button"
                           variant="outline"
@@ -1483,17 +1375,17 @@ function UsersPage() {
             <DialogTitle className={`flex items-center gap-2 ${createdStaffInfo?.emailError ? "text-amber-600" : "text-emerald-600"}`}>
               {createdStaffInfo?.emailError ? (
                 <>
-                  <AlertTriangle className="h-5 w-5 text-amber-600" /> User Invitation (Action Required)
+                  <AlertTriangle className="h-5 w-5 text-amber-600" /> User Created (Email Delivery Action Required)
                 </>
               ) : (
                 <>
-                  <ShieldCheck className="h-5 w-5" /> User Invitation Delivered &amp; Link Ready
+                  <ShieldCheck className="h-5 w-5" /> User Created &amp; Invitation Delivered
                 </>
               )}
             </DialogTitle>
             <DialogDescription className="space-y-2 pt-2 text-left">
               <p>
-                <strong>{createdStaffInfo?.staffName}</strong> has been invited as a {createdStaffInfo?.roleTitle}.
+                <strong>{createdStaffInfo?.staffName}</strong> has been added as a {createdStaffInfo?.roleTitle}.
               </p>
               {createdStaffInfo?.emailError ? (
                 <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-destructive">

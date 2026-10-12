@@ -40,7 +40,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
           </nav>
           <div className="hidden lg:flex items-center gap-2">
             <Button asChild variant="ghost" className="rounded-xl">
-              <a href="/login">Sign in</a>
+              <Link to="/login">Sign in</Link>
             </Button>
           </div>
           <button
@@ -66,7 +66,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
               ))}
               <div className="mt-2">
                 <Button asChild variant="outline" className="w-full rounded-xl">
-                  <a href="/login" onClick={() => setOpen(false)}>Sign in</a>
+                  <Link to="/login" onClick={() => setOpen(false)}>Sign in</Link>
                 </Button>
               </div>
             </div>
@@ -107,7 +107,7 @@ export function MarketingShell({ children }: { children: ReactNode }) {
               <ul className="mt-3 space-y-2 text-sm text-muted-foreground">
                 <li><Link to="/about" className="hover:text-foreground">About us</Link></li>
                 <li><Link to="/faq" className="hover:text-foreground">FAQ</Link></li>
-                <li><a href="/login" className="hover:text-foreground">Sign in</a></li>
+                <li><Link to="/login" className="hover:text-foreground">Sign in</Link></li>
               </ul>
             </div>
           </div>

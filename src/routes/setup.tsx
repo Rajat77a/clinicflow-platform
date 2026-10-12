@@ -1,7 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Activity, ArrowRight, Building2, Check, CheckCircle2, Clock, Eye, EyeOff, Mail, MapPin, Phone, ShieldCheck, Stethoscope, UserCog } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Activity, ArrowRight, Building2, CheckCircle2, Clock, Eye, EyeOff, Mail, MapPin, Phone, ShieldCheck, Stethoscope, UserCog } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -625,74 +624,8 @@ function SetupPage() {
                         {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </Button>
                     </div>
-                    {!userExists && (
-                      <div className="rounded-xl border border-border/60 bg-muted/40 p-3 text-xs space-y-2">
-                        <p className="font-medium text-foreground/80">Password must contain:</p>
-                        <div className="grid gap-1.5 text-[11px]">
-                          <div
-                            className={cn(
-                              "flex items-center gap-2 transition-colors",
-                              pw.length >= MIN_PASSWORD_LENGTH
-                                ? "text-emerald-600 font-medium dark:text-emerald-400"
-                                : "text-muted-foreground"
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "flex h-4 w-4 items-center justify-center rounded-full text-[10px] transition-all",
-                                pw.length >= MIN_PASSWORD_LENGTH
-                                  ? "bg-emerald-500/15 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400"
-                                  : "border border-muted-foreground/30 text-transparent"
-                              )}
-                            >
-                              <Check className="h-2.5 w-2.5 stroke-[2.5]" />
-                            </span>
-                            <span>At least 8 characters</span>
-                          </div>
-
-                          <div
-                            className={cn(
-                              "flex items-center gap-2 transition-colors",
-                              /[A-Z]/.test(pw)
-                                ? "text-emerald-600 font-medium dark:text-emerald-400"
-                                : "text-muted-foreground"
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "flex h-4 w-4 items-center justify-center rounded-full text-[10px] transition-all",
-                                /[A-Z]/.test(pw)
-                                  ? "bg-emerald-500/15 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400"
-                                  : "border border-muted-foreground/30 text-transparent"
-                              )}
-                            >
-                              <Check className="h-2.5 w-2.5 stroke-[2.5]" />
-                            </span>
-                            <span>At least one uppercase letter (A-Z)</span>
-                          </div>
-
-                          <div
-                            className={cn(
-                              "flex items-center gap-2 transition-colors",
-                              /[a-z]/.test(pw)
-                                ? "text-emerald-600 font-medium dark:text-emerald-400"
-                                : "text-muted-foreground"
-                            )}
-                          >
-                            <span
-                              className={cn(
-                                "flex h-4 w-4 items-center justify-center rounded-full text-[10px] transition-all",
-                                /[a-z]/.test(pw)
-                                  ? "bg-emerald-500/15 text-emerald-600 dark:bg-emerald-500/20 dark:text-emerald-400"
-                                  : "border border-muted-foreground/30 text-transparent"
-                              )}
-                            >
-                              <Check className="h-2.5 w-2.5 stroke-[2.5]" />
-                            </span>
-                            <span>At least one lowercase letter (a-z)</span>
-                          </div>
-                        </div>
-                      </div>
+                    {!userExists && passwordPolicyError(pw) && pw.length > 0 && (
+                      <p className="text-[11px] font-medium text-destructive">{passwordPolicyError(pw)}</p>
                     )}
                   </div>
   
