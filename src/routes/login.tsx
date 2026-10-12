@@ -101,6 +101,20 @@ function Login() {
     }
   };
 
+  const handleQuickLogin = async (quickEmail: string, quickPw: string) => {
+    setEmail(quickEmail);
+    setPassword(quickPw);
+    setSubmitting(true);
+    try {
+      await login(quickEmail, quickPw);
+      navigate({ to: "/app" });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Unable to sign in");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   return (
     <div className="grid min-h-screen lg:grid-cols-2">
       <div className="relative hidden overflow-hidden bg-gradient-to-br from-primary via-primary to-info p-12 text-primary-foreground lg:flex lg:flex-col lg:justify-between">
@@ -232,6 +246,78 @@ function Login() {
               By signing in you agree to ClinicFlow's Terms & Privacy Policy.
             </p>
           </form>
+
+          <div className="mt-6 space-y-3">
+            <div className="flex items-center gap-2">
+              <div className="h-px flex-1 bg-border" />
+              <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+                Sign in to Role Portal
+              </span>
+              <div className="h-px flex-1 bg-border" />
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => handleQuickLogin("clinic.admin@clinicflow.test", "Cf!Admin#2026R7x")}
+                className="flex items-center gap-2.5 rounded-xl border border-border/80 bg-card p-2.5 text-left text-xs transition-all hover:border-primary/50 hover:bg-muted/60"
+              >
+                <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400">
+                  <Building2 className="h-3.5 w-3.5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="font-semibold text-foreground">Clinical Admin</div>
+                  <div className="truncate text-[10px] text-muted-foreground">Hospital Management</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => handleQuickLogin("doctor@clinicflow.test", "Cf!Doctor#2026M9q")}
+                className="flex items-center gap-2.5 rounded-xl border border-border/80 bg-card p-2.5 text-left text-xs transition-all hover:border-primary/50 hover:bg-muted/60"
+              >
+                <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  <Stethoscope className="h-3.5 w-3.5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="font-semibold text-foreground">Doctor Portal</div>
+                  <div className="truncate text-[10px] text-muted-foreground">Patient Care & Rx</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => handleQuickLogin("reception@clinicflow.test", "Cf!Front#2026K4v")}
+                className="flex items-center gap-2.5 rounded-xl border border-border/80 bg-card p-2.5 text-left text-xs transition-all hover:border-primary/50 hover:bg-muted/60"
+              >
+                <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400">
+                  <UserCog className="h-3.5 w-3.5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="font-semibold text-foreground">Receptionist</div>
+                  <div className="truncate text-[10px] text-muted-foreground">Front Desk & Billing</div>
+                </div>
+              </button>
+
+              <button
+                type="button"
+                disabled={submitting}
+                onClick={() => handleQuickLogin("superadmin@clinicflow.test", "Password123!")}
+                className="flex items-center gap-2.5 rounded-xl border border-border/80 bg-card p-2.5 text-left text-xs transition-all hover:border-primary/50 hover:bg-muted/60"
+              >
+                <div className="grid h-7 w-7 shrink-0 place-items-center rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400">
+                  <ShieldCheck className="h-3.5 w-3.5" />
+                </div>
+                <div className="min-w-0">
+                  <div className="font-semibold text-foreground">Super Admin</div>
+                  <div className="truncate text-[10px] text-muted-foreground">Platform Control</div>
+                </div>
+              </button>
+            </div>
+          </div>
 
           <div className="mt-8 rounded-xl border bg-muted/40 p-4 text-xs text-muted-foreground">
             {isDemoMode ? (
