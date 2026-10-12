@@ -12,9 +12,24 @@ import {
 test("each portal can reach its own operational routes", () => {
   assert.equal(canAccessPath("super_admin", "/app/clinics"), true);
   assert.equal(canAccessPath("super_admin", "/app/users"), true);
+  assert.equal(canAccessPath("super_admin", "/app/downloads"), true);
   assert.equal(canAccessPath("clinic_admin", "/app/doctors"), true);
+  assert.equal(canAccessPath("clinic_admin", "/app/downloads"), true);
   assert.equal(canAccessPath("doctor", "/app/followups"), true);
+  assert.equal(canAccessPath("doctor", "/app/downloads"), false);
   assert.equal(canAccessPath("receptionist", "/app/billing/new"), true);
+  assert.equal(canAccessPath("receptionist", "/app/downloads"), false);
+});
+
+test("download center is restricted strictly to super_admin and clinic_admin", () => {
+  assert.equal(hasPermission("super_admin", "downloads.read"), true);
+  assert.equal(hasPermission("clinic_admin", "downloads.read"), true);
+  assert.equal(hasPermission("doctor", "downloads.read"), false);
+  assert.equal(hasPermission("receptionist", "downloads.read"), false);
+  assert.equal(canAccessPath("super_admin", "/app/downloads"), true);
+  assert.equal(canAccessPath("clinic_admin", "/app/downloads"), true);
+  assert.equal(canAccessPath("doctor", "/app/downloads"), false);
+  assert.equal(canAccessPath("receptionist", "/app/downloads"), false);
 });
 
 test("super administrators can perform the staff invite operation", () => {
