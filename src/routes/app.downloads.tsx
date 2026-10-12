@@ -228,7 +228,8 @@ function DownloadCenter() {
       "Test Name": l.test,
       "Date": l.date,
       "Result": l.result,
-      "Status": l.status,
+      "Reference Range": l.reference || "",
+      "Status": (l as { status?: string }).status || "Completed",
       "Notes": l.notes || "",
     }));
   }, [labReports]);
