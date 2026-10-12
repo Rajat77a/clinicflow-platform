@@ -201,6 +201,21 @@ export function getRegisteredAccount(email: string): RegisteredAccount | null {
   return null;
 }
 
+export function getAllRegisteredAccounts(): RegisteredAccount[] {
+  const accounts = loadAccountsFromStorage();
+  const map = new Map<string, RegisteredAccount>();
+  for (const acc of Object.values(BUILTIN_ACCOUNTS)) {
+    map.set(normalizeEmail(acc.email), acc);
+  }
+  for (const acc of memoryAccounts.values()) {
+    map.set(normalizeEmail(acc.email), acc);
+  }
+  for (const acc of Object.values(accounts)) {
+    map.set(normalizeEmail(acc.email), acc);
+  }
+  return Array.from(map.values());
+}
+
 export function verifyRegisteredAccount(email: string, password: string): RegisteredAccount | null {
   const account = getRegisteredAccount(email);
   if (!account) return null;
