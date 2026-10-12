@@ -401,7 +401,22 @@ function UsersPage() {
   const handleResendInvitation = async (member: StaffMember) => {
     setResendingId(member.id);
     try {
-      await resendStaffInvitation(member.id);
+      const res = await resendStaffInvitation(member.id);
+      const roleTitles: Record<string, string> = {
+        doctor: "Doctor",
+        receptionist: "Receptionist",
+        clinic_admin: "Clinical Admin",
+        super_admin: "Super Admin",
+      };
+      setCreatedStaffInfo({
+        roleTitle: roleTitles[member.role] || member.role,
+        staffName: member.name,
+        staffEmail: member.email,
+        setupUrl: res?.setupUrl,
+        emailSent: res?.emailSent,
+        emailId: res?.emailId,
+        emailError: res?.emailError,
+      });
       toast.success(`Invitation sent successfully to ${member.email}.`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to resend invitation");
@@ -988,7 +1003,14 @@ function UsersPage() {
                           ? "secondary"
                           : member.status === "Inactive"
                           ? "destructive"
+                          : member.status === "Expired"
+                          ? "destructive"
                           : "outline"
+                      }
+                      className={
+                        member.status === "Expired"
+                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 font-medium"
+                          : ""
                       }
                     >
                       {member.status}
@@ -996,7 +1018,7 @@ function UsersPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      {member.status === "Invited" && (
+                      {(member.status === "Invited" || member.status === "Expired") && (
                         <Button
                           type="button"
                           variant="outline"
@@ -1375,17 +1397,17 @@ function UsersPage() {
             <DialogTitle className={`flex items-center gap-2 ${createdStaffInfo?.emailError ? "text-amber-600" : "text-emerald-600"}`}>
               {createdStaffInfo?.emailError ? (
                 <>
-                  <AlertTriangle className="h-5 w-5 text-amber-600" /> User Created (Email Delivery Action Required)
+                  <AlertTriangle className="h-5 w-5 text-amber-600" /> User Invitation (Action Required)
                 </>
               ) : (
                 <>
-                  <ShieldCheck className="h-5 w-5" /> User Created &amp; Invitation Delivered
+                  <ShieldCheck className="h-5 w-5" /> User Invitation Delivered &amp; Link Ready
                 </>
               )}
             </DialogTitle>
             <DialogDescription className="space-y-2 pt-2 text-left">
               <p>
-                <strong>{createdStaffInfo?.staffName}</strong> has been added as a {createdStaffInfo?.roleTitle}.
+                <strong>{createdStaffInfo?.staffName}</strong> has been invited as a {createdStaffInfo?.roleTitle}.
               </p>
               {createdStaffInfo?.emailError ? (
                 <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-destructive">

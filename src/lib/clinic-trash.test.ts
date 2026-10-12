@@ -421,6 +421,15 @@ test("workspace-data supports patient soft deletion and trash management", () =>
   assert.match(workspaceDataSource, /binPatients/);
 });
 
+test("resend invitation generates setup link dialog, handles 24h invite expiry and 1h role auto-deletion", () => {
+  assert.match(usersSource, /setCreatedStaffInfo\(\{[\s\S]*?setupUrl:\s*res\?\.setupUrl/);
+  assert.match(usersSource, /member\.status === "Invited" \|\| member\.status === "Expired"/);
+  assert.match(workspaceDataSource, /evaluateInviteState/);
+  assert.match(workspaceDataSource, /oneHourAfterExpire/);
+  assert.match(workspaceDataSource, /resendStaffInvitation:\s*async/);
+});
+
+
 
 
 

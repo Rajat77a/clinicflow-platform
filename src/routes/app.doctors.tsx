@@ -92,7 +92,14 @@ function DoctorsPage() {
                   <div>{d.email}</div>
                   <div className="text-xs">{d.phone}</div>
                 </TableCell>
-                <TableCell><Badge variant={d.status === "Active" ? "secondary" : "outline"}>{d.status}</Badge></TableCell>
+                <TableCell>
+                  <Badge
+                    variant={d.status === "Active" ? "secondary" : d.status === "Expired" ? "destructive" : "outline"}
+                    className={d.status === "Expired" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" : ""}
+                  >
+                    {d.status}
+                  </Badge>
+                </TableCell>
                 {canDelete && (
                   <TableCell className="text-right">
                     <Button

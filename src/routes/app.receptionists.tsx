@@ -150,7 +150,14 @@ function ReceptionistsPage() {
                 <TableCell className="text-muted-foreground">{r.email}</TableCell>
                 <TableCell>{r.phone}</TableCell>
                 <TableCell>{r.shift}</TableCell>
-                <TableCell><Badge variant="secondary">{r.status}</Badge></TableCell>
+                <TableCell>
+                  <Badge
+                    variant={r.status === "Active" ? "secondary" : r.status === "Expired" ? "destructive" : "outline"}
+                    className={r.status === "Expired" ? "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30" : ""}
+                  >
+                    {r.status}
+                  </Badge>
+                </TableCell>
                 {canDelete && (
                   <TableCell className="text-right">
                     <Button
