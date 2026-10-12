@@ -707,7 +707,6 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       const invitedMap = loadInvitedAtMap();
       const updatedStaffMembers = command.value.staffMembers
         .filter((m) => {
-          if (storedPermStaff.has(m.id)) return false;
           const inv = m.invitedAt || invitedMap[m.id] || (m.email ? invitedMap[m.email.toLowerCase()] : undefined);
           const memberWithInv = inv ? { ...m, invitedAt: inv } : m;
           const evalResult = evaluateStaffInviteStatus(memberWithInv);
@@ -715,6 +714,14 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
             storedPermStaff.add(m.id);
             savePermDeletedStaffToStorage(Array.from(storedPermStaff));
             removeInvitedAt(m.id, m.email);
+            return false;
+          }
+          if (storedPermStaff.has(m.id)) {
+            if (m.status === "Active" || (m.status === "Invited" && !evalResult.isExpired)) {
+              storedPermStaff.delete(m.id);
+              savePermDeletedStaffToStorage(Array.from(storedPermStaff));
+              return true;
+            }
             return false;
           }
           return true;
@@ -758,6 +765,61 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
 
           return currentMember;
         });
+
+      // Ensure all receptionists are represented in updatedStaffMembers
+      const staffMemberKeys = new Set(updatedStaffMembers.map(m => `${m.id}-${m.role}`));
+      const staffMemberEmailRoles = new Set(updatedStaffMembers.map(m => m.email ? `${m.email.toLowerCase()}-${m.role}` : ""));
+
+      (command.value.receptionists || []).forEach((r) => {
+        const key = `${r.id}-receptionist`;
+        const emailRole = r.email ? `${r.email.toLowerCase()}-receptionist` : "";
+        if (!staffMemberKeys.has(key) && (!emailRole || !staffMemberEmailRoles.has(emailRole))) {
+          const recStaff: StaffMember = {
+            id: r.id,
+            clinicId: r.clinicId,
+            name: r.name,
+            email: r.email,
+            phone: r.phone,
+            role: "receptionist",
+            status: (r.status as any) || "Invited",
+            shift: r.shift,
+          };
+          const inv = recStaff.invitedAt || invitedMap[recStaff.id] || (recStaff.email ? invitedMap[recStaff.email.toLowerCase()] : undefined);
+          const memberWithInv = inv ? { ...recStaff, invitedAt: inv } : recStaff;
+          const evalResult = evaluateStaffInviteStatus(memberWithInv);
+          if (!evalResult.shouldAutoDelete) {
+            updatedStaffMembers.push(recStaff);
+            staffMemberKeys.add(key);
+            if (emailRole) staffMemberEmailRoles.add(emailRole);
+          }
+        }
+      });
+
+      // Ensure all doctors are represented in updatedStaffMembers
+      (command.value.doctors || []).forEach((d) => {
+        const key = `${d.id}-doctor`;
+        const emailRole = d.email ? `${d.email.toLowerCase()}-doctor` : "";
+        if (!staffMemberKeys.has(key) && (!emailRole || !staffMemberEmailRoles.has(emailRole))) {
+          const docStaff: StaffMember = {
+            id: d.id,
+            clinicId: d.clinicId,
+            name: d.name,
+            email: d.email,
+            phone: d.phone,
+            role: "doctor",
+            status: (d.status as any) || "Invited",
+            specialty: d.specialty,
+          };
+          const inv = docStaff.invitedAt || invitedMap[docStaff.id] || (docStaff.email ? invitedMap[docStaff.email.toLowerCase()] : undefined);
+          const memberWithInv = inv ? { ...docStaff, invitedAt: inv } : docStaff;
+          const evalResult = evaluateStaffInviteStatus(memberWithInv);
+          if (!evalResult.shouldAutoDelete) {
+            updatedStaffMembers.push(docStaff);
+            staffMemberKeys.add(key);
+            if (emailRole) staffMemberEmailRoles.add(emailRole);
+          }
+        }
+      });
 
       const storedSoftPatients = loadSoftDeletedPatientsFromStorage();
       const storedPermPatients = new Set(loadPermDeletedPatientsFromStorage());
@@ -1903,26 +1965,81 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         ? state.auditLogs
         : state.auditLogs.filter(entry => !entry.clinicId || allowedClinicIds.has(entry.clinicId) || entry.clinicId === clinicId),
       staffMembers: user && hasPermission(user.role, "people.manage")
-        ? clinicScope(state.staffMembers).filter((m) => {
-            if (m.deletedAt || m.status === "Inactive") return false;
-            if (m.clinicId && state.clinics.some((c) => (c.id === m.clinicId || c.shortId === m.clinicId) && Boolean(c.deletedAt))) {
-              return false;
-            }
-            const evalResult = evaluateStaffInviteStatus(m, undefined, isClinicalAdmin);
-            if (evalResult.shouldAutoDelete) {
-              return false;
-            }
-            if (isClinicalAdmin && (evalResult.isExpired || evalResult.status === "Expired" || m.status === "Expired")) {
-              return false;
-            }
-            return true;
-          }).map((m) => {
-            const evalResult = evaluateStaffInviteStatus(m, undefined, isClinicalAdmin);
-            if (evalResult.status === "Expired" && m.status !== "Expired") {
-              return { ...m, status: "Expired" as const };
-            }
-            return m;
-          })
+        ? (() => {
+            const list = clinicScope(state.staffMembers).filter((m) => {
+              if (m.deletedAt || m.status === "Inactive") return false;
+              if (m.clinicId && state.clinics.some((c) => (c.id === m.clinicId || c.shortId === m.clinicId) && Boolean(c.deletedAt))) {
+                return false;
+              }
+              const evalResult = evaluateStaffInviteStatus(m, undefined, isClinicalAdmin);
+              if (evalResult.shouldAutoDelete) {
+                return false;
+              }
+              if (isClinicalAdmin && (evalResult.isExpired || evalResult.status === "Expired" || m.status === "Expired")) {
+                return false;
+              }
+              return true;
+            }).map((m) => {
+              const evalResult = evaluateStaffInviteStatus(m, undefined, isClinicalAdmin);
+              if (evalResult.status === "Expired" && m.status !== "Expired") {
+                return { ...m, status: "Expired" as const };
+              }
+              return m;
+            });
+
+            const currentKeys = new Set(list.map((m) => `${m.id}-${m.role}`));
+            const currentEmailRoles = new Set(list.map((m) => m.email ? `${m.email.toLowerCase()}-${m.role}` : ""));
+
+            clinicScope(state.receptionists).forEach((r) => {
+              if (r.status === "Inactive") return;
+              const key = `${r.id}-receptionist`;
+              const emailRole = r.email ? `${r.email.toLowerCase()}-receptionist` : "";
+              if (!currentKeys.has(key) && (!emailRole || !currentEmailRoles.has(emailRole))) {
+                const staffObj: StaffMember = {
+                  id: r.id,
+                  clinicId: r.clinicId,
+                  name: r.name,
+                  email: r.email,
+                  phone: r.phone,
+                  role: "receptionist",
+                  status: (r.status as any) || "Invited",
+                  shift: r.shift,
+                };
+                const evalResult = evaluateStaffInviteStatus(staffObj, undefined, isClinicalAdmin);
+                if (evalResult.shouldAutoDelete) return;
+                if (isClinicalAdmin && (evalResult.isExpired || evalResult.status === "Expired" || staffObj.status === "Expired")) return;
+                list.push(staffObj);
+                currentKeys.add(key);
+                if (emailRole) currentEmailRoles.add(emailRole);
+              }
+            });
+
+            clinicScope(state.doctors).forEach((d) => {
+              if (d.status === "Inactive") return;
+              const key = `${d.id}-doctor`;
+              const emailRole = d.email ? `${d.email.toLowerCase()}-doctor` : "";
+              if (!currentKeys.has(key) && (!emailRole || !currentEmailRoles.has(emailRole))) {
+                const staffObj: StaffMember = {
+                  id: d.id,
+                  clinicId: d.clinicId,
+                  name: d.name,
+                  email: d.email,
+                  phone: d.phone,
+                  role: "doctor",
+                  status: (d.status as any) || "Invited",
+                  specialty: d.specialty,
+                };
+                const evalResult = evaluateStaffInviteStatus(staffObj, undefined, isClinicalAdmin);
+                if (evalResult.shouldAutoDelete) return;
+                if (isClinicalAdmin && (evalResult.isExpired || evalResult.status === "Expired" || staffObj.status === "Expired")) return;
+                list.push(staffObj);
+                currentKeys.add(key);
+                if (emailRole) currentEmailRoles.add(emailRole);
+              }
+            });
+
+            return list;
+          })()
         : [],
       binStaffMembers: user && hasPermission(user.role, "people.manage")
         ? (isSuperAdmin ? state.staffMembers : clinicScope(state.staffMembers))

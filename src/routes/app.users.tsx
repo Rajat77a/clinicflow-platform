@@ -52,6 +52,8 @@ function UsersPage() {
   const {
     staffMembers,
     binStaffMembers,
+    receptionists,
+    doctors,
     clinics,
     inviteSuperAdmin,
     inviteClinicAdmin,
@@ -86,6 +88,64 @@ function UsersPage() {
         : m;
       map.set(`${effectiveMember.id}-${effectiveMember.role}`, effectiveMember);
     });
+
+    // Ensure receptionists are represented in allUsers
+    receptionists.forEach((r) => {
+      const key = `${r.id}-receptionist`;
+      const emailMatch = r.email
+        ? Array.from(map.values()).some(
+            (m) => m.role === "receptionist" && m.email?.toLowerCase() === r.email.toLowerCase()
+          )
+        : false;
+      if (!map.has(key) && !emailMatch) {
+        const staffObj: StaffMember = {
+          id: r.id,
+          clinicId: r.clinicId,
+          name: r.name,
+          email: r.email,
+          phone: r.phone,
+          role: "receptionist",
+          status: (r.status as any) || "Invited",
+          shift: r.shift,
+        };
+        const evalResult = evaluateStaffInviteStatus(staffObj);
+        if (evalResult.shouldAutoDelete) return;
+        if (isClinicalAdmin && (evalResult.isExpired || evalResult.status === "Expired" || staffObj.status === "Expired")) return;
+        const effectiveMember = evalResult.status === "Expired" && staffObj.status !== "Expired"
+          ? { ...staffObj, status: "Expired" as const }
+          : staffObj;
+        map.set(key, effectiveMember);
+      }
+    });
+
+    // Ensure doctors are represented in allUsers
+    doctors.forEach((d) => {
+      const key = `${d.id}-doctor`;
+      const emailMatch = d.email
+        ? Array.from(map.values()).some(
+            (m) => m.role === "doctor" && m.email?.toLowerCase() === d.email.toLowerCase()
+          )
+        : false;
+      if (!map.has(key) && !emailMatch) {
+        const staffObj: StaffMember = {
+          id: d.id,
+          clinicId: d.clinicId,
+          name: d.name,
+          email: d.email,
+          phone: d.phone,
+          role: "doctor",
+          status: (d.status as any) || "Invited",
+          specialty: d.specialty,
+        };
+        const evalResult = evaluateStaffInviteStatus(staffObj);
+        if (evalResult.shouldAutoDelete) return;
+        if (isClinicalAdmin && (evalResult.isExpired || evalResult.status === "Expired" || staffObj.status === "Expired")) return;
+        const effectiveMember = evalResult.status === "Expired" && staffObj.status !== "Expired"
+          ? { ...staffObj, status: "Expired" as const }
+          : staffObj;
+        map.set(key, effectiveMember);
+      }
+    });
     
     // Add inactive/expired staff members (excluding deleted ones)
     binStaffMembers.forEach(m => {
@@ -101,7 +161,7 @@ function UsersPage() {
     });
 
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [staffMembers, binStaffMembers, isClinicalAdmin]);
+  }, [staffMembers, binStaffMembers, receptionists, doctors, isClinicalAdmin]);
 
   useEffect(() => {
     let mounted = true;
