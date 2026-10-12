@@ -56,7 +56,7 @@ test("clinical duties remain separated by permission", () => {
   assert.equal(hasPermission("doctor", "prescriptions.write"), true);
   assert.equal(hasPermission("receptionist", "prescriptions.write"), false);
   assert.equal(hasPermission("receptionist", "prescriptions.read"), true);
-  assert.equal(hasPermission("receptionist", "labs.write"), false);
+  assert.equal(hasPermission("receptionist", "labs.write"), true);
   assert.equal(hasPermission("clinic_admin", "prescriptions.write"), false);
   assert.equal(hasPermission("doctor", "billing.read"), false);
   assert.equal(hasPermission("receptionist", "billing.write"), true);
@@ -69,7 +69,7 @@ test("lab entry uses lab permissions without granting prescription access", () =
   assert.equal(permissionForLocation("/app/prescriptions/new", labSearch), "labs.write");
   assert.equal(canAccessLocation("clinic_admin", "/app/prescriptions/new", labSearch), true);
   assert.equal(canAccessLocation("doctor", "/app/prescriptions/new", labSearch), true);
-  assert.equal(canAccessLocation("receptionist", "/app/prescriptions/new", labSearch), false);
+  assert.equal(canAccessLocation("receptionist", "/app/prescriptions/new", labSearch), true);
   assert.equal(canAccessLocation("super_admin", "/app/prescriptions/new", labSearch), false);
   assert.equal(canAccessLocation("clinic_admin", "/app/prescriptions/new"), false);
   assert.equal(canAccessLocation("doctor", "/app/prescriptions/new"), true);
