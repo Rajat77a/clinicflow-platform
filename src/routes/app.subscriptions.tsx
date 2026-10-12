@@ -49,9 +49,9 @@ function SubTable({ rows, onExtend }: { rows: SubscriptionRow[]; onExtend: (id: 
               <TableCell>
                 <div className="flex items-center gap-1.5">
                   <Input
-                    type="number"
-                    placeholder="30"
-                    className="h-8 w-20 rounded-lg"
+                    type="text"
+                    placeholder="30 or -5"
+                    className="h-8 w-24 rounded-lg"
                     value={drafts[s.id] ?? ""}
                     onChange={(e) => setDrafts({ ...drafts, [s.id]: e.target.value })}
                   />
@@ -60,11 +60,15 @@ function SubTable({ rows, onExtend }: { rows: SubscriptionRow[]; onExtend: (id: 
                     disabled={saving === s.id}
                     onClick={async () => {
                       const days = Number(drafts[s.id]);
-                      if (!Number.isFinite(days) || days <= 0) return toast.error("Enter number of days");
+                      if (!Number.isFinite(days) || days === 0) return toast.error("Enter number of days");
                       setSaving(s.id);
                       try {
                         await onExtend(s.id, days, proofs[s.id]);
-                        toast.success(`${s.clinic} extended by ${days} days`);
+                        if (days > 0) {
+                          toast.success(`${s.clinic} extended by ${days} days`);
+                        } else {
+                          toast.success(`${s.clinic} reduced by ${Math.abs(days)} days`);
+                        }
                         setDrafts((current) => ({ ...current, [s.id]: "" }));
                       } catch (error) {
                         toast.error(error instanceof Error ? error.message : "Unable to extend subscription");

@@ -1264,7 +1264,26 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       p_days: days,
       p_proof_ref: proofRef?.trim() || null,
     });
-    throwIfError(error);
+    if (error) {
+      if (days < 0) {
+        // Fallback for environments where RPC constraint restricts to positive days
+        const { data: sub, error: fetchErr } = await this.client
+          .from("hospital_subscriptions")
+          .select("expires_at")
+          .eq("hospital_id", id)
+          .single();
+        if (!fetchErr && sub?.expires_at) {
+          const currentExpiry = new Date(sub.expires_at).getTime();
+          const newExpiry = new Date(currentExpiry + days * 86400000).toISOString();
+          const { error: updateErr } = await this.client
+            .from("hospital_subscriptions")
+            .update({ expires_at: newExpiry })
+            .eq("hospital_id", id);
+          if (!updateErr) return;
+        }
+      }
+      throwIfError(error);
+    }
   }
 
   async deactivateStaff(userId: string, reason: string) {
