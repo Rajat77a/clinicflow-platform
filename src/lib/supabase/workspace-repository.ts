@@ -1055,6 +1055,22 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     };
   }
 
+  async resendStaffInvitation(
+    member: StaffMember,
+  ): Promise<{ setupUrl: string; emailSent?: boolean; emailId?: string; emailError?: string }> {
+    const roleCode = member.role;
+    const targetHospitalId = member.clinicId || undefined;
+    return this.inviteStaff(
+      {
+        name: member.name,
+        email: member.email,
+        phone: member.phone,
+      },
+      roleCode,
+      targetHospitalId,
+    );
+  }
+
   async updateClinic(input: ClinicInput) {
     if (!input.id) throw new Error("Clinic ID is required for update");
     const { error } = await this.client.rpc("update_platform_clinic", {

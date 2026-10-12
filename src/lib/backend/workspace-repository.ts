@@ -79,5 +79,6 @@ export interface WorkspaceRepository {
   permanentlyDeleteStaff?(userId: string): Promise<void>;
   bulkPermanentlyDeleteStaff?(userIds: string[]): Promise<void>;
   createFacility(input: FacilityInput): Promise<Facility>;
+  resendStaffInvitation?(member: StaffMember): Promise<{ setupUrl: string; emailSent?: boolean; emailId?: string; emailError?: string }>;
 }
 
