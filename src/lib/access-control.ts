@@ -34,8 +34,6 @@ const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     "platform.payments.manage",
     "people.manage",
     "users.manage",
-    "facilities.manage",
-    "files.read",
     "reports.read",
     "audit.read",
     "downloads.read",
@@ -124,15 +122,8 @@ const ROUTE_RULES: ReadonlyArray<{ matches: RegExp; permission: Permission }> = 
   { matches: /^\/app\/notifications(?:\/|$)/, permission: "notifications.read" },
 ];
 
-export function normalizeRole(role: string): Role {
-  if (role === "clinical_admin" || role === "admin") return "clinic_admin";
-  if (role === "superadmin" || role === "super-admin" || role === "super admin") return "super_admin";
-  return role as Role;
-}
-
 export function hasPermission(role: Role, permission: Permission) {
-  const norm = normalizeRole(role);
-  return ROLE_PERMISSIONS[norm]?.has(permission) ?? false;
+  return ROLE_PERMISSIONS[role].has(permission);
 }
 
 export function permissionForPath(pathname: string): Permission | null {

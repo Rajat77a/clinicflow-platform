@@ -7,7 +7,7 @@ import {
   HeadContent,
   Scripts,
 } from "@tanstack/react-router";
-import { type ReactNode, useEffect } from "react";
+import { type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { AuthProvider } from "@/lib/auth";
@@ -37,35 +37,8 @@ function NotFoundComponent() {
 }
 
 function ErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
+  void error;
   const router = useRouter();
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const errString = error instanceof Error ? error.message : String(error || "");
-    const isChunkLoadFailed =
-      errString.includes("Failed to fetch dynamically imported module") ||
-      errString.includes("Importing a module script failed") ||
-      errString.includes("error loading dynamically imported module");
-
-    if (isChunkLoadFailed) {
-      const reloadKey = "cf_chunk_reload";
-      const lastReload = sessionStorage.getItem(reloadKey);
-      const now = Date.now();
-      if (!lastReload || now - Number(lastReload) > 10_000) {
-        sessionStorage.setItem(reloadKey, String(now));
-        window.location.reload();
-      }
-    }
-  }, [error]);
-
-  const handleTryAgain = () => {
-    if (typeof window !== "undefined") {
-      window.location.reload();
-    } else {
-      router.invalidate();
-      reset();
-    }
-  };
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -78,7 +51,7 @@ function ErrorComponent({ error, reset }: { error: unknown; reset: () => void })
         </p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
-            onClick={handleTryAgain}
+            onClick={() => { router.invalidate(); reset(); }}
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
             Try again

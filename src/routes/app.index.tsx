@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Clock,
-  Download,
   FileText,
   IndianRupee,
   Receipt,
@@ -166,14 +165,6 @@ function SuperAdminDashboard() {
       <PageHeader
         title="Installation overview"
         description={`Administrative health of this dedicated hospital installation. Today is ${new Date().toLocaleDateString(undefined, { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}.`}
-        actions={
-          <Button asChild variant="outline">
-            <Link to="/app/downloads">
-              <Download className="mr-2 h-4 w-4" />
-              Download Center
-            </Link>
-          </Button>
-        }
       />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
         <StatCard label="Hospitals" value={clinics.length} icon={<Building2 className="h-4 w-4" />} />
@@ -276,12 +267,6 @@ function ClinicAdminDashboard() {
         description={`Authenticated operational data for ${user?.clinic ?? "this hospital"}.`}
         actions={
           <>
-            <Button asChild variant="outline">
-              <Link to="/app/downloads">
-                <Download className="mr-2 h-4 w-4" />
-                Download Center
-              </Link>
-            </Button>
             <Button asChild variant="outline"><Link to="/app/appointments/new" search={{ patient: undefined }}>New appointment</Link></Button>
             <Button asChild><Link to="/app/patients/new">Add patient</Link></Button>
           </>

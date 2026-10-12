@@ -61,7 +61,7 @@ function Home() {
           </p>
           <div className="mt-8">
             <Button asChild size="lg" className="h-12 rounded-xl px-8 text-sm font-semibold shadow-soft">
-              <a href="/login">Log in to ClinicFlow</a>
+              <Link to="/login">Log in to ClinicFlow</Link>
             </Button>
           </div>
         </div>

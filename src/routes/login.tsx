@@ -3,8 +3,12 @@ import { useEffect, useState } from "react";
 import {
   Activity,
   ArrowRight,
+  Building2,
   Eye,
   EyeOff,
+  ShieldCheck,
+  Stethoscope,
+  UserCog,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,7 +22,7 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-import { useAuth } from "@/lib/auth";
+import { useAuth, type Role, ROLE_LABELS } from "@/lib/auth";
 import { MIN_PASSWORD_LENGTH, passwordPolicyError } from "@/lib/password-policy";
 
 export const Route = createFileRoute("/login")({
@@ -33,6 +37,13 @@ export const Route = createFileRoute("/login")({
   }),
   component: Login,
 });
+
+const ROLE_ICONS: Record<Role, React.ComponentType<{ className?: string }>> = {
+  super_admin: ShieldCheck,
+  clinic_admin: Building2,
+  doctor: Stethoscope,
+  receptionist: UserCog,
+};
 
 function Login() {
   const {
