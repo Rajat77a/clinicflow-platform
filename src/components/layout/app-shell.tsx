@@ -33,7 +33,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-const supabase = getSupabaseBrowserClient();
 import { useAuth, ROLE_LABELS, type Role } from "@/lib/auth";
 import { canAccessPath } from "@/lib/access-control";
 import { useWorkspaceData } from "@/lib/workspace-data";
@@ -316,41 +315,52 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [switching, setSwitching] = useState(false);
 
   useEffect(() => {
-    if (user) {
-      supabase.from('staff_roles')
-        .select('role_code, hospital_id, hospitals(name)')
-        .eq('user_id', user.userId)
-        .then(({ data }: { data: any }) => {
-          if (data) {
-            const roles = data.map((d: any) => ({
-              role_code: d.role_code,
-              hospital_id: d.hospital_id,
-              hospital_name: d.hospitals?.name
-            }));
-            
-            // Ensure current role is in list even if not in DB yet (edge cases)
-            if (!roles.some((r: any) => r.role_code === user.role && r.hospital_id === user.clinicId)) {
-              roles.push({
-                role_code: user.role,
-                hospital_id: user.clinicId || '',
-                hospital_name: user.clinic
-              });
+    if (user && typeof window !== "undefined") {
+      try {
+        const supabase = getSupabaseBrowserClient();
+        supabase.from('staff_roles')
+          .select('role_code, hospital_id, hospitals(name)')
+          .eq('user_id', user.userId)
+          .then(({ data }: { data: any }) => {
+            if (data) {
+              const roles = data.map((d: any) => ({
+                role_code: d.role_code,
+                hospital_id: d.hospital_id,
+                hospital_name: d.hospitals?.name
+              }));
+              
+              // Ensure current role is in list even if not in DB yet (edge cases)
+              if (!roles.some((r: any) => r.role_code === user.role && r.hospital_id === user.clinicId)) {
+                roles.push({
+                  role_code: user.role,
+                  hospital_id: user.clinicId || '',
+                  hospital_name: user.clinic
+                });
+              }
+              setAvailableRoles(roles);
             }
-            setAvailableRoles(roles);
-          }
-      });
+        }).catch(() => undefined);
+      } catch {
+        // ignore in environments where supabase is not configured
+      }
     }
   }, [user]);
 
   const switchRole = async (newRole: string, newHospitalId: string) => {
     if (newRole === user?.role && newHospitalId === user?.clinicId) return;
     setSwitching(true);
-    const { data, error } = await supabase.rpc('switch_active_role', { p_role_code: newRole, p_hospital_id: newHospitalId });
-    if (!error && data?.success) {
-      window.location.reload();
-    } else {
+    try {
+      const supabase = getSupabaseBrowserClient();
+      const { data, error } = await supabase.rpc('switch_active_role', { p_role_code: newRole, p_hospital_id: newHospitalId });
+      if (!error && data?.success) {
+        window.location.reload();
+      } else {
+        setSwitching(false);
+        alert("Failed to switch role: " + (error?.message || data?.error || "Unknown error"));
+      }
+    } catch (e: any) {
       setSwitching(false);
-      alert("Failed to switch role: " + (error?.message || data?.error || "Unknown error"));
+      alert("Failed to switch role: " + (e?.message || "Unknown error"));
     }
   };
 
