@@ -414,7 +414,6 @@ function UsersPage() {
     setResendingId(member.id);
     try {
       const res = await resendStaffInvitation(member.id);
-      toast.success(`Invitation sent successfully to ${member.email}.`);
       if (res && res.setupUrl) {
         setCreatedStaffInfo({
           roleTitle: roleLabels[member.role] || member.role,
@@ -425,6 +424,9 @@ function UsersPage() {
           emailId: res.emailId,
           emailError: res.emailError,
         });
+        toast.success(`Invitation sent successfully to ${member.email}.`);
+      } else {
+        toast.success(`Invitation sent successfully to ${member.email}.`);
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to resend invitation");
@@ -1410,17 +1412,17 @@ function UsersPage() {
             <DialogTitle className={`flex items-center gap-2 ${createdStaffInfo?.emailError ? "text-amber-600" : "text-emerald-600"}`}>
               {createdStaffInfo?.emailError ? (
                 <>
-                  <AlertTriangle className="h-5 w-5 text-amber-600" /> User Created (Email Delivery Action Required)
+                  <AlertTriangle className="h-5 w-5 text-amber-600" /> Invitation Link Generated (Email Delivery Notice)
                 </>
               ) : (
                 <>
-                  <ShieldCheck className="h-5 w-5" /> User Created &amp; Invitation Delivered
+                  <ShieldCheck className="h-5 w-5" /> Invitation &amp; Setup Link Ready
                 </>
               )}
             </DialogTitle>
             <DialogDescription className="space-y-2 pt-2 text-left">
               <p>
-                <strong>{createdStaffInfo?.staffName}</strong> has been added as a {createdStaffInfo?.roleTitle}.
+                24-hour setup link for <strong>{createdStaffInfo?.staffName}</strong> ({createdStaffInfo?.roleTitle}).
               </p>
               {createdStaffInfo?.emailError ? (
                 <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-destructive">
