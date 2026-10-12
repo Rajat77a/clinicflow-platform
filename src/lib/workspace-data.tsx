@@ -2140,7 +2140,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         const offset = Math.max(input.offset ?? 0, 0);
         const scope = input.scope ?? (user?.role === "doctor" && !input.query ? "my" : "all");
 
-        if (repository && state.patients.length === 0) {
+        if (repository) {
           const result = await repository.searchPatients(input);
           const filteredRows = result.rows.filter(
             (p) => !softDeletedPatients[p.id] && !permDeletedPatients.has(p.id)
