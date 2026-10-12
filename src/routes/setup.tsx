@@ -624,6 +624,27 @@ function SetupPage() {
                         {showPw ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                       </Button>
                     </div>
+                    {!userExists && (
+                      <div className="rounded-lg border bg-muted/40 p-3 text-xs space-y-2 mt-2">
+                        <div className="font-semibold text-foreground text-[11px] uppercase tracking-wider">
+                          Password Conditions
+                        </div>
+                        <ul className="space-y-1.5 text-xs text-muted-foreground">
+                          <li className={`flex items-center gap-2 transition-colors ${pw.length >= 8 ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}`}>
+                            <CheckCircle2 className={`h-4 w-4 shrink-0 ${pw.length >= 8 ? "text-emerald-500" : "text-muted-foreground/40"}`} />
+                            <span>At least 8 characters long</span>
+                          </li>
+                          <li className={`flex items-center gap-2 transition-colors ${/[A-Z]/.test(pw) ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}`}>
+                            <CheckCircle2 className={`h-4 w-4 shrink-0 ${/[A-Z]/.test(pw) ? "text-emerald-500" : "text-muted-foreground/40"}`} />
+                            <span>At least one uppercase letter (A-Z)</span>
+                          </li>
+                          <li className={`flex items-center gap-2 transition-colors ${/[a-z]/.test(pw) ? "text-emerald-600 dark:text-emerald-400 font-medium" : ""}`}>
+                            <CheckCircle2 className={`h-4 w-4 shrink-0 ${/[a-z]/.test(pw) ? "text-emerald-500" : "text-muted-foreground/40"}`} />
+                            <span>At least one lowercase letter (a-z)</span>
+                          </li>
+                        </ul>
+                      </div>
+                    )}
                     {!userExists && passwordPolicyError(pw) && pw.length > 0 && (
                       <p className="text-[11px] font-medium text-destructive">{passwordPolicyError(pw)}</p>
                     )}

@@ -421,6 +421,36 @@ test("workspace-data supports patient soft deletion and trash management", () =>
   assert.match(workspaceDataSource, /binPatients/);
 });
 
+test("setup page displays password conditions with live validation", () => {
+  assert.match(setupSource, /Password Conditions/);
+  assert.match(setupSource, /At least 8 characters long/);
+  assert.match(setupSource, /At least one uppercase letter \(A-Z\)/);
+  assert.match(setupSource, /At least one lowercase letter \(a-z\)/);
+});
+
+test("resending invitation returns setup link and re-displays setup modal with link", () => {
+  // In workspace-data, resendStaffInvitation returns data & setupUrl
+  assert.match(workspaceDataSource, /resendStaffInvitation:\s*async[\s\S]*?return\s*\{[\s\S]*?setupUrl/);
+  // In app.users, handleResendInvitation sets createdStaffInfo with res.setupUrl
+  assert.match(usersSource, /handleResendInvitation[\s\S]*?resendStaffInvitation[\s\S]*?setCreatedStaffInfo/);
+  // Both Invited and Expired users can have invitation resent
+  assert.match(usersSource, /member\.status === "Invited" \|\| member\.status === "Expired"/);
+});
+
+test("invited user expiration lifecycle: Expired at 24h and auto-deleted from role and user list at 25h", () => {
+  // Check evaluateStaffInviteStatus and expiration threshold
+  assert.match(workspaceDataSource, /evaluateStaffInviteStatus/);
+  assert.match(workspaceDataSource, /elapsedHours\s*>=\s*24/);
+  assert.match(workspaceDataSource, /elapsedHours\s*>=\s*25/);
+  assert.match(workspaceDataSource, /status:\s*"Expired"/);
+  assert.match(workspaceDataSource, /shouldAutoDelete:\s*true/);
+
+  // Status Expired badge is rendered in app.users table
+  assert.match(usersSource, /member\.status === "Expired"/);
+  assert.match(usersSource, /evaluateStaffInviteStatus\(m\)/);
+});
+
+
 
 
 

@@ -345,7 +345,8 @@ export type StaffMember = {
   email: string;
   phone: string;
   role: AuthUser["role"];
-  status: "Active" | "Invited" | "Inactive";
+  status: "Active" | "Invited" | "Inactive" | "Expired";
+  invitedAt?: string;
   tempPassword?: string;
   deletedAt?: string;
   deletedBy?: string;
@@ -356,6 +357,109 @@ export type StaffMember = {
   emailId?: string;
   emailError?: string;
 };
+
+export const STORAGE_KEY_INVITED_AT = "cf_staff_invited_at";
+
+export function loadInvitedAtMap(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_INVITED_AT);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveInvitedAt(userId: string, email: string, isoTimestamp = new Date().toISOString()) {
+  if (typeof window === "undefined") return;
+  try {
+    const map = loadInvitedAtMap();
+    map[userId] = isoTimestamp;
+    if (email) map[email.toLowerCase()] = isoTimestamp;
+    localStorage.setItem(STORAGE_KEY_INVITED_AT, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
+export function removeInvitedAt(userId: string, email?: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const map = loadInvitedAtMap();
+    delete map[userId];
+    if (email) delete map[email.toLowerCase()];
+    localStorage.setItem(STORAGE_KEY_INVITED_AT, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
+export function getStaffInvitationTime(member: StaffMember): number | null {
+  if (member.invitedAt) {
+    const t = new Date(member.invitedAt).getTime();
+    if (!Number.isNaN(t)) return t;
+  }
+  const map = loadInvitedAtMap();
+  if (map[member.id]) {
+    const t = new Date(map[member.id]).getTime();
+    if (!Number.isNaN(t)) return t;
+  }
+  if (member.email && map[member.email.toLowerCase()]) {
+    const t = new Date(map[member.email.toLowerCase()]).getTime();
+    if (!Number.isNaN(t)) return t;
+  }
+  if (typeof window !== "undefined" && member.email) {
+    try {
+      const raw = localStorage.getItem("cf_sent_invitations");
+      if (raw) {
+        const sentList = JSON.parse(raw);
+        if (Array.isArray(sentList)) {
+          const match = sentList.find((s: any) => s.recipientEmail?.toLowerCase() === member.email.toLowerCase());
+          if (match?.sentAt) {
+            const t = new Date(match.sentAt).getTime();
+            if (!Number.isNaN(t)) return t;
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+  return null;
+}
+
+export function evaluateStaffInviteStatus(
+  member: StaffMember,
+  now = Date.now()
+): {
+  isExpired: boolean;
+  shouldAutoDelete: boolean;
+  status: "Active" | "Invited" | "Inactive" | "Expired";
+} {
+  if (member.status === "Active" || member.status === "Inactive") {
+    return { isExpired: false, shouldAutoDelete: false, status: member.status };
+  }
+
+  const inviteTime = getStaffInvitationTime(member);
+  if (!inviteTime) {
+    return { isExpired: false, shouldAutoDelete: false, status: member.status };
+  }
+
+  const elapsedMs = now - inviteTime;
+  const elapsedHours = elapsedMs / (1000 * 60 * 60);
+
+  // If > 24 hours plus next 1 hour (>= 25 hours): delete from role and delete from user list
+  if (elapsedHours >= 25) {
+    return { isExpired: true, shouldAutoDelete: true, status: "Expired" };
+  }
+
+  // If >= 24 hours: show Expired in user list
+  if (elapsedHours >= 24) {
+    return { isExpired: true, shouldAutoDelete: false, status: "Expired" };
+  }
+
+  return { isExpired: false, shouldAutoDelete: false, status: "Invited" };
+}
 
 export interface WorkspaceSnapshot {
   clinics: Clinic[];
@@ -512,7 +616,7 @@ type Command =
   | { type: "staff.soft_deleted"; userId: string; actor: AuthUser }
   | { type: "staff.restored"; userId: string; actor: AuthUser }
   | { type: "staff.permanently_deleted"; userId: string; actor: AuthUser }
-  | { type: "staff.invitation_resent"; userId: string; actor: AuthUser }
+  | { type: "staff.invitation_resent"; userId: string; actor: AuthUser; invitedAt?: string }
   | { type: "staff.bulk_soft_deleted"; userIds: string[]; actor: AuthUser }
   | { type: "staff.bulk_restored"; userIds: string[]; actor: AuthUser }
   | { type: "staff.bulk_permanently_deleted"; userIds: string[]; actor: AuthUser }
@@ -589,39 +693,59 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       );
       const clinicNameMap = new Map(updatedClinics.map((c) => [c.id, c.name]));
 
+      const invitedMap = loadInvitedAtMap();
       const updatedStaffMembers = command.value.staffMembers
-        .filter((m) => !storedPermStaff.has(m.id))
+        .filter((m) => {
+          if (storedPermStaff.has(m.id)) return false;
+          const inv = m.invitedAt || invitedMap[m.id] || (m.email ? invitedMap[m.email.toLowerCase()] : undefined);
+          const memberWithInv = inv ? { ...m, invitedAt: inv } : m;
+          const evalResult = evaluateStaffInviteStatus(memberWithInv);
+          if (evalResult.shouldAutoDelete) {
+            storedPermStaff.add(m.id);
+            savePermDeletedStaffToStorage(Array.from(storedPermStaff));
+            removeInvitedAt(m.id, m.email);
+            return false;
+          }
+          return true;
+        })
         .map((m) => {
+          const inv = m.invitedAt || invitedMap[m.id] || (m.email ? invitedMap[m.email.toLowerCase()] : undefined);
+          const memberWithInv = inv ? { ...m, invitedAt: inv } : m;
+          const evalResult = evaluateStaffInviteStatus(memberWithInv);
+          const currentMember = evalResult.status === "Expired" && memberWithInv.status !== "Expired"
+            ? { ...memberWithInv, status: "Expired" as const }
+            : memberWithInv;
+
           // Check if associated clinic is soft-deleted
-          const isClinicDeleted = Boolean(m.clinicId && deletedClinicIds.has(m.clinicId));
-          const clinicDeletedAt = m.clinicId ? softDeletedMap.get(m.clinicId) || updatedClinics.find((c) => c.id === m.clinicId)?.deletedAt : undefined;
+          const isClinicDeleted = Boolean(currentMember.clinicId && deletedClinicIds.has(currentMember.clinicId));
+          const clinicDeletedAt = currentMember.clinicId ? softDeletedMap.get(currentMember.clinicId) || updatedClinics.find((c) => c.id === currentMember.clinicId)?.deletedAt : undefined;
 
           // Check if user was directly soft-deleted
-          const softStaffInfo = storedSoftStaff[m.id];
+          const softStaffInfo = storedSoftStaff[currentMember.id];
 
           if (isClinicDeleted) {
             return {
-              ...m,
+              ...currentMember,
               status: "Inactive" as const,
-              deletedAt: m.deletedAt || clinicDeletedAt || new Date().toISOString(),
-              deletedBy: m.deletedBy || softStaffInfo?.deletedBy || "Super Admin",
-              previousClinicId: m.clinicId,
-              previousClinicName: (m.clinicId ? clinicNameMap.get(m.clinicId) : null) || m.previousClinicName || "Clinic",
+              deletedAt: currentMember.deletedAt || clinicDeletedAt || new Date().toISOString(),
+              deletedBy: currentMember.deletedBy || softStaffInfo?.deletedBy || "Super Admin",
+              previousClinicId: currentMember.clinicId,
+              previousClinicName: (currentMember.clinicId ? clinicNameMap.get(currentMember.clinicId) : null) || currentMember.previousClinicName || "Clinic",
             };
           }
 
           if (softStaffInfo) {
             return {
-              ...m,
+              ...currentMember,
               status: "Inactive" as const,
-              deletedAt: m.deletedAt || softStaffInfo.deletedAt,
-              deletedBy: m.deletedBy || softStaffInfo.deletedBy || "Super Admin",
-              previousClinicId: m.previousClinicId || softStaffInfo.previousClinicId || m.clinicId,
-              previousClinicName: m.previousClinicName || softStaffInfo.previousClinicName || (m.clinicId ? clinicNameMap.get(m.clinicId) : null),
+              deletedAt: currentMember.deletedAt || softStaffInfo.deletedAt,
+              deletedBy: currentMember.deletedBy || softStaffInfo.deletedBy || "Super Admin",
+              previousClinicId: currentMember.previousClinicId || softStaffInfo.previousClinicId || currentMember.clinicId,
+              previousClinicName: currentMember.previousClinicName || softStaffInfo.previousClinicName || (currentMember.clinicId ? clinicNameMap.get(currentMember.clinicId) : null),
             };
           }
 
-          return m;
+          return currentMember;
         });
 
       const storedSoftPatients = loadSoftDeletedPatientsFromStorage();
@@ -736,12 +860,15 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         command.actor,
         `Updated invoice ${command.value.id} to ${command.value.status}`,
       );
-    case "staff.invited":
+    case "staff.invited": {
+      const now = command.value.invitedAt || new Date().toISOString();
+      saveInvitedAt(command.value.id, command.value.email, now);
       return appendAudit(
-        { ...state, staffMembers: [command.value, ...state.staffMembers] },
+        { ...state, staffMembers: [{ ...command.value, invitedAt: now }, ...state.staffMembers] },
         command.actor,
         `Invited ${command.value.role} ${command.value.email}`,
       );
+    }
     case "staff.deactivated":
       return appendAudit(
         {
@@ -1152,11 +1279,12 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       );
     }
     case "staff.invitation_resent": {
+      const resentAt = command.invitedAt || new Date().toISOString();
       return appendAudit(
         {
           ...state,
           staffMembers: state.staffMembers.map((m) =>
-            m.id === command.userId ? { ...m, status: "Invited" } : m
+            m.id === command.userId ? { ...m, status: "Invited", invitedAt: resentAt } : m
           ),
         },
         command.actor,
@@ -1466,7 +1594,7 @@ interface WorkspaceData {
   permanentlyDeletePatient: (patientId: string) => Promise<void>;
   bulkPermanentlyDeletePatients: (patientIds: string[]) => Promise<void>;
   resetUserPassword: (email: string, newPassword: string) => Promise<void>;
-  resendStaffInvitation: (userId: string) => Promise<void>;
+  resendStaffInvitation: (userId: string) => Promise<{ data: StaffMember; setupUrl: string; emailSent?: boolean; emailId?: string; emailError?: string } | void>;
   createPatient: (input: PatientInput) => Promise<Patient>;
   createAppointment: (input: AppointmentInput) => Promise<Appointment>;
   updateAppointment: (appointment: Appointment) => Promise<Appointment>;
@@ -1696,8 +1824,24 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       clinics: state.clinics.filter((c) => !c.deletedAt),
       binClinics: state.clinics.filter((c) => isWithinRetentionPeriod(c.deletedAt, 60)),
       patients,
-      doctors: clinicScope(state.doctors).filter((d) => d.status !== "Inactive"),
-      receptionists: clinicScope(state.receptionists).filter((r) => r.status !== "Inactive"),
+      doctors: clinicScope(state.doctors).filter((d) => {
+        if (d.status === "Inactive") return false;
+        const matchingStaff = state.staffMembers.find((m) => m.id === d.id);
+        if (matchingStaff) {
+          const evalResult = evaluateStaffInviteStatus(matchingStaff);
+          if (evalResult.shouldAutoDelete) return false;
+        }
+        return true;
+      }),
+      receptionists: clinicScope(state.receptionists).filter((r) => {
+        if (r.status === "Inactive") return false;
+        const matchingStaff = state.staffMembers.find((m) => m.id === r.id);
+        if (matchingStaff) {
+          const evalResult = evaluateStaffInviteStatus(matchingStaff);
+          if (evalResult.shouldAutoDelete) return false;
+        }
+        return true;
+      }),
       appointments,
       prescriptions,
       labReports: user && (hasPermission(user.role, "labs.write") || hasPermission(user.role, "prescriptions.read"))
@@ -1721,12 +1865,24 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             if (m.clinicId && state.clinics.some((c) => (c.id === m.clinicId || c.shortId === m.clinicId) && Boolean(c.deletedAt))) {
               return false;
             }
+            const evalResult = evaluateStaffInviteStatus(m);
+            if (evalResult.shouldAutoDelete) {
+              return false;
+            }
             return true;
+          }).map((m) => {
+            const evalResult = evaluateStaffInviteStatus(m);
+            if (evalResult.status === "Expired" && m.status !== "Expired") {
+              return { ...m, status: "Expired" as const };
+            }
+            return m;
           })
         : [],
       binStaffMembers: user && hasPermission(user.role, "people.manage")
         ? (isSuperAdmin ? state.staffMembers : clinicScope(state.staffMembers))
             .filter((m) => {
+              const evalResult = evaluateStaffInviteStatus(m);
+              if (evalResult.shouldAutoDelete) return false;
               if (Boolean(m.deletedAt) || m.status === "Inactive") {
                 return !m.deletedAt || isWithinRetentionPeriod(m.deletedAt, 60);
               }
@@ -2710,7 +2866,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         const clinicId = target.clinicId || target.previousClinicId;
         const clinic = clinicId ? state.clinics.find((c) => c.id === clinicId) : null;
 
-        await sendInvitationEmail({
+        const emailResult = await sendInvitationEmail({
           recipientEmail: target.email,
           recipientName: target.name,
           clinicName: clinic?.name || "ClinicFlow Health",
@@ -2724,7 +2880,17 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           expiresInHours: 24,
         });
 
-        dispatch({ type: "staff.invitation_resent", userId, actor });
+        const invitedAt = new Date().toISOString();
+        saveInvitedAt(userId, target.email, invitedAt);
+        dispatch({ type: "staff.invitation_resent", userId, actor, invitedAt });
+
+        return {
+          data: { ...target, status: "Invited" as const, invitedAt },
+          setupUrl,
+          emailSent: Boolean(emailResult?.success),
+          emailId: emailResult?.emailId,
+          emailError: undefined,
+        };
       },
       createPatient: async (input) => {
         const actor = requireUser(user, "patients.create");
