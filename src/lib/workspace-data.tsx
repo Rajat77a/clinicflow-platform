@@ -1618,6 +1618,7 @@ interface WorkspaceData {
   clinics: Clinic[];
   binClinics: Clinic[];
   patients: Patient[];
+  allPatients: Patient[];
   doctors: Doctor[];
   receptionists: Receptionist[];
   appointments: Appointment[];
@@ -1717,6 +1718,62 @@ export function getTrashRetentionStatus(deletedAt?: string) {
     daysUntilPurge,
     canPermanentlyDelete,
   };
+}
+
+export function isPatientTreated(
+  patient: Patient,
+  appointments: Appointment[] = [],
+  prescriptions: Prescription[] = [],
+  user?: AuthUser | null,
+): boolean {
+  const isDoctor = user?.role === "doctor";
+  const doctorMatches = (nameOrId?: string) => {
+    if (!nameOrId || !user) return false;
+    const n = nameOrId.toLowerCase().trim();
+    return (
+      n === user.name?.toLowerCase().trim() ||
+      n === user.id?.toLowerCase().trim() ||
+      Boolean(user.userId && n === user.userId?.toLowerCase().trim())
+    );
+  };
+
+  // 1. Any completed appointment
+  const hasCompletedAppointment = appointments.some((a) => {
+    if (a.patientId !== patient.id) return false;
+    const isCompleted = a.status.toLowerCase() === "completed";
+    if (!isCompleted) return false;
+    if (isDoctor) {
+      return doctorMatches(a.doctor) || doctorMatches(a.doctorId) || doctorMatches(patient.doctor);
+    }
+    return true;
+  });
+  if (hasCompletedAppointment) return true;
+
+  // 2. Any prescription
+  const hasPrescription = prescriptions.some((pr) => {
+    if (pr.patientId !== patient.id) return false;
+    if (isDoctor) {
+      return doctorMatches(pr.doctor) || doctorMatches(patient.doctor);
+    }
+    return true;
+  });
+  if (hasPrescription) return true;
+
+  // 3. Status and last visit
+  const isAssignedDoctor = !isDoctor || doctorMatches(patient.doctor);
+  if (isAssignedDoctor) {
+    if (patient.status === "Active" || patient.status === "Follow-up") {
+      return true;
+    }
+    if (
+      patient.status !== "New" &&
+      Boolean(patient.lastVisit && patient.lastVisit !== "-" && patient.lastVisit !== "")
+    ) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
@@ -1921,6 +1978,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       clinics: state.clinics.filter((c) => !c.deletedAt),
       binClinics: state.clinics.filter((c) => isWithinRetentionPeriod(c.deletedAt, 60)),
       patients,
+      allPatients: activeClinicPatients,
       doctors: clinicScope(state.doctors).filter((d) => {
         if (d.status === "Inactive") return false;
         const matchingStaff = state.staffMembers.find((m) => m.id === d.id || (d.email && m.email && m.email.toLowerCase() === d.email.toLowerCase()));
@@ -2077,11 +2135,26 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         const softDeletedPatients = loadSoftDeletedPatientsFromStorage();
         const permDeletedPatients = new Set(loadPermDeletedPatientsFromStorage());
 
-        if (repository) {
+        const query = input.query?.trim().toLocaleLowerCase().replace(/\s/g, "") ?? "";
+        const limit = Math.min(Math.max(input.limit ?? 25, 1), 100);
+        const offset = Math.max(input.offset ?? 0, 0);
+        const scope = input.scope ?? (user?.role === "doctor" && !input.query ? "my" : "all");
+
+        if (repository && state.patients.length === 0) {
           const result = await repository.searchPatients(input);
           const filteredRows = result.rows.filter(
             (p) => !softDeletedPatients[p.id] && !permDeletedPatients.has(p.id)
           );
+          if (scope === "my") {
+            const treatedRows = filteredRows.filter((p) =>
+              isPatientTreated(p, clinicAppointments, clinicPrescriptions, user)
+            );
+            return {
+              ...result,
+              rows: treatedRows,
+              total: treatedRows.length,
+            };
+          }
           return {
             ...result,
             rows: filteredRows,
@@ -2089,11 +2162,18 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           };
         }
 
-        const query = input.query?.trim().toLocaleLowerCase().replace(/\s/g, "") ?? "";
-        const limit = Math.min(Math.max(input.limit ?? 25, 1), 100);
-        const offset = Math.max(input.offset ?? 0, 0);
+        let baseList = scope === "my"
+          ? activeClinicPatients.filter((p) =>
+              isPatientTreated(p, clinicAppointments, clinicPrescriptions, user)
+            )
+          : activeClinicPatients;
+
+        baseList = baseList.filter(
+          (p) => !softDeletedPatients[p.id] && !permDeletedPatients.has(p.id)
+        );
+
         const matches = query
-          ? patients.filter((patient) =>
+          ? baseList.filter((patient) =>
               [
                 patient.id,
                 patient.medicalRecordNumber ?? "",
@@ -2103,7 +2183,8 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
                 value.toLocaleLowerCase().replace(/\s/g, "").includes(query),
               ),
             )
-          : patients;
+          : baseList;
+
         return {
           rows: matches.slice(offset, offset + limit),
           total: matches.length,

@@ -510,9 +510,13 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     throwIfError(error);
 
     const rows = (data ?? []) as Row[];
+    let mapped = rows.map((row) => mapPatient(row, doctorById.get(row.doctor_user_id)));
+    if (input.scope === "my") {
+      mapped = mapped.filter((p) => p.status === "Active" || p.status === "Follow-up" || Boolean(p.lastVisit && p.lastVisit !== "-"));
+    }
     return {
-      rows: rows.map((row) => mapPatient(row, doctorById.get(row.doctor_user_id))),
-      total: rows.length ? Number(rows[0].total_count) : 0,
+      rows: mapped,
+      total: input.scope === "my" ? mapped.length : (rows.length ? Number(rows[0].total_count) : 0),
       limit,
       offset,
     };

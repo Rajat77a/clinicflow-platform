@@ -40,6 +40,7 @@ const dashboardSource = await readFile(new URL("../routes/app.index.tsx", import
 const workspaceSource = await readFile(new URL("./workspace-data.tsx", import.meta.url), "utf8");
 const notesSource = await readFile(new URL("./invoice-notes.ts", import.meta.url), "utf8");
 const usersSource = await readFile(new URL("../routes/app.users.tsx", import.meta.url), "utf8");
+const patientsIndexSource = await readFile(new URL("../routes/app.patients.index.tsx", import.meta.url), "utf8");
 const offboardingMigration = await readFile(
   new URL("../../supabase/migrations/20260730100000_safe_staff_offboarding.sql", import.meta.url),
   "utf8",
@@ -132,4 +133,17 @@ test("bill viewing dialog is scrollable and allows notes to be added and edited"
   assert.match(billingIndexSource, /Notes \/ Remarks/);
   assert.match(workspaceSource, /updateBillNotes/);
   assert.match(notesSource, /cf_invoice_notes/);
+});
+
+test("patients list offers My Patients (treated at least once) and All Patients tabs", () => {
+  assert.match(patientsIndexSource, /<TabsTrigger value="my"/);
+  assert.match(patientsIndexSource, /My Patients/);
+  assert.match(patientsIndexSource, /<TabsTrigger value="all"/);
+  assert.match(patientsIndexSource, /All Patients/);
+  assert.match(patientsIndexSource, /scope:\s*tab/);
+
+  assert.match(workspaceSource, /export function isPatientTreated/);
+  assert.match(workspaceSource, /allPatients:\s*activeClinicPatients/);
+  assert.match(workspaceSource, /isPatientTreated\(p,\s*clinicAppointments,\s*clinicPrescriptions,\s*user\)/);
+  assert.match(workspaceSource, /scope === "my"/);
 });

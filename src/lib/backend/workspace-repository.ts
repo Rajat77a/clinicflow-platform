@@ -35,6 +35,7 @@ export interface RecordPageInput {
   patientId?: string;
   recordId?: string;
   date?: string;
+  scope?: "my" | "all";
 }
 
 export type PatientPage = RecordPage<Patient>;
