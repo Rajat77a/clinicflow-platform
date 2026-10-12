@@ -38,6 +38,7 @@ function PatientProfile() {
   const { id } = Route.useParams();
   const {
     patients,
+    allPatients,
     getPatient,
     listAppointments,
     listPrescriptions,
@@ -46,7 +47,7 @@ function PatientProfile() {
     updateBillNotes,
     softDeletePatient,
   } = useWorkspaceData();
-  const snapshotPatient = patients.find(candidate => candidate.id === id);
+  const snapshotPatient = (allPatients ?? patients).find(candidate => candidate.id === id);
   const [loadedPatient, setLoadedPatient] = useState<Patient | null>(null);
   const [recordLoading, setRecordLoading] = useState(!snapshotPatient);
   const [viewingBill, setViewingBill] = useState<Bill | null>(null);

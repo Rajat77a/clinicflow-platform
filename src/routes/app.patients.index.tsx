@@ -18,7 +18,9 @@ export const Route = createFileRoute("/app/patients/")({ component: PatientsPage
 function PatientsPage() {
   const { searchPatients, softDeletePatient } = useWorkspaceData();
   const { user } = useAuth();
+  const isDoctor = user?.role === "doctor";
   const [tab, setTab] = useState<"my" | "all">("my");
+  const effectiveScope = isDoctor ? tab : "all";
   const [query, setQuery] = useState("");
   const [rows, setRows] = useState<Patient[]>([]);
   const [total, setTotal] = useState(0);
@@ -36,7 +38,7 @@ function PatientsPage() {
     let current = true;
     setLoading(true);
     setLoadError(null);
-    void searchPatients({ query, limit: pageSize, offset: page * pageSize, scope: tab })
+    void searchPatients({ query, limit: pageSize, offset: page * pageSize, scope: effectiveScope })
       .then((result) => {
         if (!current) return;
         setRows(result.rows);
@@ -62,7 +64,7 @@ function PatientsPage() {
     setLoading(true);
     setLoadError(null);
     const timer = window.setTimeout(() => {
-      void searchPatients({ query, limit: pageSize, offset: page * pageSize, scope: tab })
+      void searchPatients({ query, limit: pageSize, offset: page * pageSize, scope: effectiveScope })
         .then((result) => {
           if (!current) return;
           setRows(result.rows);
@@ -83,7 +85,7 @@ function PatientsPage() {
       current = false;
       window.clearTimeout(timer);
     };
-  }, [page, query, tab, searchPatients]);
+  }, [page, query, effectiveScope, searchPatients]);
 
   const handleConfirmTrash = async () => {
     if (!patientToTrash) return;
@@ -108,29 +110,41 @@ function PatientsPage() {
     <>
       <PageHeader
         title="Patients"
-        description={tab === "my" ? "Patients who have been treated at least once." : "All registered patients in the hospital."}
+        description={
+          isDoctor
+            ? (tab === "my"
+                ? "Patients who have been treated at least once."
+                : "All registered patients in the clinic.")
+            : "All registered patients in the clinic."
+        }
         actions={canCreate ? <Button asChild><Link to="/app/patients/new"><Plus className="mr-1.5 h-4 w-4" />Register patient</Link></Button> : undefined}
       />
-      <div className="mb-4">
-        <Tabs value={tab} onValueChange={(val) => { setTab(val as "my" | "all"); setPage(0); }}>
-          <TabsList className="rounded-xl bg-muted/60 p-1">
-            <TabsTrigger value="my" className="rounded-lg">
-              <UserCheck className="mr-1.5 h-3.5 w-3.5" />
-              My Patients
-            </TabsTrigger>
-            <TabsTrigger value="all" className="rounded-lg">
-              <Users className="mr-1.5 h-3.5 w-3.5" />
-              All Patients
-            </TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
+      {isDoctor && (
+        <div className="mb-4">
+          <Tabs value={tab} onValueChange={(val) => { setTab(val as "my" | "all"); setPage(0); }}>
+            <TabsList className="rounded-xl bg-muted/60 p-1">
+              <TabsTrigger value="my" className="rounded-lg">
+                <UserCheck className="mr-1.5 h-3.5 w-3.5" />
+                My Patients
+              </TabsTrigger>
+              <TabsTrigger value="all" className="rounded-lg">
+                <Users className="mr-1.5 h-3.5 w-3.5" />
+                All Patients
+              </TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+      )}
       <div className="rounded-2xl border bg-card shadow-soft">
         <div className="flex flex-wrap items-center gap-3 border-b p-4">
           <div className="relative min-w-[240px] flex-1">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder={tab === "my" ? "Search treated patients by name, ID, phone…" : "Search all registered patients by name, ID, phone…"}
+              placeholder={
+                isDoctor && tab === "my"
+                  ? "Search treated patients by name, ID, phone…"
+                  : "Search all patients in the clinic by name, ID, phone…"
+              }
               className="h-10 rounded-xl bg-muted/30 pl-9"
               value={query}
               onChange={event => { setQuery(event.target.value); setPage(0); }}
@@ -194,7 +208,7 @@ function PatientsPage() {
                 </TableRow>
               ))}
               {!loading && rows.length === 0 && (
-                <TableRow><TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">{loadError ?? (tab === "my" ? "No treated patients found." : "No patients found.")}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="py-8 text-center text-sm text-muted-foreground">{loadError ?? (isDoctor && tab === "my" ? "No treated patients found." : "No patients found.")}</TableCell></TableRow>
               )}
             </TableBody>
           </Table>
