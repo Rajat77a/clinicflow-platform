@@ -135,12 +135,14 @@ test("bill viewing dialog is scrollable and allows notes to be added and edited"
   assert.match(notesSource, /cf_invoice_notes/);
 });
 
-test("patients list offers My Patients (treated at least once) and All Patients tabs", () => {
+test("patients list offers My Patients (treated at least once) and All Patients tabs for doctors only", () => {
+  assert.match(patientsIndexSource, /isDoctor\s*&&\s*\(/);
   assert.match(patientsIndexSource, /<TabsTrigger value="my"/);
   assert.match(patientsIndexSource, /My Patients/);
   assert.match(patientsIndexSource, /<TabsTrigger value="all"/);
   assert.match(patientsIndexSource, /All Patients/);
-  assert.match(patientsIndexSource, /scope:\s*tab/);
+  assert.match(patientsIndexSource, /scope:\s*effectiveScope/);
+  assert.match(patientsIndexSource, /effectiveScope\s*=\s*isDoctor\s*\?\s*tab\s*:\s*"all"/);
 
   assert.match(workspaceSource, /export function isPatientTreated/);
   assert.match(workspaceSource, /allPatients:\s*activeClinicPatients/);
