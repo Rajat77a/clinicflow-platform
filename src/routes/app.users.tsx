@@ -9,7 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth, type Role } from "@/lib/auth";
-import { useWorkspaceData, type StaffMember } from "@/lib/workspace-data";
+import { useWorkspaceData, type StaffMember, evaluateStaffInviteStatus } from "@/lib/workspace-data";
 import { UserMinus, UserPlus, Eye, EyeOff, Building2, ShieldCheck, Stethoscope, UserCog, Mail, Phone, Trash2, RotateCw, Send, CheckSquare, AlertTriangle, CheckCircle2, Check, Copy, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -74,13 +74,25 @@ function UsersPage() {
   const allUsers = useMemo(() => {
     const map = new Map<string, StaffMember>();
     
-    // Add active staff members
-    staffMembers.forEach(m => map.set(`${m.id}-${m.role}`, m));
+    // Add active / invited / expired staff members
+    staffMembers.forEach(m => {
+      const evalResult = evaluateStaffInviteStatus(m);
+      if (evalResult.shouldAutoDelete) return;
+      const effectiveMember = evalResult.status === "Expired" && m.status !== "Expired"
+        ? { ...m, status: "Expired" as const }
+        : m;
+      map.set(`${effectiveMember.id}-${effectiveMember.role}`, effectiveMember);
+    });
     
     // Add inactive/expired staff members (excluding deleted ones)
     binStaffMembers.forEach(m => {
+      const evalResult = evaluateStaffInviteStatus(m);
+      if (evalResult.shouldAutoDelete) return;
       if (!m.deletedAt && !map.has(`${m.id}-${m.role}`)) {
-        map.set(`${m.id}-${m.role}`, m);
+        const effectiveMember = evalResult.status === "Expired" && m.status !== "Expired"
+          ? { ...m, status: "Expired" as const }
+          : m;
+        map.set(`${effectiveMember.id}-${effectiveMember.role}`, effectiveMember);
       }
     });
 
@@ -401,8 +413,19 @@ function UsersPage() {
   const handleResendInvitation = async (member: StaffMember) => {
     setResendingId(member.id);
     try {
-      await resendStaffInvitation(member.id);
+      const res = await resendStaffInvitation(member.id);
       toast.success(`Invitation sent successfully to ${member.email}.`);
+      if (res && res.setupUrl) {
+        setCreatedStaffInfo({
+          roleTitle: roleLabels[member.role] || member.role,
+          staffName: member.name,
+          staffEmail: member.email,
+          setupUrl: res.setupUrl,
+          emailSent: res.emailSent,
+          emailId: res.emailId,
+          emailError: res.emailError,
+        });
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to resend invitation");
     } finally {
@@ -988,7 +1011,14 @@ function UsersPage() {
                           ? "secondary"
                           : member.status === "Inactive"
                           ? "destructive"
+                          : member.status === "Expired"
+                          ? "destructive"
                           : "outline"
+                      }
+                      className={
+                        member.status === "Expired"
+                          ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                          : ""
                       }
                     >
                       {member.status}
@@ -996,7 +1026,7 @@ function UsersPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1.5">
-                      {member.status === "Invited" && (
+                      {(member.status === "Invited" || member.status === "Expired") && (
                         <Button
                           type="button"
                           variant="outline"
@@ -1112,9 +1142,14 @@ function UsersPage() {
                         variant={
                           selectedProfile.status === "Active"
                             ? "secondary"
-                            : selectedProfile.status === "Inactive"
+                            : selectedProfile.status === "Inactive" || selectedProfile.status === "Expired"
                             ? "destructive"
                             : "outline"
+                        }
+                        className={
+                          selectedProfile.status === "Expired"
+                            ? "bg-amber-500/15 text-amber-700 dark:text-amber-400 border-amber-500/30"
+                            : ""
                         }
                       >
                         {selectedProfile.status}
