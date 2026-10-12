@@ -430,7 +430,8 @@ export function getStaffInvitationTime(member: StaffMember): number | null {
 
 export function evaluateStaffInviteStatus(
   member: StaffMember,
-  now = Date.now()
+  now = Date.now(),
+  isClinicalAdmin = false
 ): {
   isExpired: boolean;
   shouldAutoDelete: boolean;
@@ -440,6 +441,10 @@ export function evaluateStaffInviteStatus(
     return { isExpired: false, shouldAutoDelete: false, status: member.status };
   }
 
+  if (member.status === "Expired") {
+    return { isExpired: true, shouldAutoDelete: isClinicalAdmin, status: "Expired" };
+  }
+
   const inviteTime = getStaffInvitationTime(member);
   if (!inviteTime) {
     return { isExpired: false, shouldAutoDelete: false, status: member.status };
@@ -447,6 +452,12 @@ export function evaluateStaffInviteStatus(
 
   const elapsedMs = now - inviteTime;
   const elapsedHours = elapsedMs / (1000 * 60 * 60);
+
+  // In the clinical admin portal, if the invite link is expired (>= 24 hours),
+  // delete the user from the clinic immediately (don't keep anything for the role showing as invited in any place)
+  if (isClinicalAdmin && elapsedHours >= 24) {
+    return { isExpired: true, shouldAutoDelete: true, status: "Expired" };
+  }
 
   // If > 24 hours plus next 1 hour (>= 25 hours): delete from role and delete from user list
   if (elapsedHours >= 25) {
@@ -1780,9 +1791,33 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     };
   }, [loadSnapshot, repository, user?.clinicId, user?.role, user?.userId]);
 
+  useEffect(() => {
+    if (user?.role !== "clinic_admin") return;
+    const expiredMembers = state.staffMembers.filter((m) => {
+      if (m.status !== "Invited" && m.status !== "Expired") return false;
+      const evalResult = evaluateStaffInviteStatus(m, undefined, true);
+      return evalResult.isExpired || evalResult.shouldAutoDelete || m.status === "Expired";
+    });
+    if (expiredMembers.length > 0) {
+      const storedPermStaff = new Set(loadPermDeletedStaffFromStorage());
+      expiredMembers.forEach((m) => {
+        storedPermStaff.add(m.id);
+        removeInvitedAt(m.id, m.email);
+        if (m.email) {
+          deleteUserAccount(m.email);
+        }
+        if (repository?.softDeleteStaff) {
+          repository.softDeleteStaff(m.id).catch(() => undefined);
+        }
+      });
+      savePermDeletedStaffToStorage(Array.from(storedPermStaff));
+    }
+  }, [user?.role, state.staffMembers, repository]);
+
   const value = useMemo<WorkspaceData>(() => {
     const clinicId = user?.clinicId;
     const isSuperAdmin = user?.role === "super_admin";
+    const isClinicalAdmin = user?.role === "clinic_admin";
     const userClinic = state.clinics.find(
       (c) =>
         (clinicId && (c.id === clinicId || c.shortId === clinicId)) ||
@@ -1826,19 +1861,27 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       patients,
       doctors: clinicScope(state.doctors).filter((d) => {
         if (d.status === "Inactive") return false;
-        const matchingStaff = state.staffMembers.find((m) => m.id === d.id);
+        const matchingStaff = state.staffMembers.find((m) => m.id === d.id || (d.email && m.email && m.email.toLowerCase() === d.email.toLowerCase()));
         if (matchingStaff) {
-          const evalResult = evaluateStaffInviteStatus(matchingStaff);
+          const evalResult = evaluateStaffInviteStatus(matchingStaff, undefined, isClinicalAdmin);
           if (evalResult.shouldAutoDelete) return false;
+          if (isClinicalAdmin && (evalResult.isExpired || evalResult.status === "Expired")) return false;
+        }
+        if (isClinicalAdmin && (d.status === "Expired" || (d.status === "Invited" && matchingStaff && evaluateStaffInviteStatus(matchingStaff, undefined, isClinicalAdmin).isExpired))) {
+          return false;
         }
         return true;
       }),
       receptionists: clinicScope(state.receptionists).filter((r) => {
         if (r.status === "Inactive") return false;
-        const matchingStaff = state.staffMembers.find((m) => m.id === r.id);
+        const matchingStaff = state.staffMembers.find((m) => m.id === r.id || (r.email && m.email && m.email.toLowerCase() === r.email.toLowerCase()));
         if (matchingStaff) {
-          const evalResult = evaluateStaffInviteStatus(matchingStaff);
+          const evalResult = evaluateStaffInviteStatus(matchingStaff, undefined, isClinicalAdmin);
           if (evalResult.shouldAutoDelete) return false;
+          if (isClinicalAdmin && (evalResult.isExpired || evalResult.status === "Expired")) return false;
+        }
+        if (isClinicalAdmin && (r.status === "Expired" || (r.status === "Invited" && matchingStaff && evaluateStaffInviteStatus(matchingStaff, undefined, isClinicalAdmin).isExpired))) {
+          return false;
         }
         return true;
       }),
@@ -1865,13 +1908,16 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             if (m.clinicId && state.clinics.some((c) => (c.id === m.clinicId || c.shortId === m.clinicId) && Boolean(c.deletedAt))) {
               return false;
             }
-            const evalResult = evaluateStaffInviteStatus(m);
+            const evalResult = evaluateStaffInviteStatus(m, undefined, isClinicalAdmin);
             if (evalResult.shouldAutoDelete) {
+              return false;
+            }
+            if (isClinicalAdmin && (evalResult.isExpired || evalResult.status === "Expired" || m.status === "Expired")) {
               return false;
             }
             return true;
           }).map((m) => {
-            const evalResult = evaluateStaffInviteStatus(m);
+            const evalResult = evaluateStaffInviteStatus(m, undefined, isClinicalAdmin);
             if (evalResult.status === "Expired" && m.status !== "Expired") {
               return { ...m, status: "Expired" as const };
             }
@@ -1881,8 +1927,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       binStaffMembers: user && hasPermission(user.role, "people.manage")
         ? (isSuperAdmin ? state.staffMembers : clinicScope(state.staffMembers))
             .filter((m) => {
-              const evalResult = evaluateStaffInviteStatus(m);
+              const evalResult = evaluateStaffInviteStatus(m, undefined, isClinicalAdmin);
               if (evalResult.shouldAutoDelete) return false;
+              if (isClinicalAdmin && (evalResult.isExpired || evalResult.status === "Expired" || m.status === "Expired")) {
+                return false;
+              }
               if (Boolean(m.deletedAt) || m.status === "Inactive") {
                 return !m.deletedAt || isWithinRetentionPeriod(m.deletedAt, 60);
               }
