@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   ClipboardCheck,
   Clock,
+  Download,
   FileText,
   IndianRupee,
   Receipt,
@@ -267,6 +268,12 @@ function ClinicAdminDashboard() {
         description={`Authenticated operational data for ${user?.clinic ?? "this hospital"}.`}
         actions={
           <>
+            <Button asChild variant="outline">
+              <Link to="/app/downloads">
+                <Download className="mr-2 h-4 w-4" />
+                Download Center
+              </Link>
+            </Button>
             <Button asChild variant="outline"><Link to="/app/appointments/new" search={{ patient: undefined }}>New appointment</Link></Button>
             <Button asChild><Link to="/app/patients/new">Add patient</Link></Button>
           </>
