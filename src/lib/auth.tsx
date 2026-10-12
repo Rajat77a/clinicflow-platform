@@ -47,7 +47,19 @@ function isAuthUser(value: unknown): value is AuthUser {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    if (typeof window === "undefined") return null;
+    try {
+      const stored = localStorage.getItem("cf_user");
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (isAuthUser(parsed)) return parsed;
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  });
   const [isReady, setIsReady] = useState(false);
   const authenticatedUserId = user?.userId;
   const [passwordSetupRequired, setPasswordSetupRequired] = useState(() => {
@@ -243,7 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       authUser.email ||
       "Hospital user";
 
-    setUser({
+    const authenticatedUser: AuthUser = {
       userId: authUser.id,
       name,
       email: profile?.email || authUser.email || "",
@@ -253,7 +265,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       departmentId: membership?.department_id ?? null,
       clinic,
       clinicLogo,
-    });
+    };
+
+    setUser(authenticatedUser);
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("cf_user", JSON.stringify(authenticatedUser));
+      } catch {
+        // ignore
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -285,31 +306,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           if (data.user) {
             await hydrateSupabaseUser(data.user);
           } else {
-            if (!supabaseConfig.configured || supabaseConfig.demoMode) {
-              const stored = localStorage.getItem("cf_user");
-              if (stored) {
-                const parsed = JSON.parse(stored);
-                if (isAuthUser(parsed)) {
-                  setUser(parsed);
-                  return;
-                }
+            const stored = localStorage.getItem("cf_user");
+            if (stored) {
+              const parsed = JSON.parse(stored);
+              if (isAuthUser(parsed)) {
+                setUser(parsed);
+                return;
               }
             }
             setUser(null);
           }
         } catch {
-          if (!supabaseConfig.configured || supabaseConfig.demoMode) {
-            const stored = localStorage.getItem("cf_user");
-            if (stored) {
-              try {
-                const parsed = JSON.parse(stored);
-                if (isAuthUser(parsed)) {
-                  setUser(parsed);
-                  return;
-                }
-              } catch {
-                // ignore
+          const stored = localStorage.getItem("cf_user");
+          if (stored) {
+            try {
+              const parsed = JSON.parse(stored);
+              if (isAuthUser(parsed)) {
+                setUser(parsed);
+                return;
               }
+            } catch {
+              // ignore
             }
           }
           setUser(null);
@@ -321,10 +338,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: listener } = supabase.auth.onAuthStateChange(
       (event: AuthChangeEvent, session: Session | null) => {
         if (event === "PASSWORD_RECOVERY") setPasswordSetupRequired(true);
-        if (event === "SIGNED_OUT") setPasswordSetupRequired(false);
-        queueMicrotask(() => {
-          void hydrateSupabaseUser(session?.user ?? null).catch(() => {
-            if (!supabaseConfig.configured || supabaseConfig.demoMode) {
+        if (event === "SIGNED_OUT") {
+          setPasswordSetupRequired(false);
+          persist(null);
+          return;
+        }
+        if (session?.user) {
+          queueMicrotask(() => {
+            void hydrateSupabaseUser(session.user).catch(() => {
               const stored = localStorage.getItem("cf_user");
               if (stored) {
                 try {
@@ -337,10 +358,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                   // ignore
                 }
               }
-            }
-            setUser(null);
+              setUser(null);
+            });
           });
-        });
+        }
       },
     );
 
@@ -363,7 +384,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       expired = true;
       void getSupabaseBrowserClient()
         .auth.signOut()
-        .finally(() => setUser(null));
+        .finally(() => persist(null));
     };
     const resetTimeout = () => {
       if (expired) return;
@@ -394,12 +415,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(u);
 
     if (typeof window !== "undefined") {
-      if (!supabaseConfig.configured || supabaseConfig.demoMode) {
-        if (u) {
-          localStorage.setItem("cf_user", JSON.stringify(u));
-        } else {
-          localStorage.removeItem("cf_user");
-        }
+      if (u) {
+        localStorage.setItem("cf_user", JSON.stringify(u));
       } else {
         localStorage.removeItem("cf_user");
       }

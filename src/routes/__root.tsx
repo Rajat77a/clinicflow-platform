@@ -37,8 +37,26 @@ function NotFoundComponent() {
 }
 
 function ErrorComponent({ error, reset }: { error: unknown; reset: () => void }) {
-  void error;
   const router = useRouter();
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const errString = error instanceof Error ? error.message : String(error || "");
+    const isChunkLoadFailed =
+      errString.includes("Failed to fetch dynamically imported module") ||
+      errString.includes("Importing a module script failed") ||
+      errString.includes("error loading dynamically imported module");
+
+    if (isChunkLoadFailed) {
+      const reloadKey = "cf_chunk_reload";
+      const lastReload = sessionStorage.getItem(reloadKey);
+      const now = Date.now();
+      if (!lastReload || now - Number(lastReload) > 10_000) {
+        sessionStorage.setItem(reloadKey, String(now));
+        window.location.reload();
+      }
+    }
+  }, [error]);
 
   const handleTryAgain = () => {
     if (typeof window !== "undefined") {
