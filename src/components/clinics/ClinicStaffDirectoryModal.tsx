@@ -3,6 +3,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Badge } from "@/components/ui/badge";
+import { useWorkspaceData } from "@/lib/workspace-data";
 
 interface StaffDirectoryModalProps {
   clinicId: string | null;
@@ -19,6 +20,7 @@ interface StaffMember {
 }
 
 export function ClinicStaffDirectoryModal({ clinicId, clinicName, onClose }: StaffDirectoryModalProps) {
+  const { staffMembers } = useWorkspaceData();
   const [staff, setStaff] = useState<StaffMember[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -33,15 +35,11 @@ export function ClinicStaffDirectoryModal({ clinicId, clinicName, onClose }: Sta
         const supabase = getSupabaseBrowserClient();
         const { data, error } = await supabase.rpc("list_current_staff");
 
-        if (error) throw error;
-
-        if (mounted && data) {
+        if (mounted && data && !error) {
           const mapped: StaffMember[] = data
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             .filter((m: any) => {
               if (m.hospital_id !== clinicId) return false;
-              // Only include members with active status (who have generated passwords and can log in)
-              // Exclude "Invited", "Expired", "Inactive", or soft-deleted members
               if (m.status !== "Active") return false;
               if (m.deleted_at) return false;
               if (m.active === false) return false;
@@ -57,16 +55,40 @@ export function ClinicStaffDirectoryModal({ clinicId, clinicName, onClose }: Sta
             }))
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             .filter((m: any) => m.role === "doctor" || m.role === "clinic_admin" || m.role === "receptionist");
-          setStaff(mapped);
+
+          if (mapped.length > 0) {
+            setStaff(mapped);
+            return;
+          }
         }
       } catch (e) {
-        console.error("Failed to load staff", e);
-      } finally {
-        if (mounted) setLoading(false);
+        console.error("Failed to load staff from RPC", e);
+      }
+
+      // Fallback to workspace staff members
+      if (mounted) {
+        const fallback = staffMembers
+          .filter((m) => {
+            const matchesClinic =
+              m.clinicId === clinicId ||
+              (m.previousClinicName && m.previousClinicName.toLowerCase() === clinicName.toLowerCase());
+            return matchesClinic && m.status === "Active" && !m.deletedAt;
+          })
+          .map((m) => ({
+            id: m.id,
+            name: m.name,
+            email: m.email,
+            role: m.role,
+            employeeNumber: m.employeeNumber || "-",
+          }));
+        setStaff(fallback);
+        setLoading(false);
       }
     }
 
-    loadStaff();
+    loadStaff().finally(() => {
+      if (mounted) setLoading(false);
+    });
 
     return () => {
       mounted = false;

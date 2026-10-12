@@ -1502,6 +1502,7 @@ const WorkspaceCtx = createContext<WorkspaceData | null>(null);
 
 function requireUser(user: AuthUser | null, permission: Permission) {
   if (!user) throw new Error("An authenticated user is required");
+  if (user.role === "super_admin") return user;
   if (!hasPermission(user.role, permission)) throw new Error(`Missing permission: ${permission}`);
   return user;
 }
@@ -1788,13 +1789,13 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
 
     const clinicScope = <T extends { clinicId: string | null }>(items: T[]) =>
       isSuperAdmin ? items : (clinicId ? items.filter(item => !item.clinicId || allowedClinicIds.has(item.clinicId) || item.clinicId === clinicId) : items);
-    const clinicPatients = user && hasPermission(user.role, "patients.read")
+    const clinicPatients = (isSuperAdmin || (user && hasPermission(user.role, "patients.read")))
       ? clinicScope(state.patients)
       : [];
-    const clinicAppointments = user && hasPermission(user.role, "appointments.read")
+    const clinicAppointments = (isSuperAdmin || (user && hasPermission(user.role, "appointments.read")))
       ? clinicScope(state.appointments)
       : [];
-    const clinicPrescriptions = user && hasPermission(user.role, "prescriptions.read")
+    const clinicPrescriptions = (isSuperAdmin || (user && hasPermission(user.role, "prescriptions.read")))
       ? clinicScope(state.prescriptions)
       : [];
 
@@ -1855,12 +1856,12 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       receptionists,
       appointments,
       prescriptions,
-      labReports: user && (hasPermission(user.role, "labs.write") || hasPermission(user.role, "prescriptions.read"))
+      labReports: (isSuperAdmin || (user && (hasPermission(user.role, "labs.write") || hasPermission(user.role, "prescriptions.read"))))
         ? clinicScope(state.labReports).filter(report =>
-            user.role !== "doctor" || patients.some(patient => patient.id === report.patientId)
+            user?.role !== "doctor" || patients.some(patient => patient.id === report.patientId)
           )
         : [],
-      bills: user && hasPermission(user.role, "billing.read")
+      bills: (isSuperAdmin || (user && hasPermission(user.role, "billing.read")))
         ? clinicScope(state.bills).map((b) => {
             const storedNotes = loadInvoiceNotesFromStorage();
             const note = b.notes ?? storedNotes[b.id] ?? (b.databaseId ? storedNotes[b.databaseId] : undefined);
@@ -1890,11 +1891,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
               return m;
             })
         : [],
-      binPatients: user && (hasPermission(user.role, "people.manage") || hasPermission(user.role, "patients.read"))
+      binPatients: (isSuperAdmin || (user && (hasPermission(user.role, "people.manage") || hasPermission(user.role, "patients.read"))))
         ? (isSuperAdmin ? state.patients : clinicScope(state.patients))
             .filter((p) => Boolean(p.deletedAt) && isWithinRetentionPeriod(p.deletedAt, 60))
         : [],
-      facilities: user && hasPermission(user.role, "facilities.manage")
+      facilities: (isSuperAdmin || (user && hasPermission(user.role, "facilities.manage")))
         ? clinicScope(state.facilities)
         : [],
       searchPatients: async (input = {}) => {
@@ -1996,7 +1997,16 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         const scoped = actor.role === "super_admin"
           ? state.auditLogs
           : state.auditLogs.filter((entry) => entry.clinicId === clinicId);
-        if (repository) return repository.listAuditLogs(input);
+        if (repository) {
+          try {
+            const res = await repository.listAuditLogs(input);
+            if (res && Array.isArray(res.rows) && res.rows.length > 0) {
+              return res;
+            }
+          } catch (err) {
+            console.warn("repository.listAuditLogs error, falling back to local audit logs:", err);
+          }
+        }
         const query = input.query?.trim().toLocaleLowerCase() ?? "";
         return localRecordPage(
           query

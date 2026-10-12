@@ -34,6 +34,8 @@ const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     "platform.payments.manage",
     "people.manage",
     "users.manage",
+    "facilities.manage",
+    "files.read",
     "reports.read",
     "audit.read",
     "downloads.read",
@@ -124,6 +126,7 @@ const ROUTE_RULES: ReadonlyArray<{ matches: RegExp; permission: Permission }> = 
 
 export function normalizeRole(role: string): Role {
   if (role === "clinical_admin" || role === "admin") return "clinic_admin";
+  if (role === "superadmin" || role === "super-admin" || role === "super admin") return "super_admin";
   return role as Role;
 }
 

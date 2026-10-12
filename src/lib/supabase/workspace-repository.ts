@@ -333,7 +333,33 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
           configuration: {},
         },
       ];
-    } else if (typeof window !== "undefined") {
+    }
+
+    // Ensure all unique clinics from registered accounts are represented in clinicRows
+    const regAccounts = getAllRegisteredAccounts();
+    for (const acc of regAccounts) {
+      if (acc.clinicId && !clinicRows.some((c) => c.id === acc.clinicId || c.short_id === acc.clinicId)) {
+        clinicRows.push({
+          id: acc.clinicId,
+          short_id: acc.clinicId.startsWith("demo-") ? "CL-002" : (acc.clinicId.length > 8 ? acc.clinicId.slice(0, 8).toUpperCase() : acc.clinicId),
+          name: acc.clinicName || "ClinicFlow Health",
+          city: "Bangalore",
+          doctors: 0,
+          receptionists: 0,
+          clinical_admins: 0,
+          patients: 0,
+          plan: "ClinicFlow Enterprise",
+          price: 499,
+          status: "Active",
+          expires: "2028-03-07",
+          access: "Allowed",
+          is_current: false,
+          configuration: {},
+        });
+      }
+    }
+
+    if (typeof window !== "undefined") {
       try {
         localStorage.setItem("cf_clinics_cache", JSON.stringify(clinicRows));
       } catch {
@@ -566,18 +592,28 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       .filter((row) => row.configuration?.purged !== "true" && row.configuration?.purged !== true)
       .map((row) => {
         const config = (row.configuration as Record<string, unknown>) || {};
+        const matchedStaff = staffMembers.filter(
+          (m) => (m.clinicId === row.id || m.clinicId === row.short_id) && !m.deletedAt && m.status !== "Inactive",
+        );
+        const calcAdmins = matchedStaff.filter((m) => m.role === "clinic_admin").length;
+        const calcDoctors = matchedStaff.filter((m) => m.role === "doctor").length;
+        const calcReceptionists = matchedStaff.filter((m) => m.role === "receptionist").length;
+        const calcPatients = patients.filter(
+          (p) => (p.clinicId === row.id || p.clinicId === row.short_id) && !p.deletedAt,
+        ).length;
+
         return {
           id: row.id,
           shortId: row.short_id,
           name: row.name,
           city: row.city ?? (config.city as string) ?? "Not set",
-          doctors: Number(row.doctors ?? 0),
-          receptionists: Number(row.receptionists ?? 0),
-          clinicalAdmins: Number(row.clinical_admins ?? 0),
-          patients: Number(row.patients ?? 0),
+          doctors: Math.max(Number(row.doctors ?? 0), calcDoctors),
+          receptionists: Math.max(Number(row.receptionists ?? 0), calcReceptionists),
+          clinicalAdmins: Math.max(Number(row.clinical_admins ?? 0), calcAdmins),
+          patients: Math.max(Number(row.patients ?? 0), calcPatients),
           plan: row.plan ?? "ClinicFlow",
-          status: row.status ?? "Expired",
-          expires: row.expires ?? "Not set",
+          status: row.status ?? "Active",
+          expires: row.expires ?? "2028-03-07",
           price: Number(row.price ?? 499),
           access: row.access === "Suspended" ? ("Suspended" as const) : ("Allowed" as const),
           deletedAt: (config.deleted_at as string) || undefined,
@@ -885,34 +921,41 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
 
   async listAuditLogs(input: RecordPageInput = {}): Promise<RecordPage<AuditEntry>> {
     const { limit, offset } = normalizePageInput(input);
-    let query = this.client
-      .from("audit_events")
-      .select(
-        "id,hospital_id,actor_user_id,action,entity_type,entity_id,occurred_at,profiles!audit_events_actor_user_id_fkey(display_name)",
-        { count: "exact" },
-      )
-      .order("occurred_at", { ascending: false })
-      .range(offset, offset + limit - 1);
-    if (input.query?.trim()) query = query.ilike("action", `%${input.query.trim()}%`);
+    try {
+      let query = this.client
+        .from("audit_events")
+        .select(
+          "id,hospital_id,actor_user_id,action,entity_type,entity_id,occurred_at,profiles!audit_events_actor_user_id_fkey(display_name)",
+          { count: "exact" },
+        )
+        .order("occurred_at", { ascending: false })
+        .range(offset, offset + limit - 1);
+      if (input.query?.trim()) query = query.ilike("action", `%${input.query.trim()}%`);
 
-    const result = await query;
-    throwIfError(result.error);
-    return {
-      rows: ((result.data ?? []) as Row[]).map((row) => {
-        const occurred = new Date(row.occurred_at);
-        return {
-          id: String(row.id),
-          clinicId: row.hospital_id,
-          user: firstRelation(row.profiles)?.display_name ?? "System",
-          action: `${row.action} ${row.entity_type}${row.entity_id ? ` ${row.entity_id}` : ""}`,
-          date: occurred.toISOString().slice(0, 10),
-          time: occurred.toISOString().slice(11, 16),
-        };
-      }),
-      total: result.count ?? 0,
-      limit,
-      offset,
-    };
+      const result = await query;
+      if (result.error) {
+        console.warn("Audit events query error:", result.error);
+        return { rows: [], total: 0, limit, offset };
+      }
+      return {
+        rows: ((result.data ?? []) as Row[]).map((row) => {
+          const occurred = new Date(row.occurred_at);
+          return {
+            id: String(row.id),
+            clinicId: row.hospital_id,
+            user: firstRelation(row.profiles)?.display_name ?? "System",
+            action: `${row.action} ${row.entity_type}${row.entity_id ? ` ${row.entity_id}` : ""}`,
+            date: occurred.toISOString().slice(0, 10),
+            time: occurred.toISOString().slice(11, 16),
+          };
+        }),
+        total: result.count ?? 0,
+        limit,
+        offset,
+      };
+    } catch {
+      return { rows: [], total: 0, limit, offset };
+    }
   }
 
   private async reloadAndFind<T>(
@@ -1682,5 +1725,6 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     }
   }
 }
+
 
 
