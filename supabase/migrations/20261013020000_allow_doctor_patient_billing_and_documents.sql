@@ -1,5 +1,5 @@
--- Give doctors read-only access to patient bills and uploaded document metadata.
--- Invoice visibility stays patient-scoped through private.can_access_patient.
+-- Give doctors read-only access to patient bills and uploaded documents.
+-- Invoice and document visibility stay patient-scoped through private.can_access_patient.
 
 begin;
 
@@ -43,5 +43,36 @@ using (
       and private.can_access_patient(i.patient_id)
   )
 );
+
+drop policy if exists documents_select on public.documents;
+create policy documents_select on public.documents
+for select to authenticated
+using (
+  hospital_id = private.current_hospital_id()
+  and private.has_permission('documents.read')
+  and (patient_id is null or private.can_access_patient(patient_id))
+);
+
+drop policy if exists hospital_documents_select on storage.objects;
+create policy hospital_documents_select on storage.objects
+for select to authenticated
+using (
+  bucket_id = 'hospital-documents'
+  and exists (
+    select 1
+    from public.documents document
+    where document.storage_bucket = storage.objects.bucket_id
+      and document.storage_path = storage.objects.name
+      and document.hospital_id = private.current_hospital_id()
+      and document.scan_status = 'clean'
+      and private.has_permission('documents.read')
+      and (
+        document.patient_id is null
+        or private.can_access_patient(document.patient_id)
+      )
+  )
+);
+
+notify pgrst, 'reload schema';
 
 commit;
