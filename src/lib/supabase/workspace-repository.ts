@@ -25,6 +25,7 @@ import type {
   Receptionist,
   ReceptionistInput,
   StaffMember,
+  WorkspaceDocument,
   WorkspaceSnapshot,
   AuditEntry,
 } from "../workspace-data";
@@ -52,6 +53,7 @@ const EMPTY_SNAPSHOT: WorkspaceSnapshot = {
   appointments: [],
   prescriptions: [],
   labReports: [],
+  documents: [],
   bills: [],
   auditLogs: [],
   staffMembers: [],
@@ -196,6 +198,24 @@ function mapBill(row: Row, patientName?: string): Bill {
   };
 }
 
+function mapDocument(row: Row, patientName?: string, uploaderName?: string): WorkspaceDocument {
+  return {
+    id: row.id,
+    clinicId: row.hospital_id,
+    patientId: row.patient_id || undefined,
+    patient: patientName ?? relatedPatientName(row),
+    name: row.original_filename,
+    category: row.category,
+    contentType: row.content_type,
+    sizeBytes: Number(row.byte_size ?? 0),
+    date: (row.released_at || row.scanned_at || row.created_at).slice(0, 10),
+    status: row.scan_status,
+    storageBucket: row.storage_bucket,
+    storagePath: row.storage_path,
+    uploadedBy: uploaderName ?? "Hospital staff",
+  };
+}
+
 export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   constructor(private readonly client: SupabaseClient = getSupabaseBrowserClient()) {}
 
@@ -209,6 +229,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       prescriptionsResult,
       labOrdersResult,
       invoicesResult,
+      documentsResult,
       auditResult,
       facilitiesResult,
     ] = await Promise.all([
@@ -249,6 +270,14 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         .order("created_at", { ascending: false })
         .limit(50),
       this.client
+        .from("documents")
+        .select(
+          "id,hospital_id,patient_id,storage_bucket,storage_path,original_filename,content_type,byte_size,category,scan_status,created_at,patients(first_name,last_name),profiles!documents_uploaded_by_fkey(display_name)",
+        )
+        .eq("scan_status", "clean")
+        .order("created_at", { ascending: false })
+        .limit(100),
+      this.client
         .from("audit_events")
         .select(
           "id,hospital_id,actor_user_id,action,entity_type,entity_id,occurred_at,profiles!audit_events_actor_user_id_fkey(display_name)",
@@ -269,6 +298,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     if (prescriptionsResult.error) console.warn("Failed to load prescriptions:", prescriptionsResult.error);
     if (labOrdersResult.error) console.warn("Failed to load lab orders:", labOrdersResult.error);
     if (invoicesResult.error) console.warn("Failed to load invoices:", invoicesResult.error);
+    if (documentsResult.error) console.warn("Failed to load documents:", documentsResult.error);
     if (auditResult.error) console.warn("Failed to load audit:", auditResult.error);
 
     const clinicRows = (hospitalResult.data ?? []) as Row[];
@@ -425,6 +455,9 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     const bills: Bill[] = ((invoicesResult.data ?? []) as Row[]).map((row) =>
       mapBill(row, patientById.get(row.patient_id)?.name),
     );
+    const documents: WorkspaceDocument[] = ((documentsResult.data ?? []) as Row[]).map((row) =>
+      mapDocument(row, patientById.get(row.patient_id)?.name, firstRelation(row.profiles)?.display_name),
+    );
 
     const clinics = clinicRows
       .filter((row) => row.configuration?.purged !== "true" && row.configuration?.purged !== true)
@@ -478,6 +511,7 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       appointments,
       prescriptions,
       labReports,
+      documents,
       bills,
       auditLogs: ((auditResult.data ?? []) as Row[]).map((row) => {
         const occurred = new Date(row.occurred_at);
@@ -697,6 +731,33 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     throwIfError(result.error);
     return {
       rows: ((result.data ?? []) as Row[]).map((row) => mapBill(row)),
+      total: result.count ?? 0,
+      limit,
+      offset,
+    };
+  }
+
+  async listDocuments(input: RecordPageInput = {}): Promise<RecordPage<WorkspaceDocument>> {
+    const { limit, offset } = normalizePageInput(input);
+    let query = this.client
+      .from("documents")
+      .select(
+        "id,hospital_id,patient_id,storage_bucket,storage_path,original_filename,content_type,byte_size,category,scan_status,created_at,patients(first_name,last_name),profiles!documents_uploaded_by_fkey(display_name)",
+        { count: "exact" },
+      )
+      .eq("scan_status", "clean")
+      .order("created_at", { ascending: false })
+      .range(offset, offset + limit - 1);
+    if (input.patientId) query = query.eq("patient_id", input.patientId);
+    if (input.recordId) query = query.eq("id", input.recordId);
+    if (input.query?.trim()) query = query.ilike("original_filename", `%${input.query.trim()}%`);
+
+    const result = await query;
+    throwIfError(result.error);
+    return {
+      rows: ((result.data ?? []) as Row[]).map((row) =>
+        mapDocument(row, undefined, firstRelation(row.profiles)?.display_name),
+      ),
       total: result.count ?? 0,
       limit,
       offset,

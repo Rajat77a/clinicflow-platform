@@ -1,73 +1,122 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { FileText, FolderOpen } from "lucide-react";
+import { PaginationFooter } from "@/components/data/pagination-footer";
 import { PageHeader } from "@/components/layout/page-header";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { FileText, ImageIcon, FlaskConical, FileBarChart, Upload, Download } from "lucide-react";
-import { toast } from "sonner";
+import { useRecordPage } from "@/lib/use-record-page";
+import { useWorkspaceData, type WorkspaceDocument } from "@/lib/workspace-data";
 
 export const Route = createFileRoute("/app/files")({ component: FilesPage });
 
-const FILES = [
-  { name: "Blood panel — Liam Andersson.pdf", patient: "Liam Andersson", size: "412 KB", date: "2026-06-12", type: "Lab Report", icon: FlaskConical },
-  { name: "MRI scan — Sophia Romano.jpg", patient: "Sophia Romano", size: "2.1 MB", date: "2026-06-08", type: "Image", icon: ImageIcon },
-  { name: "Discharge summary — Noah Petersen.pdf", patient: "Noah Petersen", size: "180 KB", date: "2026-06-04", type: "Medical Document", icon: FileText },
-  { name: "Annual report 2025.pdf", patient: "—", size: "1.6 MB", date: "2026-01-10", type: "Uploaded Report", icon: FileBarChart },
-  { name: "ECG strip — Emma Bauer.png", patient: "Emma Bauer", size: "920 KB", date: "2026-06-15", type: "Image", icon: ImageIcon },
-  { name: "X-Ray chest — Mateo Hernández.jpg", patient: "Mateo Hernández", size: "3.4 MB", date: "2026-06-14", type: "Image", icon: ImageIcon },
-];
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "Unknown size";
+  const units = ["B", "KB", "MB", "GB"];
+  let size = value;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size >= 10 || unit === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unit]}`;
+}
 
-function Grid({ filter }: { filter?: string }) {
-  const items = filter ? FILES.filter(f => f.type === filter) : FILES;
-  return (
-    <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-      {items.map((f) => {
-        const Icon = f.icon;
-        return (
-          <div key={f.name} className="group rounded-2xl border bg-card p-4 shadow-soft transition-all hover:shadow-card">
-            <div className="flex items-start gap-3">
-              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary"><Icon className="h-5 w-5" /></div>
-              <div className="min-w-0 flex-1">
-                <div className="truncate text-sm font-semibold">{f.name}</div>
-                <div className="text-xs text-muted-foreground">{f.patient} · {f.size}</div>
-                <div className="mt-1 text-xs text-muted-foreground">{f.date}</div>
-              </div>
-              <Button
-                size="icon"
-                variant="ghost"
-                className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
-                aria-label={`Download ${f.name}`}
-                title={`Download ${f.name}`}
-                onClick={() => toast.info("File download is unavailable in demo mode")}
-              >
-                <Download className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        );
-      })}
-    </div>
-  );
+function groupByPatient(documents: WorkspaceDocument[]) {
+  const groups = new Map<string, WorkspaceDocument[]>();
+  for (const document of documents) {
+    const patient = document.patientId ? document.patient : "Unassigned documents";
+    groups.set(patient, [...(groups.get(patient) ?? []), document]);
+  }
+  return Array.from(groups.entries());
 }
 
 function FilesPage() {
+  const { listDocuments } = useWorkspaceData();
+  const {
+    rows: documents,
+    total,
+    limit,
+    offset,
+    setOffset,
+    isLoading,
+    error,
+  } = useRecordPage(listDocuments);
+  const groups = groupByPatient(documents);
+
   return (
     <>
-      <PageHeader title="Files" description="Uploaded reports, lab results, scans and documents."
-        actions={<Button><Upload className="mr-1.5 h-4 w-4" /> Upload file</Button>} />
-      <Tabs defaultValue="all">
-        <TabsList className="rounded-xl bg-muted/60 p-1">
-          <TabsTrigger value="all" className="rounded-lg">All</TabsTrigger>
-          <TabsTrigger value="reports" className="rounded-lg">Reports</TabsTrigger>
-          <TabsTrigger value="medical" className="rounded-lg">Medical</TabsTrigger>
-          <TabsTrigger value="lab" className="rounded-lg">Lab</TabsTrigger>
-          <TabsTrigger value="images" className="rounded-lg">Images</TabsTrigger>
-        </TabsList>
-        <TabsContent value="all" className="mt-4"><Grid /></TabsContent>
-        <TabsContent value="reports" className="mt-4"><Grid filter="Uploaded Report" /></TabsContent>
-        <TabsContent value="medical" className="mt-4"><Grid filter="Medical Document" /></TabsContent>
-        <TabsContent value="lab" className="mt-4"><Grid filter="Lab Report" /></TabsContent>
-        <TabsContent value="images" className="mt-4"><Grid filter="Image" /></TabsContent>
-      </Tabs>
+      <PageHeader
+        title="Files"
+        description="Uploaded patient documents grouped by patient."
+      />
+
+      <div className="space-y-4">
+        {isLoading && (
+          <div className="rounded-2xl border bg-card p-8 text-center text-sm text-muted-foreground shadow-soft">
+            Loading patient documents...
+          </div>
+        )}
+        {!isLoading && error && (
+          <div className="rounded-2xl border bg-card p-8 text-center text-sm text-destructive shadow-soft">
+            {error}
+          </div>
+        )}
+        {!isLoading && !error && groups.length === 0 && (
+          <div className="rounded-2xl border bg-card p-8 text-center shadow-soft">
+            <FolderOpen className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
+            <p className="text-sm text-muted-foreground">No uploaded patient documents found.</p>
+          </div>
+        )}
+
+        {groups.map(([patient, patientDocuments]) => {
+          const patientId = patientDocuments.find((document) => document.patientId)?.patientId;
+          return (
+            <section key={patient} className="rounded-2xl border bg-card shadow-soft">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b px-5 py-4">
+                <div>
+                  <h2 className="font-display text-base font-semibold">{patient}</h2>
+                  <p className="text-xs text-muted-foreground">
+                    {patientDocuments.length} uploaded document{patientDocuments.length === 1 ? "" : "s"}
+                  </p>
+                </div>
+                {patientId && (
+                  <Button asChild variant="outline" size="sm">
+                    <Link to="/app/patients/$id" params={{ id: patientId }}>
+                      Open patient
+                    </Link>
+                  </Button>
+                )}
+              </div>
+              <div className="divide-y">
+                {patientDocuments.map((document) => (
+                  <div key={document.id} className="flex items-start gap-3 px-5 py-4">
+                    <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary">
+                      <FileText className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate text-sm font-semibold">{document.name}</div>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                        <Badge variant="outline">{document.category}</Badge>
+                        <span>{formatBytes(document.sizeBytes)}</span>
+                        <span>{document.date}</span>
+                        <span>Uploaded by {document.uploadedBy}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          );
+        })}
+      </div>
+
+      <PaginationFooter
+        offset={offset}
+        limit={limit}
+        total={total}
+        onOffsetChange={setOffset}
+        disabled={isLoading}
+      />
     </>
   );
 }

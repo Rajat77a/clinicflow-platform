@@ -13,6 +13,7 @@ import {
   type LabReport,
   type Patient,
   type Prescription,
+  type WorkspaceDocument,
 } from "@/lib/workspace-data";
 import { printDocument } from "@/lib/exporters";
 import { sendWhatsApp } from "@/lib/whatsapp";
@@ -22,7 +23,7 @@ import { supabaseConfig } from "@/lib/supabase/config";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Phone, Mail, MapPin, MessageCircle, Calendar, FileText, Receipt,
-  FolderOpen, FlaskConical, Download, Send, Printer, Edit, Eye,
+  FolderOpen, FlaskConical, Send, Printer, Edit, Eye,
   Trash2, AlertTriangle, Pencil, Check, X,
 } from "lucide-react";
 import { toast } from "sonner";
@@ -31,6 +32,37 @@ import { useRecordPage } from "@/lib/use-record-page";
 export const Route = createFileRoute("/app/patients/$id")({
   component: PatientProfile,
 });
+
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "Unknown size";
+  const units = ["B", "KB", "MB", "GB"];
+  let size = value;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size >= 10 || unit === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unit]}`;
+}
+
+function DocumentCard({ document }: { document: WorkspaceDocument }) {
+  return (
+    <div className="flex items-start gap-3 rounded-2xl border bg-card p-4 shadow-soft">
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary">
+        <FileText className="h-5 w-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-semibold">{document.name}</div>
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <Badge variant="outline">{document.category}</Badge>
+          <span>{formatBytes(document.sizeBytes)}</span>
+          <span>{document.date}</span>
+          <span>Uploaded by {document.uploadedBy}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function PatientProfile() {
   const { user } = useAuth();
@@ -44,6 +76,7 @@ function PatientProfile() {
     listPrescriptions,
     listLabReports,
     listBills,
+    listDocuments,
     updateBillNotes,
     softDeletePatient,
   } = useWorkspaceData();
@@ -62,10 +95,12 @@ function PatientProfile() {
   const prescriptionsPage = useRecordPage(listPrescriptions, { patientId: id });
   const billsPage = useRecordPage(listBills, { patientId: id });
   const labsPage = useRecordPage(listLabReports, { patientId: id });
+  const documentsPage = useRecordPage(listDocuments, { patientId: id });
   const visits = visitsPage.rows;
   const myRx = prescriptionsPage.rows;
   const myBills = billsPage.rows;
   const myLabs = labsPage.rows;
+  const myDocuments = documentsPage.rows;
 
   useEffect(() => {
     let current = true;
@@ -346,10 +381,20 @@ function PatientProfile() {
               />
             </TabsContent>
 
-            <TabsContent value="docs" className="mt-4 rounded-2xl border bg-card p-8 text-center shadow-soft">
-              <FolderOpen className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground">Uploaded documents appear here.</p>
-              <Button asChild variant="outline" className="mt-3"><Link to="/app/files">Open file manager</Link></Button>
+            <TabsContent value="docs" className="mt-4 space-y-3">
+              {documentsPage.isLoading && <EmptyCard label="Loading documents..." />}
+              {!documentsPage.isLoading && documentsPage.error && <EmptyCard label={documentsPage.error} />}
+              {!documentsPage.isLoading && !documentsPage.error && myDocuments.length === 0 && <EmptyCard label="No uploaded documents for this patient" />}
+              {myDocuments.map((document) => (
+                <DocumentCard key={document.id} document={document} />
+              ))}
+              <PaginationFooter
+                offset={documentsPage.offset}
+                limit={documentsPage.limit}
+                total={documentsPage.total}
+                onOffsetChange={documentsPage.setOffset}
+                disabled={documentsPage.isLoading}
+              />
             </TabsContent>
           </Tabs>
         </div>
