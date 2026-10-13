@@ -1,5 +1,5 @@
--- Give doctors read-only access to patient bills and uploaded documents.
--- Invoice and document visibility stay patient-scoped through private.can_access_patient.
+-- Give doctors read-only access to clinic bills and uploaded documents.
+-- Billing visibility matches other clinic staff; document visibility stays patient-scoped.
 
 begin;
 
@@ -15,7 +15,6 @@ for select to authenticated
 using (
   hospital_id = private.current_hospital_id()
   and private.has_permission('billing.read')
-  and private.can_access_patient(patient_id)
 );
 
 drop policy if exists invoice_items_select on public.invoice_items;
@@ -27,7 +26,6 @@ using (
     where i.id = invoice_id
       and i.hospital_id = private.current_hospital_id()
       and private.has_permission('billing.read')
-      and private.can_access_patient(i.patient_id)
   )
 );
 
@@ -40,7 +38,6 @@ using (
     where i.id = invoice_id
       and i.hospital_id = private.current_hospital_id()
       and private.has_permission('billing.read')
-      and private.can_access_patient(i.patient_id)
   )
 );
 
