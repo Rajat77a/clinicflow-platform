@@ -17,6 +17,7 @@ import type {
   Receptionist,
   ReceptionistInput,
   StaffMember,
+  WorkspaceDocument,
   WorkspaceSnapshot,
   AuditEntry,
 } from "../workspace-data";
@@ -49,6 +50,7 @@ export interface WorkspaceRepository {
   listPrescriptions(input?: RecordPageInput): Promise<RecordPage<Prescription>>;
   listLabReports(input?: RecordPageInput): Promise<RecordPage<LabReport>>;
   listBills(input?: RecordPageInput): Promise<RecordPage<Bill>>;
+  listDocuments(input?: RecordPageInput): Promise<RecordPage<WorkspaceDocument>>;
   listAuditLogs(input?: RecordPageInput): Promise<RecordPage<AuditEntry>>;
   createClinic(input: ClinicInput): Promise<{ id: string; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }>;
   updateClinic(input: ClinicInput): Promise<void>;
