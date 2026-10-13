@@ -7,10 +7,20 @@ const migration = await readFile(
   "utf8",
 );
 
-test("doctor billing and document access remains patient-scoped", () => {
+test("doctor billing access matches clinic staff read-only visibility", () => {
   assert.match(migration, /\('doctor', 'billing\.read'\)/);
   assert.match(migration, /\('doctor', 'documents\.read'\)/);
-  assert.match(migration, /create policy invoices_select[\s\S]*private\.can_access_patient\(patient_id\)/);
+  assert.match(migration, /create policy invoices_select[\s\S]*hospital_id = private\.current_hospital_id\(\)[\s\S]*private\.has_permission\('billing\.read'\)/);
+  assert.match(migration, /create policy invoice_items_select[\s\S]*i\.hospital_id = private\.current_hospital_id\(\)[\s\S]*private\.has_permission\('billing\.read'\)/);
+  assert.match(migration, /create policy payments_select[\s\S]*i\.hospital_id = private\.current_hospital_id\(\)[\s\S]*private\.has_permission\('billing\.read'\)/);
+  const billingPolicies = migration.slice(
+    migration.indexOf("create policy invoices_select"),
+    migration.indexOf("drop policy if exists documents_select"),
+  );
+  assert.doesNotMatch(billingPolicies, /can_access_patient/);
+});
+
+test("doctor document access remains patient-scoped", () => {
   assert.match(migration, /create policy documents_select[\s\S]*private\.can_access_patient\(patient_id\)/);
 });
 
