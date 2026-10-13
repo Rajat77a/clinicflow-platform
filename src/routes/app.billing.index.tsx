@@ -30,6 +30,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth";
+import { hasPermission } from "@/lib/access-control";
 import { useRecordPage } from "@/lib/use-record-page";
 import { useWorkspaceData, type Bill } from "@/lib/workspace-data";
 
@@ -55,6 +56,7 @@ function BillingPage() {
   const [isSavingNotes, setIsSavingNotes] = useState(false);
 
   const canEditNotes = user?.role === "clinic_admin" || user?.role === "receptionist" || user?.role === "super_admin";
+  const canWriteBilling = user ? hasPermission(user.role, "billing.write") : false;
 
   const markPaid = async () => {
     if (!viewing) return;
@@ -75,7 +77,7 @@ function BillingPage() {
       <PageHeader
         title="Billing"
         description="Invoices, payments and reconciliations."
-        actions={<Button asChild><Link to="/app/billing/new">Create bill</Link></Button>}
+        actions={canWriteBilling ? <Button asChild><Link to="/app/billing/new">Create bill</Link></Button> : null}
       />
       <div className="overflow-x-auto rounded-2xl border bg-card shadow-soft">
         <Table>
@@ -256,7 +258,7 @@ function BillingPage() {
                 )}
               </div>
 
-              {viewing.status !== "Paid" && (
+              {canWriteBilling && viewing.status !== "Paid" && (
                 <div className="space-y-2 rounded-xl border p-3">
                   <div className="text-xs font-semibold uppercase text-muted-foreground">Record payment</div>
                   <Select value={payMethod} onValueChange={setPayMethod}>
@@ -273,7 +275,7 @@ function BillingPage() {
             </div>
           )}
           <DialogFooter>
-            {viewing?.status !== "Paid" && (
+            {canWriteBilling && viewing?.status !== "Paid" && (
               <Button onClick={markPaid} disabled={isRecordingPayment}>
                 <CheckCircle2 className="mr-1.5 h-4 w-4" />
                 {isRecordingPayment ? "Recording..." : "Mark as paid"}
