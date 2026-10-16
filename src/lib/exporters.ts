@@ -33,7 +33,7 @@ export function downloadCSV(filename: string, rows: Record<string, unknown>[]) {
 }
 
 const PRINT_TAGS = new Set(["B", "BODY", "BR", "DIV", "H1", "H2", "H3", "P", "SPAN", "TABLE", "TBODY", "TD", "TH", "THEAD", "TR"]);
-const PRINT_CLASSES = new Set(["card", "muted", "row", "total"]);
+const PRINT_CLASSES = new Set(["card", "muted", "row", "total", "section", "label", "val"]);
 
 function sanitizePrintContent(html: string) {
   const fragment = DOMPurify.sanitize(html, {
@@ -59,14 +59,18 @@ export function printDocument(html: string, title = "ClinicFlow") {
   const safeContent = sanitizePrintContent(html);
   const style = w.document.createElement("style");
   style.textContent = `
-    body{font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;padding:32px;color:#0f172a}
-    h1,h2,h3{margin:0 0 8px}
-    table{width:100%;border-collapse:collapse;margin-top:12px}
-    td,th{padding:8px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:14px}
+    body{font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;padding:32px;color:#0f172a;line-height:1.5}
+    h1,h2,h3{margin:0 0 8px;font-weight:700}
+    table{width:100%;border-collapse:collapse;margin-top:16px}
+    td,th{padding:10px 8px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:13px}
+    th{font-weight:600;color:#475569;background:#f8fafc}
     .muted{color:#64748b;font-size:12px}
-    .row{display:flex;justify-content:space-between;margin:4px 0}
-    .card{border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-top:12px}
+    .row{display:flex;justify-content:space-between;margin:6px 0;font-size:13px}
+    .card{border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-top:16px;background:#ffffff}
     .total{font-weight:700;font-size:18px;border-top:2px solid #0f172a;padding-top:8px;margin-top:8px}
+    .section{margin-top:12px;padding-top:10px;border-top:1px dashed #e2e8f0}
+    .label{font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px}
+    .val{font-size:13px;color:#0f172a;white-space:pre-wrap;margin-bottom:8px}
   `;
   w.document.title = title;
   w.document.head.appendChild(style);
