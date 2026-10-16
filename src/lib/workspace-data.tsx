@@ -712,7 +712,9 @@ type Command =
   | { type: "patient.permanently_deleted"; patientId: string; actor: AuthUser }
   | { type: "patient.bulk_soft_deleted"; patientIds: string[]; actor: AuthUser }
   | { type: "patient.bulk_restored"; patientIds: string[]; actor: AuthUser }
-  | { type: "patient.bulk_permanently_deleted"; patientIds: string[]; actor: AuthUser };
+  | { type: "patient.bulk_permanently_deleted"; patientIds: string[]; actor: AuthUser }
+  | { type: "patient.updated"; value: Patient; actor: AuthUser }
+  | { type: "staff.updated"; value: { id: string; name?: string; phone?: string; specialty?: string; shift?: string; status?: "Active" | "Invited" | "Inactive" | "Expired" }; actor: AuthUser };
 
 function createId(prefix: string) {
   const suffix = globalThis.crypto?.randomUUID?.().slice(0, 8).toUpperCase()
@@ -957,6 +959,55 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         { ...state, clinics, patients: [command.value, ...state.patients] },
         command.actor,
         `Registered patient ${command.value.id}`,
+      );
+    }
+    case "patient.updated": {
+      return appendAudit(
+        {
+          ...state,
+          patients: state.patients.map((p) => p.id === command.value.id ? { ...p, ...command.value } : p),
+        },
+        command.actor,
+        `Updated patient ${command.value.name} (${command.value.id})`,
+      );
+    }
+    case "staff.updated": {
+      const { id, name, phone, specialty, shift, status } = command.value;
+      return appendAudit(
+        {
+          ...state,
+          staffMembers: state.staffMembers.map((m) => {
+            if (m.id !== id) return m;
+            return {
+              ...m,
+              ...(name ? { name } : {}),
+              ...(phone !== undefined ? { phone } : {}),
+              ...(status ? { status } : {}),
+            };
+          }),
+          doctors: state.doctors.map((d) => {
+            if (d.id !== id) return d;
+            return {
+              ...d,
+              ...(name ? { name } : {}),
+              ...(phone !== undefined ? { phone } : {}),
+              ...(specialty ? { specialty } : {}),
+              ...(status ? { status } : {}),
+            };
+          }),
+          receptionists: state.receptionists.map((r) => {
+            if (r.id !== id) return r;
+            return {
+              ...r,
+              ...(name ? { name } : {}),
+              ...(phone !== undefined ? { phone } : {}),
+              ...(shift ? { shift } : {}),
+              ...(status ? { status } : {}),
+            };
+          }),
+        },
+        command.actor,
+        `Updated staff details for user ${id}`,
       );
     }
     case "appointment.created":
@@ -1749,6 +1800,8 @@ interface WorkspaceData {
   resetUserPassword: (email: string, newPassword: string) => Promise<void>;
   resendStaffInvitation: (userId: string) => Promise<{ data: StaffMember; setupUrl: string; emailSent?: boolean; emailId?: string; emailError?: string } | void>;
   createPatient: (input: PatientInput) => Promise<Patient>;
+  updatePatient: (input: Partial<PatientInput> & { id: string }) => Promise<Patient>;
+  updateStaff: (input: { id: string; name?: string; phone?: string; specialty?: string; shift?: string; status?: "Active" | "Invited" | "Inactive" | "Expired" }) => Promise<void>;
   createAppointment: (input: AppointmentInput) => Promise<Appointment>;
   updateAppointment: (appointment: Appointment) => Promise<Appointment>;
   savePrescription: (input: PrescriptionInput) => Promise<Prescription>;
@@ -2037,9 +2090,9 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
     const clinicAppointments = user && hasPermission(user.role, "appointments.read")
       ? clinicScope(state.appointments)
       : [];
-    const clinicPrescriptions = user && hasPermission(user.role, "prescriptions.read")
+    const clinicPrescriptions = (user && hasPermission(user.role, "prescriptions.read")
       ? clinicScope(state.prescriptions)
-      : [];
+      : []).slice().sort((a, b) => (b.date || "").localeCompare(a.date || "") || b.id.localeCompare(a.id));
 
     const activeClinicPatients = clinicPatients.filter((p) => !p.deletedAt);
     const patients = user?.role === "doctor"
@@ -2308,7 +2361,10 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         }
         if (repository) return repository.listPrescriptions(input);
         return localRecordPage(
-          prescriptions.filter((item) => !input.patientId || item.patientId === input.patientId),
+          prescriptions
+            .filter((item) => !input.patientId || item.patientId === input.patientId)
+            .slice()
+            .sort((a, b) => (b.date || "").localeCompare(a.date || "") || b.id.localeCompare(a.id)),
           input,
         );
       },
@@ -2793,6 +2849,27 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           return;
         }
         dispatch({ type: "staff.deactivated", userId, actor });
+      },
+      updateStaff: async (input) => {
+        const actor = requireUser(user, "people.manage");
+        const target = state.staffMembers.find((m) => m.id === input.id);
+        if (
+          actor.role !== "super_admin" &&
+          target?.clinicId &&
+          actor.clinicId &&
+          target.clinicId !== actor.clinicId
+        ) {
+          throw new Error("You can only manage users within your clinic");
+        }
+        dispatch({ type: "staff.updated", value: input, actor });
+        if (repository?.updateStaff) {
+          try {
+            await repository.updateStaff(input);
+          } catch (err) {
+            console.warn("Backend updateStaff failed, local state updated:", err);
+          }
+          await refresh().catch(() => undefined);
+        }
       },
       softDeleteStaff: async (userId: string) => {
         const actor = requireUser(user, "people.manage");
@@ -3375,6 +3452,46 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         };
         dispatch({ type: "patient.created", value: patient, actor });
         return patient;
+      },
+      updatePatient: async (input) => {
+        const actor = requireUser(user, "patients.read");
+        if (repository?.updatePatient) {
+          const patient = await repository.updatePatient(input);
+          dispatch({ type: "patient.updated", value: patient, actor });
+          await refresh().catch(() => undefined);
+          return patient;
+        }
+        const existing = state.patients.find((p) => p.id === input.id);
+        if (!existing) throw new Error("Patient not found");
+        let age = existing.age;
+        if (input.dateOfBirth) {
+          const birthDate = new Date(`${input.dateOfBirth}T00:00:00`);
+          const today = new Date();
+          age = today.getFullYear() - birthDate.getFullYear();
+          if (
+            today.getMonth() < birthDate.getMonth()
+            || (today.getMonth() === birthDate.getMonth() && today.getDate() < birthDate.getDate())
+          ) {
+            age -= 1;
+          }
+        }
+        const updated: Patient = {
+          ...existing,
+          ...(input.name ? { name: input.name } : {}),
+          ...(input.dateOfBirth ? { dateOfBirth: input.dateOfBirth, age } : {}),
+          ...(input.gender ? { gender: input.gender } : {}),
+          ...(input.phone !== undefined ? { phone: input.phone } : {}),
+          ...(input.email !== undefined ? { email: input.email } : {}),
+          ...(input.whatsappPhone !== undefined ? { whatsappPhone: input.whatsappPhone } : {}),
+          ...(input.address !== undefined ? { address: input.address } : {}),
+          ...(input.bloodGroup !== undefined ? { bloodGroup: input.bloodGroup } : {}),
+          ...(input.emergencyContactName !== undefined ? { emergencyContactName: input.emergencyContactName } : {}),
+          ...(input.emergencyContactPhone !== undefined ? { emergencyContactPhone: input.emergencyContactPhone } : {}),
+          ...(input.allergies !== undefined ? { allergies: input.allergies } : {}),
+          ...(input.chronicConditions !== undefined ? { chronicConditions: input.chronicConditions } : {}),
+        };
+        dispatch({ type: "patient.updated", value: updated, actor });
+        return updated;
       },
       createAppointment: async (input) => {
         const actor = requireUser(user, "appointments.create");

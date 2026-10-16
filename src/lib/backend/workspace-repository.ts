@@ -67,12 +67,14 @@ export interface WorkspaceRepository {
   createReceptionist(input: ReceptionistInput): Promise<{ data: Receptionist; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }>;
   inviteClinicAdmin(input: ClinicAdminInput): Promise<{ data: StaffMember; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }>;
   createPatient(input: PatientInput): Promise<Patient>;
+  updatePatient?(input: Partial<PatientInput> & { id: string }): Promise<Patient>;
   createAppointment(input: AppointmentInput): Promise<Appointment>;
   updateAppointment(appointment: Appointment): Promise<Appointment>;
   savePrescription(input: PrescriptionInput): Promise<Prescription>;
   saveLabReports(reports: Omit<LabReport, "clinicId">[]): Promise<LabReport[]>;
   createBill(input: BillInput): Promise<Bill>;
   updateBill(bill: Bill): Promise<Bill>;
+  updateStaff?(input: { id: string; name?: string; phone?: string; specialty?: string; shift?: string; status?: "Active" | "Invited" | "Inactive" | "Expired" }): Promise<void>;
   inviteSuperAdmin(input: { name: string; email: string; phone: string; tempPassword?: string }): Promise<{ data: StaffMember; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }>;
   deactivateStaff(userId: string, reason: string): Promise<void>;
   softDeleteStaff?(userId: string): Promise<void>;
