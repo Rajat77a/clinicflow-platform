@@ -365,6 +365,21 @@ export type LabReport = {
   fileData?: string;
   uploadedBy: string;
 };
+export type WorkspaceDocument = {
+  id: string;
+  clinicId: string;
+  patientId?: string;
+  patient: string;
+  name: string;
+  category: string;
+  contentType: string;
+  sizeBytes: number;
+  date: string;
+  status: string;
+  storageBucket: string;
+  storagePath: string;
+  uploadedBy: string;
+};
 export type Bill = {
   id: string;
   clinicId: string;
@@ -532,6 +547,7 @@ export interface WorkspaceSnapshot {
   appointments: Appointment[];
   prescriptions: Prescription[];
   labReports: LabReport[];
+  documents: WorkspaceDocument[];
   bills: Bill[];
   auditLogs: AuditEntry[];
   staffMembers: StaffMember[];
@@ -707,6 +723,7 @@ function emptySnapshot(): WorkspaceSnapshot {
     appointments: [],
     prescriptions: [],
     labReports: [],
+    documents: [],
     bills: [],
     auditLogs: [],
     staffMembers: [],
@@ -1676,6 +1693,7 @@ interface WorkspaceData {
   appointments: Appointment[];
   prescriptions: Prescription[];
   labReports: LabReport[];
+  documents: WorkspaceDocument[];
   bills: Bill[];
   auditLogs: AuditEntry[];
   staffMembers: StaffMember[];
@@ -1689,6 +1707,7 @@ interface WorkspaceData {
   listPrescriptions: (input?: RecordPageInput) => Promise<RecordPage<Prescription>>;
   listLabReports: (input?: RecordPageInput) => Promise<RecordPage<LabReport>>;
   listBills: (input?: RecordPageInput) => Promise<RecordPage<Bill>>;
+  listDocuments: (input?: RecordPageInput) => Promise<RecordPage<WorkspaceDocument>>;
   listAuditLogs: (input?: RecordPageInput) => Promise<RecordPage<AuditEntry>>;
   createClinic: (input: ClinicInput) => Promise<Clinic>;
   updateClinic: (input: ClinicInput) => Promise<void>;
@@ -2067,6 +2086,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             user.role !== "doctor" || patients.some(patient => patient.id === report.patientId)
           )
         : [],
+      documents: user && hasPermission(user.role, "files.read")
+        ? clinicScope(state.documents).filter(document =>
+            user.role !== "doctor" || !document.patientId || patients.some(patient => patient.id === document.patientId)
+          )
+        : [],
       bills: user && hasPermission(user.role, "billing.read")
         ? clinicScope(state.bills).map((b) => {
             const storedNotes = loadInvoiceNotesFromStorage();
@@ -2298,6 +2322,21 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         return localRecordPage(
           clinicScope(state.bills).filter(
             (item) => !input.patientId || item.patientId === input.patientId,
+          ),
+          input,
+        );
+      },
+      listDocuments: async (input = {}) => {
+        if (!user || !hasPermission(user.role, "files.read")) {
+          return localRecordPage([], input);
+        }
+        if (repository) return repository.listDocuments(input);
+        const visiblePatients = user.role === "doctor" ? new Set(patients.map((patient) => patient.id)) : null;
+        return localRecordPage(
+          clinicScope(state.documents).filter(
+            (item) =>
+              (!input.patientId || item.patientId === input.patientId)
+              && (!visiblePatients || !item.patientId || visiblePatients.has(item.patientId)),
           ),
           input,
         );

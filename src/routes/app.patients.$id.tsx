@@ -14,6 +14,7 @@ import {
   type Patient,
   type Prescription,
   type PatientDocument,
+  type WorkspaceDocument,
 } from "@/lib/workspace-data";
 import { printDocument } from "@/lib/exporters";
 import { sendWhatsApp } from "@/lib/whatsapp";
@@ -33,6 +34,37 @@ export const Route = createFileRoute("/app/patients/$id")({
   component: PatientProfile,
 });
 
+function formatBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "Unknown size";
+  const units = ["B", "KB", "MB", "GB"];
+  let size = value;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size >= 10 || unit === 0 ? size.toFixed(0) : size.toFixed(1)} ${units[unit]}`;
+}
+
+function DocumentCard({ document }: { document: WorkspaceDocument }) {
+  return (
+    <div className="flex items-start gap-3 rounded-2xl border bg-card p-4 shadow-soft">
+      <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary">
+        <FileText className="h-5 w-5" />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-sm font-semibold">{document.name}</div>
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+          <Badge variant="outline">{document.category}</Badge>
+          <span>{formatBytes(document.sizeBytes)}</span>
+          <span>{document.date}</span>
+          <span>Uploaded by {document.uploadedBy}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function PatientProfile() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -45,6 +77,7 @@ function PatientProfile() {
     listPrescriptions,
     listLabReports,
     listBills,
+    listDocuments,
     updateBillNotes,
     softDeletePatient,
     listPatientDocuments,
@@ -69,10 +102,12 @@ function PatientProfile() {
   const prescriptionsPage = useRecordPage(listPrescriptions, { patientId: id });
   const billsPage = useRecordPage(listBills, { patientId: id });
   const labsPage = useRecordPage(listLabReports, { patientId: id });
+  const documentsPage = useRecordPage(listDocuments, { patientId: id });
   const visits = visitsPage.rows;
   const myRx = prescriptionsPage.rows;
   const myBills = billsPage.rows;
   const myLabs = labsPage.rows;
+  const myDocuments = documentsPage.rows;
 
   useEffect(() => {
     let current = true;
@@ -439,8 +474,10 @@ function PatientProfile() {
                 </label>
               </div>
 
+              {documentsPage.isLoading && <EmptyCard label="Loading documents..." />}
+              {!documentsPage.isLoading && documentsPage.error && <EmptyCard label={documentsPage.error} />}
+
               {(() => {
-                // Combine explicit documents with lab reports that have attached files
                 const labDocs: PatientDocument[] = myLabs
                   .filter(l => l.fileName)
                   .map(l => ({
@@ -456,74 +493,94 @@ function PatientProfile() {
                   }));
                 const allDocs = [...patientDocs, ...labDocs];
 
-                if (allDocs.length === 0) {
-                  return (
-                    <div className="rounded-2xl border bg-card p-10 text-center shadow-soft">
-                      <FolderOpen className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
-                      <p className="text-sm font-medium">No documents uploaded yet</p>
-                      <p className="text-xs text-muted-foreground mt-1">Upload files or attach reports to this patient record.</p>
-                    </div>
-                  );
-                }
-
                 return (
-                  <div className="grid gap-3 sm:grid-cols-2">
-                    {allDocs.map((doc) => (
-                      <div
-                        key={doc.id}
-                        className="group flex items-start justify-between gap-3 rounded-2xl border bg-card p-4 shadow-soft transition-all hover:border-primary/50 hover:shadow-card"
-                      >
-                        <div className="flex items-start gap-3 min-w-0">
-                          <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary">
-                            {doc.type.includes("Lab") ? (
-                              <FlaskConical className="h-5 w-5" />
-                            ) : (
-                              <File className="h-5 w-5" />
-                            )}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-semibold" title={doc.name}>
-                              {doc.name}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {doc.type} · {doc.size}
-                            </div>
-                            <div className="mt-1 text-xs text-muted-foreground">
-                              {doc.date} · by {doc.uploadedBy}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1">
-                          <Button
-                            size="icon"
-                            variant="ghost"
-                            className="h-8 w-8"
-                            title={`Download ${doc.name}`}
-                            onClick={() => handleDownloadFile(doc.name, doc.fileData)}
-                          >
-                            <Download className="h-4 w-4" />
-                          </Button>
-                          {doc.source === "document" && (
-                            <Button
-                              size="icon"
-                              variant="ghost"
-                              className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                              title="Delete document"
-                              onClick={async () => {
-                                await deletePatientDocument(doc.id);
-                                setPatientDocs(prev => prev.filter(d => d.id !== doc.id));
-                                toast.success("Document removed");
-                              }}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          )}
-                        </div>
+                  <>
+                    {myDocuments.length > 0 && (
+                      <div className="space-y-3">
+                        {myDocuments.map((document) => (
+                          <DocumentCard key={document.id} document={document} />
+                        ))}
                       </div>
-                    ))}
-                  </div>
+                    )}
+
+                    {allDocs.length > 0 && (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {allDocs.map((doc) => (
+                          <div
+                            key={doc.id}
+                            className="group flex items-start justify-between gap-3 rounded-2xl border bg-card p-4 shadow-soft transition-all hover:border-primary/50 hover:shadow-card"
+                          >
+                            <div className="flex items-start gap-3 min-w-0">
+                              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary">
+                                {doc.type.includes("Lab") ? (
+                                  <FlaskConical className="h-5 w-5" />
+                                ) : (
+                                  <File className="h-5 w-5" />
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-semibold" title={doc.name}>
+                                  {doc.name}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {doc.type} · {doc.size}
+                                </div>
+                                <div className="mt-1 text-xs text-muted-foreground">
+                                  {doc.date} · by {doc.uploadedBy}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8"
+                                title={`Download ${doc.name}`}
+                                onClick={() => handleDownloadFile(doc.name, doc.fileData)}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              {doc.source === "document" && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                  title="Delete document"
+                                  onClick={async () => {
+                                    await deletePatientDocument(doc.id);
+                                    setPatientDocs(prev => prev.filter(d => d.id !== doc.id));
+                                    toast.success("Document removed");
+                                  }}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {!documentsPage.isLoading && myDocuments.length === 0 && allDocs.length === 0 && (
+                      <div className="rounded-2xl border bg-card p-10 text-center shadow-soft">
+                        <FolderOpen className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
+                        <p className="text-sm font-medium">No documents uploaded yet</p>
+                        <p className="text-xs text-muted-foreground mt-1">Upload files or attach reports to this patient record.</p>
+                      </div>
+                    )}
+                  </>
                 );
               })()}
+
+              {myDocuments.length > 0 && (
+                <PaginationFooter
+                  offset={documentsPage.offset}
+                  limit={documentsPage.limit}
+                  total={documentsPage.total}
+                  onOffsetChange={documentsPage.setOffset}
+                  disabled={documentsPage.isLoading}
+                />
+              )}
             </TabsContent>
           </Tabs>
         </div>

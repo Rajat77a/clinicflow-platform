@@ -386,8 +386,13 @@ async function main() {
   );
   assert.deepEqual(
     await visibleIds(doctor.client, "invoices", invoiceId),
+    [invoiceId],
+    "assigned doctor must see the patient invoice",
+  );
+  assert.deepEqual(
+    await visibleIds(unrelatedDoctor.client, "invoices", invoiceId),
     [],
-    "doctor must not see billing records",
+    "unrelated doctor must not see patient invoices",
   );
 
   const { data: auditRows, error: auditError } = await clinicAdmin.client

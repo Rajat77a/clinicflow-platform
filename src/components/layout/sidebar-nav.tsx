@@ -71,6 +71,8 @@ const NAV: Record<Role, NavSection[]> = {
       { to: "/app/patients", label: "Patients", icon: UsersRound },
       { to: "/app/appointments", label: "Appointments", icon: CalendarDays },
       { to: "/app/prescriptions", label: "Prescriptions", icon: FileText },
+      { to: "/app/billing", label: "Billing", icon: Receipt },
+      { to: "/app/files", label: "Files", icon: FolderOpen },
       { to: "/app/followups", label: "Follow-ups", icon: CalendarClock },
     ]},
     { label: "Account", items: [

@@ -31,6 +31,7 @@ test("clinical roles subscribe only to relevant hospital records", () => {
     "appointments",
     "prescriptions",
     "lab_orders",
+    "invoices",
   ]);
   assert.deepEqual(tableNames("receptionist"), [
     "hospitals",
