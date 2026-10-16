@@ -173,15 +173,15 @@ function NewBill() {
 
   const shareBill = () => {
     if (!patient) return;
-    const targetPhone = patient.raw?.whatsappPhone?.trim() || patient.tertiary?.trim() || "";
+    const targetPhone = patient.raw?.whatsappPhone?.trim() || "";
     if (!targetPhone) {
-      toast.error("No WhatsApp number available for this patient");
+      toast.error("WhatsApp number is not available");
       return;
     }
     const lineText = lines.map(l => `• ${l.name} (${l.category}) × ${l.qty} = ₹${(l.qty*l.unit).toFixed(2)}`).join("\n");
-    const msg = `Hi ${patient.primary}, invoice from ${user?.clinic}:\n${lineText}\n\nSubtotal: ₹${subtotal.toFixed(2)}\nDiscount: ₹${discount.toFixed(2)}\nTax: ${tax}%\nTotal: ₹${total.toFixed(2)}`;
+    const msg = `Hi ${patient.primary}, invoice from ${user?.clinic ?? "ClinicFlow"}:\n${lineText}\n\nSubtotal: ₹${subtotal.toFixed(2)}\nDiscount: ₹${discount.toFixed(2)}\nTax: ${tax}%\nTotal: ₹${total.toFixed(2)}`;
     sendWhatsApp(targetPhone, msg);
-    toast.success(`Opening WhatsApp for ${patient.primary}`);
+    toast.success(`Opening WhatsApp chat for ${patient.primary}`);
   };
 
   return (

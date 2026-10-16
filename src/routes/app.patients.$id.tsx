@@ -241,13 +241,13 @@ function PatientProfile() {
   };
 
   const getPatientWhatsAppNumber = () => {
-    return patient.whatsappPhone?.trim() || patient.phone?.trim() || "";
+    return patient.whatsappPhone?.trim() || "";
   };
 
   const shareRx = (rx: Prescription) => {
     const targetPhone = getPatientWhatsAppNumber();
     if (!targetPhone) {
-      toast.error("No WhatsApp number available for this patient");
+      toast.error("WhatsApp number is not available");
       return;
     }
     const parts = [
@@ -262,18 +262,18 @@ function PatientProfile() {
     ].filter(Boolean);
     const msg = parts.join("\n\n");
     sendWhatsApp(targetPhone, msg);
-    toast.success(`Opening WhatsApp for ${patient.name}`);
+    toast.success(`Opening WhatsApp chat for ${patient.name}`);
   };
 
   const shareBill = (b: Bill) => {
     const targetPhone = getPatientWhatsAppNumber();
     if (!targetPhone) {
-      toast.error("No WhatsApp number available for this patient");
+      toast.error("WhatsApp number is not available");
       return;
     }
-    const msg = `Hi ${patient.name}, invoice ${b.id} from ${user?.clinic ?? "ClinicFlow"}: Amount: ₹${b.amount.toFixed(2)} (${b.status}). Date: ${b.date}`;
+    const msg = `Hi ${patient.name}, invoice ${b.id} from ${user?.clinic ?? "ClinicFlow"}:\nAmount: ₹${b.amount.toFixed(2)} (${b.status})\nDate: ${b.date}`;
     sendWhatsApp(targetPhone, msg);
-    toast.success(`Opening WhatsApp for ${patient.name}`);
+    toast.success(`Opening WhatsApp chat for ${patient.name}`);
   };
 
   return (
@@ -319,8 +319,19 @@ function PatientProfile() {
             {patient.address && <div className="flex items-start gap-2"><MapPin className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" /> <span>{patient.address}</span></div>}
             {canUseExternalSharing && <div className="flex items-center gap-2">
               <MessageCircle className="h-4 w-4 text-muted-foreground" />
-              <button className="hover:underline text-left" onClick={() => sendWhatsApp(patient.phone, `Hello ${patient.name}, this is ${user?.clinic}.`)}>
-                {patient.phone} (WhatsApp)
+              <button
+                className="hover:underline text-left"
+                onClick={() => {
+                  const targetPhone = getPatientWhatsAppNumber();
+                  if (!targetPhone) {
+                    toast.error("WhatsApp number is not available");
+                    return;
+                  }
+                  sendWhatsApp(targetPhone, `Hello ${patient.name}, this is ${user?.clinic ?? "ClinicFlow"}.`);
+                  toast.success(`Opening WhatsApp chat for ${patient.name}`);
+                }}
+              >
+                {patient.whatsappPhone ? `${patient.whatsappPhone} (WhatsApp)` : "WhatsApp chat"}
               </button>
             </div>}
             <div className="flex items-center gap-2"><Calendar className="h-4 w-4 text-muted-foreground" /> <span>Last visit {patient.lastVisit}</span></div>

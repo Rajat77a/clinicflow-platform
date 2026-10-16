@@ -68,14 +68,14 @@ function BillingPage() {
         // Ignore
       }
     }
-    const targetPhone = p?.whatsappPhone?.trim() || p?.phone?.trim() || "";
+    const targetPhone = p?.whatsappPhone?.trim() || "";
     if (!targetPhone) {
-      toast.error("No WhatsApp number available for this patient");
+      toast.error("WhatsApp number is not available");
       return;
     }
-    const msg = `Hi ${bill.patient}, invoice ${bill.id} from ${user?.clinic ?? "ClinicFlow"}: Amount: INR ${bill.amount.toFixed(2)} (${bill.status}). Date: ${bill.date}`;
+    const msg = `Hi ${bill.patient}, invoice ${bill.id} from ${user?.clinic ?? "ClinicFlow"}:\nAmount: INR ${bill.amount.toFixed(2)} (${bill.status})\nDate: ${bill.date}`;
     sendWhatsApp(targetPhone, msg);
-    toast.success(`Opening WhatsApp for ${bill.patient}`);
+    toast.success(`Opening WhatsApp chat for ${bill.patient}`);
   };
 
   const markPaid = async () => {

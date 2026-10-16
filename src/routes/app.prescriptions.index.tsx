@@ -38,9 +38,9 @@ function PrescriptionsPage() {
         // Ignore
       }
     }
-    const targetPhone = p?.whatsappPhone?.trim() || p?.phone?.trim() || "";
+    const targetPhone = p?.whatsappPhone?.trim() || "";
     if (!targetPhone) {
-      toast.error("No WhatsApp number available for this patient");
+      toast.error("WhatsApp number is not available");
       return;
     }
     const parts = [
@@ -55,7 +55,7 @@ function PrescriptionsPage() {
     ].filter(Boolean);
     const msg = parts.join("\n\n");
     sendWhatsApp(targetPhone, msg);
-    toast.success(`Opening WhatsApp for ${rx.patient}`);
+    toast.success(`Opening WhatsApp chat for ${rx.patient}`);
   };
   return (
     <>
