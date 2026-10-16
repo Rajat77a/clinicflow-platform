@@ -141,7 +141,16 @@ function AppointmentsPage() {
               {rows.map(a => (
                 <TableRow key={a.id}>
                   <TableCell className="font-mono text-xs">{a.id}</TableCell>
-                  <TableCell className="font-semibold">{a.patient}</TableCell>
+                  <TableCell className="font-semibold">
+                    <Link
+                      to="/app/patients/$id"
+                      params={{ id: a.patientId }}
+                      className="text-foreground hover:text-primary hover:underline transition-colors"
+                      title={`View details for ${a.patient}`}
+                    >
+                      {a.patient}
+                    </Link>
+                  </TableCell>
                   <TableCell>{a.doctor}</TableCell>
                   <TableCell>{a.date} · <span className="font-semibold">{a.time}</span></TableCell>
                   <TableCell>{a.type}</TableCell>
