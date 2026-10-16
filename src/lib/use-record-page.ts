@@ -17,16 +17,19 @@ export function useRecordPage<T>(
   const [error, setError] = useState<string | null>(null);
   const query = input.query ?? "";
   const patientId = input.patientId;
+  const recordId = input.recordId;
+  const date = input.date;
+  const scope = input.scope;
 
   useEffect(() => {
     setOffset(0);
-  }, [query, patientId]);
+  }, [query, patientId, recordId, date, scope]);
 
   useEffect(() => {
     let active = true;
     setIsLoading(true);
     setError(null);
-    void loader({ query, patientId, limit, offset })
+    void loader({ query, patientId, recordId, date, scope, limit, offset })
       .then((result) => {
         if (active) setPage(result);
       })
@@ -41,7 +44,7 @@ export function useRecordPage<T>(
     return () => {
       active = false;
     };
-  }, [limit, loader, offset, patientId, query]);
+  }, [date, limit, loader, offset, patientId, query, recordId, scope]);
 
   return { ...page, offset, setOffset, isLoading, error };
 }
