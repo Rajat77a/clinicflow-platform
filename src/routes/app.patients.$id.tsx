@@ -226,7 +226,12 @@ function PatientProfile() {
       <div class="card">
         <div class="row"><b>Patient</b><span>${patient.name} (${patient.id})</span></div>
         <div class="row"><b>Doctor</b><span>${rx.doctor}</span></div>
-        <div class="row"><b>Diagnosis</b><span>${rx.diagnosis}</span></div>
+        ${rx.presentingComplaints ? `<div class="row"><b>Presenting Complaints</b><span style="white-space: pre-wrap;">${rx.presentingComplaints}</span></div>` : ""}
+        ${rx.pastIllnessHistory ? `<div class="row"><b>History of Past Illness</b><span style="white-space: pre-wrap;">${rx.pastIllnessHistory}</span></div>` : ""}
+        ${rx.clinicalFindings ? `<div class="row"><b>Clinical Findings</b><span style="white-space: pre-wrap;">${rx.clinicalFindings}</span></div>` : ""}
+        <div class="row"><b>Diagnosis</b><span style="white-space: pre-wrap;">${rx.diagnosis}</span></div>
+        ${rx.treatmentNotes ? `<div class="row"><b>Treatment Notes</b><span style="white-space: pre-wrap;">${rx.treatmentNotes}</span></div>` : ""}
+        ${rx.notes ? `<div class="row"><b>Additional Notes</b><span style="white-space: pre-wrap;">${rx.notes}</span></div>` : ""}
         ${rx.followUp ? `<div class="row"><b>Follow-up</b><span>${rx.followUp}</span></div>` : ""}
       </div>
       <h3>Medicines</h3>
@@ -236,7 +241,17 @@ function PatientProfile() {
   };
 
   const shareRx = (rx: Prescription) => {
-    const msg = `Hi ${patient.name}, prescription ${rx.id} (${rx.date}):\nDiagnosis: ${rx.diagnosis}\n${rx.medicines.map(m => `• ${m.name} — ${m.dosage} ${m.frequency} × ${m.duration}`).join("\n")}`;
+    const parts = [
+      `Hi ${patient.name}, prescription ${rx.id} (${rx.date}):`,
+      rx.presentingComplaints?.trim() ? `Presenting Complaints:\n${rx.presentingComplaints.trim()}` : "",
+      rx.pastIllnessHistory?.trim() ? `History of Past Illness:\n${rx.pastIllnessHistory.trim()}` : "",
+      rx.clinicalFindings?.trim() ? `Clinical Findings:\n${rx.clinicalFindings.trim()}` : "",
+      `Diagnosis:\n${rx.diagnosis}`,
+      rx.treatmentNotes?.trim() ? `Treatment Notes:\n${rx.treatmentNotes.trim()}` : "",
+      `Medicines:\n${rx.medicines.map(m => `• ${m.name} — ${m.dosage} ${m.frequency} × ${m.duration}`).join("\n")}`,
+      rx.followUp ? `Follow-up: ${rx.followUp}` : "",
+    ].filter(Boolean);
+    const msg = parts.join("\n\n");
     sendWhatsApp(patient.phone, msg);
   };
 
@@ -326,8 +341,37 @@ function PatientProfile() {
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="font-mono text-xs text-muted-foreground">{r.id} · {r.date}</div>
-                      <div className="font-display text-base font-semibold">{r.diagnosis}</div>
+                      <div className="mt-1 font-display text-base font-semibold whitespace-pre-wrap">{r.diagnosis}</div>
                       <div className="text-xs text-muted-foreground">{r.doctor}{r.followUp ? ` · Follow-up ${r.followUp}` : ""}</div>
+
+                      {(r.presentingComplaints || r.pastIllnessHistory || r.clinicalFindings || r.treatmentNotes) && (
+                        <div className="mt-3 space-y-1.5 border-t pt-2 text-xs">
+                          {r.presentingComplaints && (
+                            <div>
+                              <span className="font-semibold text-muted-foreground">Complaints: </span>
+                              <span className="whitespace-pre-wrap">{r.presentingComplaints}</span>
+                            </div>
+                          )}
+                          {r.pastIllnessHistory && (
+                            <div>
+                              <span className="font-semibold text-muted-foreground">Past Illness: </span>
+                              <span className="whitespace-pre-wrap">{r.pastIllnessHistory}</span>
+                            </div>
+                          )}
+                          {r.clinicalFindings && (
+                            <div>
+                              <span className="font-semibold text-muted-foreground">Findings: </span>
+                              <span className="whitespace-pre-wrap">{r.clinicalFindings}</span>
+                            </div>
+                          )}
+                          {r.treatmentNotes && (
+                            <div>
+                              <span className="font-semibold text-muted-foreground">Treatment: </span>
+                              <span className="whitespace-pre-wrap">{r.treatmentNotes}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
                     </div>
                     <div className="flex gap-1">
                       <Button size="sm" variant="ghost" onClick={() => printRx(r)} aria-label={`Print ${r.id}`} title={`Print ${r.id}`}><Printer className="h-3.5 w-3.5" /></Button>

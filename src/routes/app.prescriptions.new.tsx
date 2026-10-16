@@ -66,9 +66,32 @@ function NewPrescription() {
       ? doctorOptions.find(d => d.raw.name === seed.doctor) ?? null
       : doctorOptions.length > 0 ? doctorOptions[0] : null
   );
+  const [presentingComplaints, setPresentingComplaints] = useState(seed?.presentingComplaints ?? "");
+  const [pastIllnessHistory, setPastIllnessHistory] = useState(seed?.pastIllnessHistory ?? "");
+  const [clinicalFindings, setClinicalFindings] = useState(seed?.clinicalFindings ?? "");
   const [diagnosis, setDiagnosis] = useState(seed?.diagnosis ?? "");
   const [notes, setNotes] = useState(seed?.notes ?? "");
+  const [treatmentNotes, setTreatmentNotes] = useState(seed?.treatmentNotes ?? seed?.notes ?? "");
   const [followup, setFollowup] = useState(seed?.followUp ?? "");
+
+  const adjustTextareaHeight = (element: HTMLTextAreaElement) => {
+    element.style.height = "auto";
+    const newHeight = Math.min(Math.max(element.scrollHeight, 46), 260);
+    element.style.height = `${newHeight}px`;
+    element.style.overflowY = element.scrollHeight > 260 ? "auto" : "hidden";
+  };
+
+  const handleKeySubmitOrLine = (
+    e: React.KeyboardEvent<HTMLTextAreaElement>,
+  ) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      const form = e.currentTarget.closest("form");
+      if (form) {
+        form.requestSubmit();
+      }
+    }
+  };
   const [meds, setMeds] = useState<Med[]>(
     seed?.medicines.map(m => ({ name: m.name, dosage: m.dosage, frequency: m.frequency, duration: m.duration })) ??
     (isLabMode ? [] : [{ name: "", dosage: "", frequency: "", duration: "" }])
@@ -151,12 +174,24 @@ function NewPrescription() {
     if (meds.length === 0 || !meds[0].name.trim()) { toast.error("Add at least one medicine"); return; }
     setIsSaving(true);
     try {
+      const combinedNotes = [
+        presentingComplaints.trim() ? `Presenting Complaints:\n${presentingComplaints.trim()}` : "",
+        pastIllnessHistory.trim() ? `History of Past Illness:\n${pastIllnessHistory.trim()}` : "",
+        clinicalFindings.trim() ? `Clinical Findings:\n${clinicalFindings.trim()}` : "",
+        treatmentNotes.trim() ? `Treatment Notes:\n${treatmentNotes.trim()}` : "",
+        notes.trim() ? `Additional Notes:\n${notes.trim()}` : "",
+      ].filter(Boolean).join("\n\n");
+
       const saved = await savePrescription({
         id: edit,
         patientId: patient.id,
         doctorId: doctor.id,
+        presentingComplaints: presentingComplaints.trim() || undefined,
+        pastIllnessHistory: pastIllnessHistory.trim() || undefined,
+        clinicalFindings: clinicalFindings.trim() || undefined,
         diagnosis: diagnosis.trim(),
-        notes: notes.trim() || undefined,
+        treatmentNotes: treatmentNotes.trim() || undefined,
+        notes: combinedNotes || undefined,
         followUp: followup || undefined,
         medicines: meds,
       });
@@ -184,19 +219,33 @@ function NewPrescription() {
       <div class="card">
         <div class="row"><b>Patient</b><span>${patient?.primary ?? "—"} (${patient?.id ?? ""})</span></div>
         <div class="row"><b>Doctor</b><span>${doctor?.primary ?? "—"}</span></div>
-        <div class="row"><b>Diagnosis</b><span>${diagnosis}</span></div>
+        ${presentingComplaints ? `<div class="row"><b>Presenting Complaints</b><span style="white-space: pre-wrap;">${presentingComplaints}</span></div>` : ""}
+        ${pastIllnessHistory ? `<div class="row"><b>History of Past Illness</b><span style="white-space: pre-wrap;">${pastIllnessHistory}</span></div>` : ""}
+        ${clinicalFindings ? `<div class="row"><b>Clinical Findings</b><span style="white-space: pre-wrap;">${clinicalFindings}</span></div>` : ""}
+        <div class="row"><b>Diagnosis</b><span style="white-space: pre-wrap;">${diagnosis}</span></div>
+        ${treatmentNotes ? `<div class="row"><b>Treatment Notes</b><span style="white-space: pre-wrap;">${treatmentNotes}</span></div>` : ""}
+        ${notes ? `<div class="row"><b>Additional Notes</b><span style="white-space: pre-wrap;">${notes}</span></div>` : ""}
         ${followup ? `<div class="row"><b>Follow-up</b><span>${followup}</span></div>` : ""}
       </div>
       <h3>Medicines</h3>
       <table><thead><tr><th>Medicine</th><th>Dosage</th><th>Frequency</th><th>Duration</th></tr></thead>
         <tbody>${meds.map(m => `<tr><td>${m.name}</td><td>${m.dosage}</td><td>${m.frequency}</td><td>${m.duration}</td></tr>`).join("")}</tbody></table>
-      ${notes ? `<div class="card"><b>Notes:</b> ${notes}</div>` : ""}
     `, `Prescription ${edit ?? ""}`);
   };
 
   const shareRx = () => {
     if (!patient) return;
-    const msg = `Hi ${patient.primary}, here is your prescription from ${user?.clinic}.\nDiagnosis: ${diagnosis}\nMedicines:\n${meds.map(m => `• ${m.name} — ${m.dosage} ${m.frequency} × ${m.duration}`).join("\n")}${followup ? `\nFollow-up: ${followup}` : ""}`;
+    const parts = [
+      `Hi ${patient.primary}, here is your prescription from ${user?.clinic}.`,
+      presentingComplaints.trim() ? `Presenting Complaints:\n${presentingComplaints.trim()}` : "",
+      pastIllnessHistory.trim() ? `History of Past Illness:\n${pastIllnessHistory.trim()}` : "",
+      clinicalFindings.trim() ? `Clinical Findings:\n${clinicalFindings.trim()}` : "",
+      `Diagnosis:\n${diagnosis}`,
+      treatmentNotes.trim() ? `Treatment Notes:\n${treatmentNotes.trim()}` : "",
+      `Medicines:\n${meds.map(m => `• ${m.name} — ${m.dosage} ${m.frequency} × ${m.duration}`).join("\n")}`,
+      followup ? `Follow-up: ${followup}` : "",
+    ].filter(Boolean);
+    const msg = parts.join("\n\n");
     sendWhatsApp(patient.tertiary ?? "", msg);
   };
 
@@ -269,13 +318,89 @@ function NewPrescription() {
               </div>
               {!isLabMode && (
                 <>
-                  <div className="space-y-1.5"><Label>Diagnosis <span className="text-destructive">*</span></Label>
-                    <Input data-testid="prescription-diagnosis" className="h-11 rounded-xl" value={diagnosis} onChange={e => setDiagnosis(e.target.value)} />
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label>Presenting complaints</Label>
+                      <span className="text-[10px] text-muted-foreground">Shift+Enter: newline · Enter: submit</span>
+                    </div>
+                    <Textarea
+                      rows={2}
+                      className="min-h-[46px] rounded-xl resize-none transition-[height] duration-75"
+                      placeholder="e.g. Fever for 3 days, cough, headache..."
+                      value={presentingComplaints}
+                      onKeyDown={handleKeySubmitOrLine}
+                      onInput={e => adjustTextareaHeight(e.currentTarget)}
+                      onChange={e => setPresentingComplaints(e.target.value)}
+                    />
                   </div>
-                  <div className="space-y-1.5"><Label>Treatment notes</Label>
-                    <Textarea rows={3} className="rounded-xl" value={notes} onChange={e => setNotes(e.target.value)} />
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label>History of past illness</Label>
+                      <span className="text-[10px] text-muted-foreground">Shift+Enter: newline · Enter: submit</span>
+                    </div>
+                    <Textarea
+                      rows={2}
+                      className="min-h-[46px] rounded-xl resize-none transition-[height] duration-75"
+                      placeholder="e.g. Hypertension for 5 years, no known drug allergies..."
+                      value={pastIllnessHistory}
+                      onKeyDown={handleKeySubmitOrLine}
+                      onInput={e => adjustTextareaHeight(e.currentTarget)}
+                      onChange={e => setPastIllnessHistory(e.target.value)}
+                    />
                   </div>
-                  <div className="space-y-1.5"><Label>Follow-up date</Label>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label>Clinical findings</Label>
+                      <span className="text-[10px] text-muted-foreground">Shift+Enter: newline · Enter: submit</span>
+                    </div>
+                    <Textarea
+                      rows={2}
+                      className="min-h-[46px] rounded-xl resize-none transition-[height] duration-75"
+                      placeholder="e.g. BP 120/80 mmHg, PR 76/min, chest clear..."
+                      value={clinicalFindings}
+                      onKeyDown={handleKeySubmitOrLine}
+                      onInput={e => adjustTextareaHeight(e.currentTarget)}
+                      onChange={e => setClinicalFindings(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label>Diagnosis <span className="text-destructive">*</span></Label>
+                      <span className="text-[10px] text-muted-foreground">Shift+Enter: newline · Enter: submit</span>
+                    </div>
+                    <Textarea
+                      data-testid="prescription-diagnosis"
+                      rows={2}
+                      className="min-h-[46px] rounded-xl resize-none transition-[height] duration-75 font-medium"
+                      placeholder="Enter primary diagnosis / conditions..."
+                      value={diagnosis}
+                      onKeyDown={handleKeySubmitOrLine}
+                      onInput={e => adjustTextareaHeight(e.currentTarget)}
+                      onChange={e => setDiagnosis(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <Label>Treatment notes</Label>
+                      <span className="text-[10px] text-muted-foreground">Shift+Enter: newline · Enter: submit</span>
+                    </div>
+                    <Textarea
+                      rows={3}
+                      className="min-h-[64px] rounded-xl resize-none transition-[height] duration-75"
+                      placeholder="Diet advice, precautions, or additional instructions..."
+                      value={treatmentNotes}
+                      onKeyDown={handleKeySubmitOrLine}
+                      onInput={e => adjustTextareaHeight(e.currentTarget)}
+                      onChange={e => setTreatmentNotes(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label>Follow-up date</Label>
                     <Input type="date" className="h-11 rounded-xl" value={followup} onChange={e => setFollowup(e.target.value)} />
                   </div>
                 </>
@@ -402,10 +527,34 @@ function NewPrescription() {
               <div><div className="text-muted-foreground">Age / Gender</div><div>{patient?.secondary ?? "—"}</div></div>
               <div><div className="text-muted-foreground">Date</div><div>{new Date().toISOString().slice(0, 10)}</div></div>
             </div>
+            {presentingComplaints && (
+              <div className="mt-4">
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Presenting Complaints</div>
+                <div className="mt-1 whitespace-pre-wrap text-sm">{presentingComplaints}</div>
+              </div>
+            )}
+            {pastIllnessHistory && (
+              <div className="mt-4">
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">History of Past Illness</div>
+                <div className="mt-1 whitespace-pre-wrap text-sm">{pastIllnessHistory}</div>
+              </div>
+            )}
+            {clinicalFindings && (
+              <div className="mt-4">
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Clinical Findings</div>
+                <div className="mt-1 whitespace-pre-wrap text-sm">{clinicalFindings}</div>
+              </div>
+            )}
             <div className="mt-4">
               <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Diagnosis</div>
-              <div className="mt-1 text-sm">{diagnosis}</div>
+              <div className="mt-1 whitespace-pre-wrap text-sm font-medium">{diagnosis || "—"}</div>
             </div>
+            {treatmentNotes && (
+              <div className="mt-4">
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Treatment Notes</div>
+                <div className="mt-1 whitespace-pre-wrap text-sm">{treatmentNotes}</div>
+              </div>
+            )}
             <div className="mt-4">
               <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Rx</div>
               <ol className="mt-1 space-y-1.5 text-sm">

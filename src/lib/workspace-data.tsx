@@ -345,7 +345,11 @@ export type Prescription = {
   patient: string;
   doctor: string;
   date: string;
+  presentingComplaints?: string;
+  pastIllnessHistory?: string;
+  clinicalFindings?: string;
   diagnosis: string;
+  treatmentNotes?: string;
   notes: string | undefined;
   followUp: string | undefined;
   medicines: { name: string; dosage: string; frequency: string; duration: string; unitPrice?: number }[];
@@ -585,7 +589,11 @@ export interface PrescriptionInput {
   id?: string;
   patientId: string;
   doctorId: string;
+  presentingComplaints?: string;
+  pastIllnessHistory?: string;
+  clinicalFindings?: string;
   diagnosis: string;
+  treatmentNotes?: string;
   notes?: string;
   followUp?: string;
   medicines: { name: string; dosage: string; frequency: string; duration: string; unitPrice?: number }[];
@@ -3414,7 +3422,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           patientId: patient.id,
           doctor: doctor.name,
           date: new Date().toISOString().slice(0, 10),
+          presentingComplaints: input.presentingComplaints,
+          pastIllnessHistory: input.pastIllnessHistory,
+          clinicalFindings: input.clinicalFindings,
           diagnosis: input.diagnosis,
+          treatmentNotes: input.treatmentNotes,
           notes: input.notes,
           followUp: input.followUp,
           medicines: input.medicines,
