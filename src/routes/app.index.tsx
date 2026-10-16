@@ -399,7 +399,14 @@ function ClinicAdminDashboard() {
                     {appointment.time}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold">{appointment.patient}</div>
+                    <Link
+                      to="/app/patients/$id"
+                      params={{ id: appointment.patientId }}
+                      className="truncate text-sm font-semibold hover:text-primary hover:underline transition-colors block"
+                      title={`View details for ${appointment.patient}`}
+                    >
+                      {appointment.patient}
+                    </Link>
                     <div className="truncate text-xs text-muted-foreground">{appointment.doctor} - {appointment.type}</div>
                   </div>
                   <Badge variant="secondary" className="shrink-0">{appointment.status}</Badge>
@@ -554,7 +561,14 @@ function ReceptionistDashboard() {
                     {appointment.time}
                   </div>
                   <div className="min-w-0">
-                    <div className="truncate text-sm font-semibold">{appointment.patient}</div>
+                    <Link
+                      to="/app/patients/$id"
+                      params={{ id: appointment.patientId }}
+                      className="truncate text-sm font-semibold hover:text-primary hover:underline transition-colors block"
+                      title={`View details for ${appointment.patient}`}
+                    >
+                      {appointment.patient}
+                    </Link>
                     <div className="truncate text-xs text-muted-foreground">{appointment.doctor} - {appointment.type}</div>
                   </div>
                   <Badge variant={appointment.status === "Checked-in" ? "default" : "secondary"} className="shrink-0">
