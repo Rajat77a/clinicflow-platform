@@ -417,6 +417,8 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
           result: structured.value ?? structured.result ?? "",
           reference: structured.reference ?? "",
           notes: result.interpretation || undefined,
+          fileName: structured.fileName || undefined,
+          fileData: structured.fileData || undefined,
           uploadedBy: doctorById.get(result.recorded_by)?.name ?? "Hospital staff",
         });
       }
@@ -671,6 +673,8 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
           result: structured.value ?? structured.result ?? "",
           reference: structured.reference ?? "",
           notes: row.interpretation || undefined,
+          fileName: structured.fileName || undefined,
+          fileData: structured.fileData || undefined,
           uploadedBy: doctorById.get(row.recorded_by) ?? "Hospital staff",
         };
       }),
@@ -1371,7 +1375,12 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       const { data, error } = await this.client.rpc("record_lab_result", {
         p_patient_id: report.patientId,
         p_test_name: report.test,
-        p_result: { value: report.result, reference: report.reference },
+        p_result: {
+          value: report.result,
+          reference: report.reference,
+          ...(report.fileName ? { fileName: report.fileName } : {}),
+          ...(report.fileData ? { fileData: report.fileData } : {}),
+        },
         p_interpretation: report.notes ?? null,
         p_idempotency_key: randomKey(),
       });

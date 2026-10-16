@@ -37,6 +37,57 @@ const STORAGE_KEY_SOFT_DELETED_STAFF = "cf_soft_deleted_staff";
 const STORAGE_KEY_PERM_DELETED_STAFF = "cf_perm_deleted_staff";
 const STORAGE_KEY_SOFT_DELETED_PATIENTS = "cf_soft_deleted_patients";
 const STORAGE_KEY_PERM_DELETED_PATIENTS = "cf_perm_deleted_patients";
+export const STORAGE_KEY_PATIENT_DOCUMENTS = "cf_patient_documents";
+
+export interface PatientDocument {
+  id: string;
+  patientId: string;
+  clinicId?: string;
+  name: string;
+  size: string;
+  type: string;
+  date: string;
+  uploadedBy: string;
+  fileData?: string;
+  source?: "document" | "lab_report";
+}
+
+export function loadPatientDocumentsFromStorage(patientId?: string): PatientDocument[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_PATIENT_DOCUMENTS);
+    if (!raw) return [];
+    const list: PatientDocument[] = JSON.parse(raw);
+    if (patientId) return list.filter((doc) => doc.patientId === patientId);
+    return list;
+  } catch {
+    return [];
+  }
+}
+
+export function savePatientDocumentToStorage(doc: PatientDocument): void {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_PATIENT_DOCUMENTS);
+    const list: PatientDocument[] = raw ? JSON.parse(raw) : [];
+    const updated = [doc, ...list.filter((d) => d.id !== doc.id)];
+    localStorage.setItem(STORAGE_KEY_PATIENT_DOCUMENTS, JSON.stringify(updated));
+  } catch {
+    // Ignore quota or disabled storage
+  }
+}
+
+export function deletePatientDocumentFromStorage(docId: string): void {
+  if (typeof window === "undefined") return;
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_PATIENT_DOCUMENTS);
+    if (!raw) return;
+    const list: PatientDocument[] = JSON.parse(raw);
+    localStorage.setItem(STORAGE_KEY_PATIENT_DOCUMENTS, JSON.stringify(list.filter((d) => d.id !== docId)));
+  } catch {
+    // Ignore quota or disabled storage
+  }
+}
 
 export interface StoredSoftDeletedStaff {
   deletedAt: string;
@@ -311,6 +362,7 @@ export type LabReport = {
   notes?: string;
   prescriptionId?: string;
   fileName?: string;
+  fileData?: string;
   uploadedBy: string;
 };
 export type Bill = {
@@ -1678,6 +1730,9 @@ interface WorkspaceData {
   updateBill: (bill: Bill) => Promise<Bill>;
   updateBillNotes: (billId: string, notes: string) => Promise<void>;
   createFacility: (input: FacilityInput) => Promise<Facility>;
+  listPatientDocuments: (patientId: string) => Promise<PatientDocument[]>;
+  uploadPatientDocument: (doc: Omit<PatientDocument, "id" | "date" | "uploadedBy">) => Promise<PatientDocument>;
+  deletePatientDocument: (docId: string) => Promise<void>;
 }
 
 const WorkspaceCtx = createContext<WorkspaceData | null>(null);
@@ -3431,6 +3486,26 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         };
         dispatch({ type: "facility.created", value: facility, actor });
         return facility;
+      },
+      listPatientDocuments: async (patientId: string) => {
+        return loadPatientDocumentsFromStorage(patientId);
+      },
+      uploadPatientDocument: async (docInput) => {
+        const actor = user;
+        if (!actor) throw new Error("Authentication required");
+        const newDoc: PatientDocument = {
+          ...docInput,
+          id: `DOC-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+          date: new Date().toISOString().slice(0, 10),
+          uploadedBy: actor.name ?? "Staff",
+          clinicId: docInput.clinicId || actor.clinicId || undefined,
+          source: docInput.source || "document",
+        };
+        savePatientDocumentToStorage(newDoc);
+        return newDoc;
+      },
+      deletePatientDocument: async (docId: string) => {
+        deletePatientDocumentFromStorage(docId);
       },
     };
   }, [error, isLoading, refresh, repository, state, syncStatus, user]);

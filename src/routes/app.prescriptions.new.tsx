@@ -9,7 +9,7 @@ import { EntityPicker, toPatientOptions, toDoctorOptions, type PatientOption, ty
 import { useAuth } from "@/lib/auth";
 import { type LabReport } from "@/lib/workspace-data";
 import { useWorkspaceData } from "@/lib/workspace-data";
-import { Activity, Plus, Trash2, Send, Printer, FlaskConical } from "lucide-react";
+import { Activity, Plus, Trash2, Send, Printer, FlaskConical, Paperclip, Upload, X } from "lucide-react";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { printDocument } from "@/lib/exporters";
 import { supabaseConfig } from "@/lib/supabase/config";
@@ -78,6 +78,7 @@ function NewPrescription() {
   );
   const [isSaving, setIsSaving] = useState(false);
   const [newLab, setNewLab] = useState({ test: "", result: "", reference: "", notes: "" });
+  const [attachedFile, setAttachedFile] = useState<{ name: string; size: string; dataUrl?: string } | null>(null);
 
   useEffect(() => {
     if (!patientParam || patient?.id === patientParam) return;
@@ -85,6 +86,26 @@ function NewPrescription() {
       if (result) setPatient(toPatientOptions([result])[0]);
     });
   }, [getPatient, patient?.id, patientParam]);
+
+  const handleLabFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const formatBytes = (bytes: number) => {
+      if (bytes < 1024) return bytes + " B";
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + " KB";
+      return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+    };
+    const reader = new FileReader();
+    reader.onload = () => {
+      setAttachedFile({
+        name: file.name,
+        size: formatBytes(file.size),
+        dataUrl: typeof reader.result === "string" ? reader.result : undefined,
+      });
+      toast.success(`Attached ${file.name}`);
+    };
+    reader.readAsDataURL(file);
+  };
 
   const update = (i: number, k: keyof Med, v: string) =>
     setMeds(meds.map((m, idx) => (idx === i ? { ...m, [k]: v } : m)));
@@ -98,9 +119,12 @@ function NewPrescription() {
       patient: patient?.primary ?? "", patientId: patient?.id ?? "",
       test: newLab.test, date: new Date().toISOString().slice(0, 10),
       result: newLab.result, reference: newLab.reference, notes: newLab.notes,
+      fileName: attachedFile?.name,
+      fileData: attachedFile?.dataUrl,
       uploadedBy: user?.name ?? "User",
     }]);
     setNewLab({ test: "", result: "", reference: "", notes: "" });
+    setAttachedFile(null);
     toast.success("Lab report added");
   };
 
@@ -321,6 +345,25 @@ function NewPrescription() {
                 <Input placeholder="Result" className="h-10 rounded-lg" value={newLab.result} onChange={e => setNewLab({ ...newLab, result: e.target.value })} />
                 <Input placeholder="Reference range" className="h-10 rounded-lg" value={newLab.reference} onChange={e => setNewLab({ ...newLab, reference: e.target.value })} />
                 <Input placeholder="Notes" className="h-10 rounded-lg" value={newLab.notes} onChange={e => setNewLab({ ...newLab, notes: e.target.value })} />
+              </div>
+              <div className="pt-2">
+                <div className="text-xs font-medium text-muted-foreground mb-1.5 flex items-center gap-1.5">
+                  <Paperclip className="h-3.5 w-3.5" /> Attach lab report file (optional — PDF, Image)
+                </div>
+                {attachedFile ? (
+                  <div className="flex items-center justify-between rounded-lg border bg-background px-3 py-2 text-sm">
+                    <span className="truncate text-xs font-medium">📎 {attachedFile.name} ({attachedFile.size})</span>
+                    <Button type="button" variant="ghost" size="sm" className="h-7 px-2 text-destructive" onClick={() => setAttachedFile(null)}>
+                      <X className="h-3.5 w-3.5" /> Remove
+                    </Button>
+                  </div>
+                ) : (
+                  <label className="flex cursor-pointer items-center justify-center gap-2 rounded-lg border border-dashed border-muted-foreground/30 bg-muted/10 px-4 py-2.5 text-xs text-muted-foreground hover:bg-muted/30 transition">
+                    <Upload className="h-3.5 w-3.5" />
+                    <span>Upload report file (PDF, PNG, JPG)</span>
+                    <input type="file" accept=".pdf,image/png,image/jpeg" className="hidden" onChange={handleLabFileUpload} />
+                  </label>
+                )}
               </div>
               <Button type="button" size="sm" onClick={addLab}><Plus className="mr-1 h-3.5 w-3.5" />Add lab report</Button>
             </div>

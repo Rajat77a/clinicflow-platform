@@ -37,7 +37,18 @@ function Grid({ filter }: { filter?: string }) {
                 className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
                 aria-label={`Download ${f.name}`}
                 title={`Download ${f.name}`}
-                onClick={() => toast.info("File download is unavailable in demo mode")}
+                onClick={() => {
+                  const blob = new Blob([`ClinicFlow Medical Record Document\nDocument: ${f.name}\nPatient: ${f.patient}\nDate: ${f.date}\nType: ${f.type}`], { type: "text/plain" });
+                  const url = URL.createObjectURL(blob);
+                  const a = document.createElement("a");
+                  a.href = url;
+                  a.download = f.name;
+                  document.body.appendChild(a);
+                  a.click();
+                  document.body.removeChild(a);
+                  URL.revokeObjectURL(url);
+                  toast.success(`Downloaded ${f.name}`);
+                }}
               >
                 <Download className="h-4 w-4" />
               </Button>
