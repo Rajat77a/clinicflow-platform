@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth, type Role } from "@/lib/auth";
 import { useWorkspaceData, type StaffMember, evaluateStaffInviteStatus } from "@/lib/workspace-data";
-import { UserMinus, UserPlus, Eye, EyeOff, Building2, ShieldCheck, Stethoscope, UserCog, Mail, Phone, Trash2, RotateCw, Send, CheckSquare, AlertTriangle, CheckCircle2, Check, Copy, KeyRound } from "lucide-react";
+import { UserMinus, UserPlus, Eye, EyeOff, Building2, ShieldCheck, Stethoscope, UserCog, Mail, Phone, Trash2, RotateCw, Send, CheckSquare, AlertTriangle, CheckCircle2, Check, Copy, KeyRound, Pencil } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -64,8 +64,18 @@ function UsersPage() {
     bulkSoftDeleteStaff,
     resetUserPassword,
     resendStaffInvitation,
+    updateStaff,
     refresh,
   } = useWorkspaceData();
+
+  const [editTarget, setEditTarget] = useState<StaffMember | null>(null);
+  const [isEditingStaff, setIsEditingStaff] = useState(false);
+  const [isSavingStaff, setIsSavingStaff] = useState(false);
+  const [editStaffName, setEditStaffName] = useState("");
+  const [editStaffPhone, setEditStaffPhone] = useState("");
+  const [editStaffSpecialty, setEditStaffSpecialty] = useState("");
+  const [editStaffShift, setEditStaffShift] = useState("");
+  const [editStaffStatus, setEditStaffStatus] = useState<"Active" | "Invited" | "Inactive" | "Expired">("Active");
 
   const [passwordResetTarget, setPasswordResetTarget] = useState<StaffMember | null>(null);
   const [resetNewPassword, setResetNewPassword] = useState("");
@@ -517,6 +527,53 @@ function UsersPage() {
     }
     return false;
   }, [user]);
+
+  const canEditStaff = useCallback((member: StaffMember) => {
+    if (user?.role === "super_admin") return true;
+    if (user?.role === "clinic_admin") {
+      return member.role !== "super_admin" && (member.clinicId === user.clinicId || !member.clinicId);
+    }
+    return false;
+  }, [user]);
+
+  const handleOpenEditStaff = (member: StaffMember) => {
+    setEditTarget(member);
+    setEditStaffName(member.name || "");
+    setEditStaffPhone(member.phone || "");
+    const doc = doctors.find((d) => d.id === member.id);
+    const rec = receptionists.find((r) => r.id === member.id);
+    setEditStaffSpecialty(doc?.specialty || "");
+    setEditStaffShift(rec?.shift || "");
+    setEditStaffStatus(member.status);
+    setIsEditingStaff(true);
+  };
+
+  const handleSaveStaff = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editTarget) return;
+    if (!editStaffName.trim()) {
+      toast.error("Staff name is required");
+      return;
+    }
+    setIsSavingStaff(true);
+    try {
+      await updateStaff({
+        id: editTarget.id,
+        name: editStaffName.trim(),
+        phone: editStaffPhone.trim() || undefined,
+        specialty: editTarget.role === "doctor" ? editStaffSpecialty.trim() || undefined : undefined,
+        shift: editTarget.role === "receptionist" ? editStaffShift.trim() || undefined : undefined,
+        status: editStaffStatus,
+      });
+      setIsEditingStaff(false);
+      setEditTarget(null);
+      toast.success(`Updated details for ${editStaffName.trim()}`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update staff details");
+    } finally {
+      setIsSavingStaff(false);
+    }
+  };
 
   const deletableStaff = useMemo(
     () => allUsers.filter(canDeleteMember),
@@ -1125,6 +1182,19 @@ function UsersPage() {
                           <KeyRound className="h-4 w-4 text-amber-600 dark:text-amber-500" />
                         </Button>
                       )}
+                      {canEditStaff(member) && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          title={`Edit ${member.name}'s details`}
+                          aria-label={`Edit ${member.name}`}
+                          onClick={() => handleOpenEditStaff(member)}
+                          className="hover:text-primary hover:bg-primary/10"
+                        >
+                          <Pencil className="h-4 w-4 text-primary" />
+                        </Button>
+                      )}
                       <Button
                         type="button"
                         variant="ghost"
@@ -1302,6 +1372,20 @@ function UsersPage() {
               Close
             </Button>
             <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap justify-end">
+              {selectedProfile && canEditStaff(selectedProfile) && (
+                <Button
+                  variant="outline"
+                  className="gap-1.5"
+                  onClick={() => {
+                    const target = selectedProfile;
+                    setSelectedProfile(null);
+                    handleOpenEditStaff(target);
+                  }}
+                >
+                  <Pencil className="h-4 w-4" />
+                  Edit Details
+                </Button>
+              )}
               {selectedProfile && user?.role === "super_admin" && Boolean(selectedProfile.email) && (
                 <Button
                   variant="outline"
@@ -1664,6 +1748,120 @@ function UsersPage() {
               >
                 <KeyRound className="h-4 w-4" />
                 {isResettingPassword ? "Updating password..." : "Set New Password"}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Staff Details Dialog */}
+      <Dialog open={isEditingStaff} onOpenChange={setIsEditingStaff}>
+        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+          <form onSubmit={handleSaveStaff}>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Pencil className="h-4 w-4 text-primary" />
+                Edit User Details
+              </DialogTitle>
+              <DialogDescription>
+                Update details for <strong>{editTarget?.name}</strong> ({editTarget?.role ? (roleLabels[editTarget.role] || editTarget.role) : "User"}).
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-3">
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-staff-name">Display Name *</Label>
+                <Input
+                  id="edit-staff-name"
+                  required
+                  value={editStaffName}
+                  onChange={(e) => setEditStaffName(e.target.value)}
+                  placeholder="Full name"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-staff-email">Email Address</Label>
+                <Input
+                  id="edit-staff-email"
+                  disabled
+                  value={editTarget?.email || "Pending activation"}
+                  className="bg-muted text-muted-foreground cursor-not-allowed"
+                />
+                <p className="text-[11px] text-muted-foreground">Email is tied to auth identity and cannot be edited directly.</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-staff-phone">Phone Number</Label>
+                <Input
+                  id="edit-staff-phone"
+                  value={editStaffPhone}
+                  onChange={(e) => setEditStaffPhone(e.target.value)}
+                  placeholder="+91..."
+                />
+              </div>
+
+              {editTarget?.role === "doctor" && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-staff-specialty">Specialty</Label>
+                  <Input
+                    id="edit-staff-specialty"
+                    value={editStaffSpecialty}
+                    onChange={(e) => setEditStaffSpecialty(e.target.value)}
+                    placeholder="e.g. Cardiologist, General Medicine"
+                  />
+                </div>
+              )}
+
+              {editTarget?.role === "receptionist" && (
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-staff-shift">Shift</Label>
+                  <Select value={editStaffShift} onValueChange={setEditStaffShift}>
+                    <SelectTrigger id="edit-staff-shift">
+                      <SelectValue placeholder="Select Shift" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Morning">Morning Shift</SelectItem>
+                      <SelectItem value="Evening">Evening Shift</SelectItem>
+                      <SelectItem value="Night">Night Shift</SelectItem>
+                      <SelectItem value="General">General / Full Day</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
+              <div className="space-y-1.5">
+                <Label htmlFor="edit-staff-status">Status</Label>
+                <Select
+                  value={editStaffStatus}
+                  onValueChange={(val) => setEditStaffStatus(val as "Active" | "Invited" | "Inactive" | "Expired")}
+                >
+                  <SelectTrigger id="edit-staff-status">
+                    <SelectValue placeholder="Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Active">Active</SelectItem>
+                    <SelectItem value="Invited">Invited</SelectItem>
+                    <SelectItem value="Inactive">Inactive</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={isSavingStaff}
+                onClick={() => {
+                  setIsEditingStaff(false);
+                  setEditTarget(null);
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSavingStaff}>
+                {isSavingStaff ? "Saving..." : "Save Changes"}
               </Button>
             </DialogFooter>
           </form>

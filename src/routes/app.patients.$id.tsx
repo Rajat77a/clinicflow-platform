@@ -23,6 +23,9 @@ import { useAuth } from "@/lib/auth";
 import { hasPermission } from "@/lib/access-control";
 import { supabaseConfig } from "@/lib/supabase/config";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Phone, Mail, MapPin, MessageCircle, Calendar, FileText, Receipt,
   FolderOpen, FlaskConical, Download, Send, Printer, Edit, Eye,
@@ -81,6 +84,7 @@ function PatientProfile() {
     listDocuments,
     updateBillNotes,
     softDeletePatient,
+    updatePatient,
     listPatientDocuments,
     uploadPatientDocument,
     deletePatientDocument,
@@ -99,6 +103,22 @@ function PatientProfile() {
   const [patientDocs, setPatientDocs] = useState<PatientDocument[]>([]);
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
   const [viewingDoc, setViewingDoc] = useState<PatientDocument | null>(null);
+
+  // Edit patient modal state
+  const [isEditingPatient, setIsEditingPatient] = useState(false);
+  const [isSavingPatient, setIsSavingPatient] = useState(false);
+  const [editName, setEditName] = useState("");
+  const [editDateOfBirth, setEditDateOfBirth] = useState("");
+  const [editGender, setEditGender] = useState("male");
+  const [editPhone, setEditPhone] = useState("");
+  const [editEmail, setEditEmail] = useState("");
+  const [editWhatsappPhone, setEditWhatsappPhone] = useState("");
+  const [editBloodGroup, setEditBloodGroup] = useState("");
+  const [editAddress, setEditAddress] = useState("");
+  const [editEmergencyName, setEditEmergencyName] = useState("");
+  const [editEmergencyPhone, setEditEmergencyPhone] = useState("");
+  const [editAllergies, setEditAllergies] = useState("");
+  const [editChronicConditions, setEditChronicConditions] = useState("");
   const patient = loadedPatient ?? snapshotPatient;
   const visitsPage = useRecordPage(listAppointments, { patientId: id });
   const prescriptionsPage = useRecordPage(listPrescriptions, { patientId: id });
@@ -221,6 +241,67 @@ function PatientProfile() {
     }
   };
 
+  const handleOpenEditModal = () => {
+    if (!patient) return;
+    setEditName(patient.name || "");
+    setEditDateOfBirth(patient.dateOfBirth || "");
+    setEditGender(
+      patient.gender?.toLowerCase() === "male"
+        ? "male"
+        : patient.gender?.toLowerCase() === "female"
+        ? "female"
+        : "unknown"
+    );
+    setEditPhone(patient.phone || "");
+    setEditEmail(patient.email || "");
+    setEditWhatsappPhone(patient.whatsappPhone || "");
+    setEditBloodGroup(patient.bloodGroup || "");
+    setEditAddress(patient.address || "");
+    setEditEmergencyName(patient.emergencyContactName || "");
+    setEditEmergencyPhone(patient.emergencyContactPhone || "");
+    setEditAllergies((patient.allergies || []).join(", "));
+    setEditChronicConditions((patient.chronicConditions || []).join(", "));
+    setIsEditingPatient(true);
+  };
+
+  const handleSavePatient = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!patient) return;
+    if (!editName.trim()) {
+      toast.error("Patient full name is required");
+      return;
+    }
+    if (!editPhone.trim()) {
+      toast.error("Phone number is required");
+      return;
+    }
+    setIsSavingPatient(true);
+    try {
+      const updated = await updatePatient({
+        id: patient.id,
+        name: editName.trim(),
+        dateOfBirth: editDateOfBirth || patient.dateOfBirth,
+        gender: editGender,
+        phone: editPhone.trim(),
+        email: editEmail.trim() || undefined,
+        whatsappPhone: editWhatsappPhone.trim() || undefined,
+        bloodGroup: editBloodGroup || undefined,
+        address: editAddress.trim() || undefined,
+        emergencyContactName: editEmergencyName.trim() || undefined,
+        emergencyContactPhone: editEmergencyPhone.trim() || undefined,
+        allergies: editAllergies.split(",").map(s => s.trim()).filter(Boolean),
+        chronicConditions: editChronicConditions.split(",").map(s => s.trim()).filter(Boolean),
+      });
+      setLoadedPatient(updated);
+      setIsEditingPatient(false);
+      toast.success("Patient details updated successfully");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update patient details");
+    } finally {
+      setIsSavingPatient(false);
+    }
+  };
+
   const printRx = (rx: Prescription) => {
     const details = resolvePrescriptionDetails(rx);
     const displayPatientId = formatPatientId(patient.id, patient.medicalRecordNumber);
@@ -299,6 +380,13 @@ function PatientProfile() {
       <PageHeader title={patient.name} description={`Patient ID ${formatPatientId(patient.id, patient.medicalRecordNumber)}`}
         actions={
           <div className="flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              onClick={handleOpenEditModal}
+              title="Edit patient details"
+            >
+              <Pencil className="mr-1.5 h-4 w-4" /> Edit Patient
+            </Button>
             {canEditRx && <Button asChild variant="outline"><Link to="/app/prescriptions/new" search={{ patient: patient.id }}>New prescription</Link></Button>}
             {canBook && (
               <Button asChild>
@@ -325,8 +413,20 @@ function PatientProfile() {
             <div className="grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-primary to-info text-primary-foreground text-xl font-bold">
               {patient.name.split(" ").map(n => n[0]).slice(0, 2).join("")}
             </div>
-            <div className="min-w-0">
-              <div className="font-display text-lg font-bold">{patient.name}</div>
+            <div className="min-w-0 flex-1">
+              <div className="flex items-center justify-between">
+                <div className="font-display text-lg font-bold truncate">{patient.name}</div>
+                <Button
+                  size="icon"
+                  variant="ghost"
+                  className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                  onClick={handleOpenEditModal}
+                  title="Edit patient details"
+                  aria-label="Edit patient details"
+                >
+                  <Pencil className="h-3.5 w-3.5" />
+                </Button>
+              </div>
               <div className="text-xs text-muted-foreground">{patient.age} y · {patient.gender}</div>
               <Badge variant="outline" className="mt-1">{patient.status}</Badge>
             </div>
@@ -1078,6 +1178,181 @@ function PatientProfile() {
               </>
             );
           })()}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Patient Details Dialog */}
+      <Dialog open={isEditingPatient} onOpenChange={setIsEditingPatient}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <form onSubmit={handleSavePatient}>
+            <DialogHeader>
+              <DialogTitle>Edit Patient Details</DialogTitle>
+              <DialogDescription>
+                Update demographic, contact and clinical information for {patient.name} ({formatPatientId(patient.id, patient.medicalRecordNumber)}).
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="edit-name">Full Name *</Label>
+                  <Input
+                    id="edit-name"
+                    required
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    placeholder="Patient full name"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-dob">Date of Birth</Label>
+                  <Input
+                    id="edit-dob"
+                    type="date"
+                    max={new Date().toISOString().slice(0, 10)}
+                    value={editDateOfBirth}
+                    onChange={(e) => setEditDateOfBirth(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-gender">Gender</Label>
+                  <Select value={editGender} onValueChange={setEditGender}>
+                    <SelectTrigger id="edit-gender">
+                      <SelectValue placeholder="Select gender" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="male">Male</SelectItem>
+                      <SelectItem value="female">Female</SelectItem>
+                      <SelectItem value="unknown">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-phone">Phone Number *</Label>
+                  <Input
+                    id="edit-phone"
+                    required
+                    maxLength={40}
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    placeholder="+91..."
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-email">Email Address</Label>
+                  <Input
+                    id="edit-email"
+                    type="email"
+                    maxLength={254}
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    placeholder="patient@example.com"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-whatsapp">WhatsApp Phone</Label>
+                  <Input
+                    id="edit-whatsapp"
+                    maxLength={40}
+                    value={editWhatsappPhone}
+                    onChange={(e) => setEditWhatsappPhone(e.target.value)}
+                    placeholder="+91..."
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-blood-group">Blood Group</Label>
+                  <Select value={editBloodGroup} onValueChange={setEditBloodGroup}>
+                    <SelectTrigger id="edit-blood-group">
+                      <SelectValue placeholder="Select blood group" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((bg) => (
+                        <SelectItem key={bg} value={bg}>
+                          {bg}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="edit-address">Address</Label>
+                  <Textarea
+                    id="edit-address"
+                    rows={2}
+                    maxLength={1000}
+                    value={editAddress}
+                    onChange={(e) => setEditAddress(e.target.value)}
+                    placeholder="Residential address"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-emergency-name">Emergency Contact Name</Label>
+                  <Input
+                    id="edit-emergency-name"
+                    maxLength={200}
+                    value={editEmergencyName}
+                    onChange={(e) => setEditEmergencyName(e.target.value)}
+                    placeholder="Contact person name"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="edit-emergency-phone">Emergency Contact Phone</Label>
+                  <Input
+                    id="edit-emergency-phone"
+                    maxLength={40}
+                    value={editEmergencyPhone}
+                    onChange={(e) => setEditEmergencyPhone(e.target.value)}
+                    placeholder="+91..."
+                  />
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="edit-allergies">Allergies (comma separated)</Label>
+                  <Input
+                    id="edit-allergies"
+                    maxLength={1000}
+                    value={editAllergies}
+                    onChange={(e) => setEditAllergies(e.target.value)}
+                    placeholder="Penicillin, Peanuts, Pollen..."
+                  />
+                </div>
+
+                <div className="space-y-1.5 sm:col-span-2">
+                  <Label htmlFor="edit-chronic">Existing / Chronic Conditions (comma separated)</Label>
+                  <Input
+                    id="edit-chronic"
+                    maxLength={1000}
+                    value={editChronicConditions}
+                    onChange={(e) => setEditChronicConditions(e.target.value)}
+                    placeholder="Hypertension, Diabetes, Asthma..."
+                  />
+                </div>
+              </div>
+            </div>
+
+            <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setIsEditingPatient(false)}
+                disabled={isSavingPatient}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSavingPatient}>
+                {isSavingPatient ? "Saving changes..." : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </>

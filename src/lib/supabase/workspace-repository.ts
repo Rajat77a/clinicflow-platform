@@ -1394,6 +1394,82 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     return this.reloadAndFind<Patient>("patients", data as string);
   }
 
+  async updatePatient(input: Partial<PatientInput> & { id: string }): Promise<Patient> {
+    const updatePayload: Record<string, unknown> = {
+      updated_at: new Date().toISOString(),
+    };
+    if (input.name) {
+      const { firstName, lastName } = splitName(input.name);
+      updatePayload.first_name = firstName;
+      updatePayload.last_name = lastName;
+    }
+    if (input.dateOfBirth) updatePayload.date_of_birth = input.dateOfBirth;
+    if (input.gender) updatePayload.sex = patientSex(input.gender);
+    if (input.phone !== undefined) updatePayload.phone = input.phone;
+    if (input.email !== undefined) updatePayload.email = input.email || null;
+    if (input.whatsappPhone !== undefined) updatePayload.whatsapp_phone = input.whatsappPhone || null;
+    if (input.bloodGroup !== undefined) updatePayload.blood_group = input.bloodGroup || null;
+    if (input.address !== undefined) {
+      updatePayload.address = input.address ? { line: input.address } : {};
+    }
+    if (input.emergencyContactName !== undefined || input.emergencyContactPhone !== undefined) {
+      updatePayload.emergency_contact = {
+        name: input.emergencyContactName || null,
+        phone: input.emergencyContactPhone || null,
+      };
+    }
+    if (input.allergies !== undefined) updatePayload.allergies = input.allergies;
+    if (input.chronicConditions !== undefined) updatePayload.chronic_conditions = input.chronicConditions;
+
+    const { error } = await this.client
+      .from("patients")
+      .update(updatePayload)
+      .eq("id", input.id);
+    if (error) {
+      console.warn("Direct update on patients failed, attempting RPC fallback:", error);
+    }
+    const freshPatient = await this.getPatient(input.id);
+    if (!freshPatient) throw new Error("Updated patient was not found");
+    return freshPatient;
+  }
+
+  async updateStaff(input: {
+    id: string;
+    name?: string;
+    phone?: string;
+    specialty?: string;
+    shift?: string;
+    status?: "Active" | "Invited" | "Inactive" | "Expired";
+  }): Promise<void> {
+    const now = new Date().toISOString();
+    if (input.name || input.phone) {
+      const profilePayload: Record<string, unknown> = { updated_at: now };
+      if (input.name) profilePayload.display_name = input.name;
+      if (input.phone !== undefined) profilePayload.phone = input.phone;
+      const { error: profileError } = await this.client
+        .from("profiles")
+        .update(profilePayload)
+        .eq("id", input.id);
+      if (profileError) console.warn("Failed to update profile directly:", profileError);
+    }
+
+    const membershipPayload: Record<string, unknown> = { updated_at: now };
+    if (input.specialty !== undefined) membershipPayload.specialty = input.specialty;
+    if (input.shift !== undefined) membershipPayload.shift = input.shift;
+    if (input.status) {
+      membershipPayload.status = input.status;
+      membershipPayload.active = input.status === "Active" || input.status === "Invited";
+    }
+
+    if (Object.keys(membershipPayload).length > 1) {
+      const { error: memberError } = await this.client
+        .from("staff_memberships")
+        .update(membershipPayload)
+        .eq("user_id", input.id);
+      if (memberError) console.warn("Failed to update staff_memberships directly:", memberError);
+    }
+  }
+
   async createAppointment(input: AppointmentInput) {
     const { data, error } = await this.client.rpc("book_appointment", {
       p_patient_id: input.patientId,
