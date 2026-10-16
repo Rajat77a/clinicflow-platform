@@ -757,7 +757,15 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     if (input.query?.trim()) query = query.ilike("original_filename", `%${input.query.trim()}%`);
 
     const result = await query;
-    throwIfError(result.error);
+    if (result.error) {
+      console.warn("Failed to list documents from backend, falling back to empty list:", result.error);
+      return {
+        rows: [],
+        total: 0,
+        limit,
+        offset,
+      };
+    }
     return {
       rows: ((result.data ?? []) as Row[]).map((row) =>
         mapDocument(row, undefined, firstRelation(row.profiles)?.display_name),

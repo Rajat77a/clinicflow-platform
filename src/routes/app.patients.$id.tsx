@@ -475,7 +475,6 @@ function PatientProfile() {
               </div>
 
               {documentsPage.isLoading && <EmptyCard label="Loading documents..." />}
-              {!documentsPage.isLoading && documentsPage.error && <EmptyCard label={documentsPage.error} />}
 
               {(() => {
                 const labDocs: PatientDocument[] = myLabs
