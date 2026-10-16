@@ -92,9 +92,25 @@ export function resolvePrescriptionDetails(rx: {
   const additionalNotes = parsed.additionalNotes;
 
   // The primary illness / main reason of the prescription:
-  // If diagnosis is missing or "Not recorded", use presenting complaints instead of showing "Not recorded"
-  const cleanDiagnosis = rx.diagnosis && rx.diagnosis.trim().toLowerCase() !== "not recorded" ? rx.diagnosis.trim() : "";
-  const primaryIllness = cleanDiagnosis || presentingComplaints || "General Consultation";
+  // When presentingComplaints is available, it should ALWAYS take precedence over advice/treatment notes
+  // (like "take good rest / good sleep / drink plenty of water") or "Not recorded" / generic consultation notes.
+  const rawDiagnosis = (rx.diagnosis || "").trim();
+  const isGenericOrAdvice =
+    !rawDiagnosis ||
+    rawDiagnosis.toLowerCase() === "not recorded" ||
+    (treatmentNotes && rawDiagnosis === treatmentNotes) ||
+    rawDiagnosis.toLowerCase().includes("take rest") ||
+    rawDiagnosis.toLowerCase().includes("good rest") ||
+    rawDiagnosis.toLowerCase().includes("drink plenty") ||
+    rawDiagnosis.toLowerCase().includes("good sleep");
+
+  let primaryIllness = presentingComplaints;
+  if (!primaryIllness) {
+    primaryIllness = !isGenericOrAdvice ? rawDiagnosis : (rawDiagnosis || "General Consultation");
+  } else if (!isGenericOrAdvice && rawDiagnosis && rawDiagnosis.length < 50 && !rawDiagnosis.includes("\n")) {
+    // If a concise, valid clinical diagnosis exists and is not advice, use that
+    primaryIllness = rawDiagnosis;
+  }
 
   return {
     presentingComplaints,
