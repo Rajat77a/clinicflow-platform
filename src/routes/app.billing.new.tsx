@@ -11,6 +11,7 @@ import { useAuth } from "@/lib/auth";
 import { useWorkspaceData, type Prescription } from "@/lib/workspace-data";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { printDocument } from "@/lib/exporters";
+import { formatPatientId } from "@/lib/prescription-fields";
 import { Plus, Trash2, Send, Printer, Pill } from "lucide-react";
 import { toast } from "sonner";
 
@@ -151,11 +152,13 @@ function NewBill() {
     }
   };
 
-  const billHtml = () => `
+  const billHtml = () => {
+    const displayPatientId = formatPatientId(patient?.id, patient?.raw?.medicalRecordNumber);
+    return `
     <h2>${user?.clinic ?? "ClinicFlow"}</h2>
     <div class="muted">Invoice · ${new Date().toLocaleDateString()}</div>
     <div class="card">
-      <div class="row"><b>Patient</b><span>${patient?.primary ?? "—"} (${patient?.id ?? ""})</span></div>
+      <div class="row"><b>Patient</b><span>${patient?.primary ?? "—"} (${displayPatientId})</span></div>
       <div class="row"><b>Phone</b><span>${patient?.tertiary ?? "—"}</span></div>
     </div>
     ${Object.entries(bySection).map(([sec, items]) => `
@@ -170,6 +173,7 @@ function NewBill() {
       <div class="row total"><span>Total</span><span>₹${total.toFixed(2)}</span></div>
     </div>
   `;
+  };
 
   const shareBill = () => {
     if (!patient) return;

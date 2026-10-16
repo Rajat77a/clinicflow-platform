@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 
 export interface EntityOption {
   id: string;
+  displayId?: string;     // e.g. "PT-101"
   primary: string;        // e.g. "John Mathew"
   secondary?: string;     // e.g. "34 M"
   tertiary?: string;      // e.g. "9876543210"
@@ -93,7 +94,7 @@ export function EntityPicker<T extends EntityOption>({
           <div className="min-w-0">
             <div className="truncate text-sm font-semibold">{value.primary}</div>
             <div className="truncate text-xs text-muted-foreground">
-              <span className="font-mono">{value.id}</span>
+              <span className="font-mono">{value.displayId ?? value.id}</span>
               {value.secondary ? <> · {value.secondary}</> : null}
               {value.tertiary ? <> · {value.tertiary}</> : null}
             </div>
@@ -148,7 +149,7 @@ export function EntityPicker<T extends EntityOption>({
                 <div className="min-w-0">
                   <div className="truncate text-sm font-semibold">{o.primary}</div>
                   <div className="truncate text-xs text-muted-foreground">
-                    <span className="font-mono">{o.id}</span>
+                    <span className="font-mono">{o.displayId ?? o.id}</span>
                     {o.secondary ? <> · {o.secondary}</> : null}
                     {o.tertiary ? <> · {o.tertiary}</> : null}
                   </div>
@@ -165,18 +166,28 @@ export function EntityPicker<T extends EntityOption>({
 
 // ----- Workspace adapters -----
 import type { Doctor, Patient } from "@/lib/workspace-data";
+import { formatPatientId } from "@/lib/prescription-fields";
 
 export type PatientOption = EntityOption & { raw: Patient };
 export type DoctorOption = EntityOption & { raw: Doctor };
 
-export const toPatientOptions = (patients: Patient[]): PatientOption[] => patients.map(p => ({
-  id: p.id,
-  primary: p.name,
-  secondary: `${p.age} ${p.gender[0]}`,
-  tertiary: p.phone,
-  searchTokens: [p.id.toLowerCase(), p.name.toLowerCase(), p.phone.replace(/\s/g, "")],
-  raw: p,
-}));
+export const toPatientOptions = (patients: Patient[]): PatientOption[] => patients.map(p => {
+  const shortId = formatPatientId(p.id, p.medicalRecordNumber);
+  return {
+    id: p.id,
+    displayId: shortId,
+    primary: p.name,
+    secondary: `${p.age} ${p.gender[0]}`,
+    tertiary: p.phone,
+    searchTokens: [
+      p.id.toLowerCase(),
+      shortId.toLowerCase(),
+      p.name.toLowerCase(),
+      p.phone.replace(/\s/g, ""),
+    ],
+    raw: p,
+  };
+});
 
 export const toDoctorOptions = (doctors: Doctor[]): DoctorOption[] => doctors.map(d => ({
   id: d.id,

@@ -3359,7 +3359,16 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           allergies: input.allergies,
           chronicConditions: input.chronicConditions,
           doctor: assignedDoctor?.name ?? "General Practice",
-          id: createId("PT"),
+          id: (() => {
+            const existingNums = state.patients
+              .map(p => {
+                const m = p.id.match(/^PT-(\d+)$/i);
+                return m ? parseInt(m[1], 10) : 0;
+              })
+              .filter(n => n >= 100);
+            const nextNum = existingNums.length > 0 ? Math.max(...existingNums) + 1 : 101;
+            return `PT-${nextNum}`;
+          })(),
           clinicId: tenantId,
           lastVisit: new Date().toISOString().slice(0, 10),
           status: "New",
