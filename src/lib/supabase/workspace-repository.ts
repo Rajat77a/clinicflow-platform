@@ -85,7 +85,7 @@ function splitName(name: string) {
   const parts = name.trim().split(/\s+/);
   return {
     firstName: parts.shift() ?? "",
-    lastName: parts.join(" ") || "Unknown",
+    lastName: parts.join(" "),
   };
 }
 
