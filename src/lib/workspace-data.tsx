@@ -2293,7 +2293,12 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         requireUser(user, "appointments.read");
         if (repository) return repository.listAppointments(input);
         return localRecordPage(
-          appointments.filter((item) => !input.patientId || item.patientId === input.patientId),
+          appointments.filter(
+            (item) =>
+              (!input.patientId || item.patientId === input.patientId) &&
+              (!input.recordId || item.id === input.recordId) &&
+              (!input.date || item.date === input.date),
+          ),
           input,
         );
       },

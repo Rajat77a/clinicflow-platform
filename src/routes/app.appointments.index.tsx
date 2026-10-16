@@ -125,7 +125,18 @@ function AppointmentsPage() {
                 <TableRow><TableCell colSpan={7} className="py-8 text-center text-destructive">{error}</TableCell></TableRow>
               )}
               {!isLoading && !error && rows.length === 0 && (
-                <TableRow><TableCell colSpan={7} className="py-8 text-center text-muted-foreground">No appointments found.</TableCell></TableRow>
+                <TableRow>
+                  <TableCell colSpan={7} className="py-12 text-center text-muted-foreground">
+                    <p className="font-medium text-foreground">
+                      {tabValue === "today" ? "No appointments scheduled for today." : "No appointments found."}
+                    </p>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {tabValue === "today"
+                        ? "Check the \"All appointments\" tab to view past and future appointments."
+                        : "Appointments booked will appear here."}
+                    </p>
+                  </TableCell>
+                </TableRow>
               )}
               {rows.map(a => (
                 <TableRow key={a.id}>
