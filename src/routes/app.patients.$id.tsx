@@ -13,6 +13,7 @@ import {
   type LabReport,
   type Patient,
   type Prescription,
+  type PatientDocument,
   type WorkspaceDocument,
 } from "@/lib/workspace-data";
 import { printDocument } from "@/lib/exporters";
@@ -23,8 +24,8 @@ import { supabaseConfig } from "@/lib/supabase/config";
 import { Textarea } from "@/components/ui/textarea";
 import {
   Phone, Mail, MapPin, MessageCircle, Calendar, FileText, Receipt,
-  FolderOpen, FlaskConical, Send, Printer, Edit, Eye,
-  Trash2, AlertTriangle, Pencil, Check, X,
+  FolderOpen, FlaskConical, Download, Send, Printer, Edit, Eye,
+  Trash2, AlertTriangle, Pencil, Check, X, Upload, Plus, File,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useRecordPage } from "@/lib/use-record-page";
@@ -79,6 +80,9 @@ function PatientProfile() {
     listDocuments,
     updateBillNotes,
     softDeletePatient,
+    listPatientDocuments,
+    uploadPatientDocument,
+    deletePatientDocument,
   } = useWorkspaceData();
   const snapshotPatient = (allPatients ?? patients).find(candidate => candidate.id === id);
   const [loadedPatient, setLoadedPatient] = useState<Patient | null>(null);
@@ -90,6 +94,9 @@ function PatientProfile() {
   const [viewingLab, setViewingLab] = useState<LabReport | null>(null);
   const [showTrashDialog, setShowTrashDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [patientDocs, setPatientDocs] = useState<PatientDocument[]>([]);
+  const [isUploadingDoc, setIsUploadingDoc] = useState(false);
+  const [viewingDoc, setViewingDoc] = useState<PatientDocument | null>(null);
   const patient = loadedPatient ?? snapshotPatient;
   const visitsPage = useRecordPage(listAppointments, { patientId: id });
   const prescriptionsPage = useRecordPage(listPrescriptions, { patientId: id });
@@ -120,6 +127,11 @@ function PatientProfile() {
     };
   }, [getPatient, id, snapshotPatient]);
 
+  useEffect(() => {
+    if (!id) return;
+    void listPatientDocuments(id).then(setPatientDocs);
+  }, [id, listPatientDocuments]);
+
   if (recordLoading) {
     return <div className="py-12 text-center text-sm text-muted-foreground">Loading patient record…</div>;
   }
@@ -130,6 +142,68 @@ function PatientProfile() {
   const canBook = Boolean(user && hasPermission(user.role, "appointments.create"));
   const canDelete = Boolean(user && (user.role === "clinic_admin" || user.role === "super_admin"));
   const canUseExternalSharing = supabaseConfig.demoMode;
+
+  const handleDocumentFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !patient) return;
+    setIsUploadingDoc(true);
+    const formatBytes = (bytes: number) => {
+      if (bytes < 1024) return bytes + " B";
+      if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(0) + " KB";
+      return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+    };
+    const fileType = file.type.includes("pdf") ? "PDF Document" : file.type.includes("image") ? "Image" : "Document";
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        const newDoc = await uploadPatientDocument({
+          patientId: patient.id,
+          clinicId: patient.clinicId,
+          name: file.name,
+          size: formatBytes(file.size),
+          type: fileType,
+          fileData: typeof reader.result === "string" ? reader.result : undefined,
+          source: "document",
+        });
+        setPatientDocs(prev => [newDoc, ...prev]);
+        toast.success(`Uploaded ${file.name}`);
+      } catch (err) {
+        toast.error("Failed to upload document");
+      } finally {
+        setIsUploadingDoc(false);
+      }
+    };
+    reader.onerror = () => {
+      toast.error("Failed to read file");
+      setIsUploadingDoc(false);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
+
+  const handleDownloadFile = (name: string, fileData?: string) => {
+    if (fileData) {
+      const link = document.createElement("a");
+      link.href = fileData;
+      link.download = name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success(`Downloading ${name}`);
+    } else {
+      // Create a dummy text file blob so user can always open/download
+      const blob = new Blob([`ClinicFlow Medical Record Document: ${name}\nPatient: ${patient?.name} (${patient?.id})`], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = name;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success(`Downloading ${name}`);
+    }
+  };
 
   const handleTrashPatient = async () => {
     if (!patient) return;
@@ -381,20 +455,132 @@ function PatientProfile() {
               />
             </TabsContent>
 
-            <TabsContent value="docs" className="mt-4 space-y-3">
+            <TabsContent value="docs" className="mt-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-semibold">Patient Documents & Reports</h3>
+                  <p className="text-xs text-muted-foreground">Uploaded documents, prescriptions, and lab report attachments</p>
+                </div>
+                <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-primary px-3.5 py-2 text-xs font-medium text-primary-foreground shadow-sm hover:bg-primary/90 transition">
+                  <Upload className="h-3.5 w-3.5" />
+                  <span>{isUploadingDoc ? "Uploading..." : "Upload document"}</span>
+                  <input
+                    type="file"
+                    accept=".pdf,image/png,image/jpeg,.doc,.docx"
+                    className="hidden"
+                    disabled={isUploadingDoc}
+                    onChange={handleDocumentFileUpload}
+                  />
+                </label>
+              </div>
+
               {documentsPage.isLoading && <EmptyCard label="Loading documents..." />}
               {!documentsPage.isLoading && documentsPage.error && <EmptyCard label={documentsPage.error} />}
-              {!documentsPage.isLoading && !documentsPage.error && myDocuments.length === 0 && <EmptyCard label="No uploaded documents for this patient" />}
-              {myDocuments.map((document) => (
-                <DocumentCard key={document.id} document={document} />
-              ))}
-              <PaginationFooter
-                offset={documentsPage.offset}
-                limit={documentsPage.limit}
-                total={documentsPage.total}
-                onOffsetChange={documentsPage.setOffset}
-                disabled={documentsPage.isLoading}
-              />
+
+              {(() => {
+                const labDocs: PatientDocument[] = myLabs
+                  .filter(l => l.fileName)
+                  .map(l => ({
+                    id: `LAB-DOC-${l.id}`,
+                    patientId: l.patientId,
+                    name: l.fileName!,
+                    size: "Lab Report",
+                    type: "Lab Report Attachment",
+                    date: l.date,
+                    uploadedBy: l.uploadedBy,
+                    fileData: l.fileData,
+                    source: "lab_report" as const,
+                  }));
+                const allDocs = [...patientDocs, ...labDocs];
+
+                return (
+                  <>
+                    {myDocuments.length > 0 && (
+                      <div className="space-y-3">
+                        {myDocuments.map((document) => (
+                          <DocumentCard key={document.id} document={document} />
+                        ))}
+                      </div>
+                    )}
+
+                    {allDocs.length > 0 && (
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {allDocs.map((doc) => (
+                          <div
+                            key={doc.id}
+                            className="group flex items-start justify-between gap-3 rounded-2xl border bg-card p-4 shadow-soft transition-all hover:border-primary/50 hover:shadow-card"
+                          >
+                            <div className="flex items-start gap-3 min-w-0">
+                              <div className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary">
+                                {doc.type.includes("Lab") ? (
+                                  <FlaskConical className="h-5 w-5" />
+                                ) : (
+                                  <File className="h-5 w-5" />
+                                )}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="truncate text-sm font-semibold" title={doc.name}>
+                                  {doc.name}
+                                </div>
+                                <div className="text-xs text-muted-foreground">
+                                  {doc.type} · {doc.size}
+                                </div>
+                                <div className="mt-1 text-xs text-muted-foreground">
+                                  {doc.date} · by {doc.uploadedBy}
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8"
+                                title={`Download ${doc.name}`}
+                                onClick={() => handleDownloadFile(doc.name, doc.fileData)}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              {doc.source === "document" && (
+                                <Button
+                                  size="icon"
+                                  variant="ghost"
+                                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                  title="Delete document"
+                                  onClick={async () => {
+                                    await deletePatientDocument(doc.id);
+                                    setPatientDocs(prev => prev.filter(d => d.id !== doc.id));
+                                    toast.success("Document removed");
+                                  }}
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {!documentsPage.isLoading && myDocuments.length === 0 && allDocs.length === 0 && (
+                      <div className="rounded-2xl border bg-card p-10 text-center shadow-soft">
+                        <FolderOpen className="mx-auto mb-2 h-8 w-8 text-muted-foreground" />
+                        <p className="text-sm font-medium">No documents uploaded yet</p>
+                        <p className="text-xs text-muted-foreground mt-1">Upload files or attach reports to this patient record.</p>
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+
+              {myDocuments.length > 0 && (
+                <PaginationFooter
+                  offset={documentsPage.offset}
+                  limit={documentsPage.limit}
+                  total={documentsPage.total}
+                  onOffsetChange={documentsPage.setOffset}
+                  disabled={documentsPage.isLoading}
+                />
+              )}
             </TabsContent>
           </Tabs>
         </div>
@@ -551,9 +737,13 @@ function PatientProfile() {
                     <div className="font-medium">{viewingLab.fileName}</div>
                     <div className="text-xs text-muted-foreground">Attached file</div>
                   </div>
-                  {supabaseConfig.demoMode && (
-                    <Button size="sm" variant="outline"><Download className="mr-1.5 h-3.5 w-3.5" />Download</Button>
-                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => handleDownloadFile(viewingLab.fileName!, viewingLab.fileData)}
+                  >
+                    <Download className="mr-1.5 h-3.5 w-3.5" />Download
+                  </Button>
                 </div>
               )}
               <div className="grid grid-cols-2 gap-3">
