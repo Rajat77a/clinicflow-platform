@@ -1438,6 +1438,13 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     name?: string;
     phone?: string;
     specialty?: string;
+    gender?: "female" | "male" | "other" | "";
+    qualification?: string;
+    medicalRegistrationNumber?: string;
+    experienceYears?: number;
+    consultationFee?: number;
+    workingHours?: string;
+    notes?: string;
     shift?: string;
     status?: "Active" | "Invited" | "Inactive" | "Expired";
   }): Promise<void> {

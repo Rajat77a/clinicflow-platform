@@ -74,6 +74,13 @@ function UsersPage() {
   const [editStaffName, setEditStaffName] = useState("");
   const [editStaffPhone, setEditStaffPhone] = useState("");
   const [editStaffSpecialty, setEditStaffSpecialty] = useState("");
+  const [editStaffGender, setEditStaffGender] = useState<"female" | "male" | "other" | "">("");
+  const [editStaffQualification, setEditStaffQualification] = useState("");
+  const [editStaffRegNo, setEditStaffRegNo] = useState("");
+  const [editStaffExperienceYears, setEditStaffExperienceYears] = useState(0);
+  const [editStaffConsultationFee, setEditStaffConsultationFee] = useState(0);
+  const [editStaffWorkingHours, setEditStaffWorkingHours] = useState("");
+  const [editStaffNotes, setEditStaffNotes] = useState("");
   const [editStaffShift, setEditStaffShift] = useState("");
   const [editStaffStatus, setEditStaffStatus] = useState<"Active" | "Invited" | "Inactive" | "Expired">("Active");
 
@@ -543,6 +550,13 @@ function UsersPage() {
     const doc = doctors.find((d) => d.id === member.id);
     const rec = receptionists.find((r) => r.id === member.id);
     setEditStaffSpecialty(doc?.specialty || "");
+    setEditStaffGender((doc?.gender as any) || "");
+    setEditStaffQualification(doc?.qualification || "");
+    setEditStaffRegNo(doc?.medicalRegistrationNumber || "");
+    setEditStaffExperienceYears(doc?.experienceYears || 0);
+    setEditStaffConsultationFee(doc?.consultationFee || 0);
+    setEditStaffWorkingHours(doc?.workingHours || "");
+    setEditStaffNotes(doc?.notes || "");
     setEditStaffShift(rec?.shift || "");
     setEditStaffStatus(member.status);
     setIsEditingStaff(true);
@@ -562,6 +576,13 @@ function UsersPage() {
         name: editStaffName.trim(),
         phone: editStaffPhone.trim() || undefined,
         specialty: editTarget.role === "doctor" ? editStaffSpecialty.trim() || undefined : undefined,
+        gender: editTarget.role === "doctor" ? editStaffGender || undefined : undefined,
+        qualification: editTarget.role === "doctor" ? editStaffQualification.trim() || undefined : undefined,
+        medicalRegistrationNumber: editTarget.role === "doctor" ? editStaffRegNo.trim() || undefined : undefined,
+        experienceYears: editTarget.role === "doctor" ? editStaffExperienceYears : undefined,
+        consultationFee: editTarget.role === "doctor" ? editStaffConsultationFee : undefined,
+        workingHours: editTarget.role === "doctor" ? editStaffWorkingHours.trim() || undefined : undefined,
+        notes: editTarget.role === "doctor" ? editStaffNotes.trim() || undefined : undefined,
         shift: editTarget.role === "receptionist" ? editStaffShift.trim() || undefined : undefined,
         status: editStaffStatus,
       });
@@ -1756,7 +1777,7 @@ function UsersPage() {
 
       {/* Edit Staff Details Dialog */}
       <Dialog open={isEditingStaff} onOpenChange={setIsEditingStaff}>
-        <DialogContent className="max-w-md max-h-[90vh] overflow-y-auto">
+        <DialogContent className={editTarget?.role === "doctor" ? "max-w-2xl max-h-[90vh] overflow-y-auto" : "max-w-md max-h-[90vh] overflow-y-auto"}>
           <form onSubmit={handleSaveStaff}>
             <DialogHeader>
               <DialogTitle className="flex items-center gap-2">
@@ -1769,86 +1790,275 @@ function UsersPage() {
             </DialogHeader>
 
             <div className="space-y-4 py-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-staff-name">Display Name *</Label>
-                <Input
-                  id="edit-staff-name"
-                  required
-                  value={editStaffName}
-                  onChange={(e) => setEditStaffName(e.target.value)}
-                  placeholder="Full name"
-                />
-              </div>
+              {editTarget?.role === "doctor" ? (
+                <>
+                  {/* Doctor Section 1: Personal information */}
+                  <section className="rounded-2xl border bg-card p-4 shadow-soft space-y-3">
+                    <h4 className="font-display text-xs font-semibold uppercase tracking-wider text-muted-foreground">Personal information</h4>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
+                      <div className="md:col-span-4 space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-doctor-name">Full name *</Label>
+                        <Input
+                          id="edit-doctor-name"
+                          required
+                          className="h-10 rounded-xl"
+                          placeholder="Dr. Amelia Chen"
+                          value={editStaffName}
+                          onChange={(e) => setEditStaffName(e.target.value)}
+                        />
+                      </div>
+                      <div className="md:col-span-2 space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-doctor-gender">Gender</Label>
+                        <Select value={editStaffGender} onValueChange={(val) => setEditStaffGender(val as any)}>
+                          <SelectTrigger id="edit-doctor-gender" className="h-10 rounded-xl">
+                            <SelectValue placeholder="Select" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="male">Male</SelectItem>
+                            <SelectItem value="female">Female</SelectItem>
+                            <SelectItem value="other">Other</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="md:col-span-3 space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-doctor-specialty">Specialty *</Label>
+                        <Input
+                          id="edit-doctor-specialty"
+                          required
+                          className="h-10 rounded-xl"
+                          placeholder="General Medicine"
+                          value={editStaffSpecialty}
+                          onChange={(e) => setEditStaffSpecialty(e.target.value)}
+                        />
+                      </div>
+                      <div className="md:col-span-3 space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-doctor-qual">Qualification</Label>
+                        <Input
+                          id="edit-doctor-qual"
+                          className="h-10 rounded-xl"
+                          placeholder="MBBS, MD"
+                          value={editStaffQualification}
+                          onChange={(e) => setEditStaffQualification(e.target.value)}
+                        />
+                      </div>
+                      <div className="md:col-span-3 space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-doctor-reg">Medical registration No.</Label>
+                        <Input
+                          id="edit-doctor-reg"
+                          className="h-10 rounded-xl"
+                          placeholder="MCI-123456"
+                          value={editStaffRegNo}
+                          onChange={(e) => setEditStaffRegNo(e.target.value)}
+                        />
+                      </div>
+                      <div className="md:col-span-3 space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-doctor-exp">Experience (years)</Label>
+                        <Input
+                          id="edit-doctor-exp"
+                          type="number"
+                          min={0}
+                          max={80}
+                          className="h-10 rounded-xl"
+                          placeholder="8"
+                          value={editStaffExperienceYears}
+                          onChange={(e) => setEditStaffExperienceYears(Number(e.target.value))}
+                        />
+                      </div>
+                    </div>
+                  </section>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-staff-email">Email Address</Label>
-                <Input
-                  id="edit-staff-email"
-                  disabled
-                  value={editTarget?.email || "Pending activation"}
-                  className="bg-muted text-muted-foreground cursor-not-allowed"
-                />
-                <p className="text-[11px] text-muted-foreground">Email is tied to auth identity and cannot be edited directly.</p>
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-staff-phone">Phone Number</Label>
-                <Input
-                  id="edit-staff-phone"
-                  value={editStaffPhone}
-                  onChange={(e) => setEditStaffPhone(e.target.value)}
-                  placeholder="+91..."
-                />
-              </div>
-
-              {editTarget?.role === "doctor" && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="edit-staff-specialty">Specialty</Label>
-                  <Input
-                    id="edit-staff-specialty"
-                    value={editStaffSpecialty}
-                    onChange={(e) => setEditStaffSpecialty(e.target.value)}
-                    placeholder="e.g. Cardiologist, General Medicine"
-                  />
-                </div>
+                  {/* Doctor Section 2: Contact & login */}
+                  <section className="rounded-2xl border bg-card p-4 shadow-soft space-y-3">
+                    <h4 className="font-display text-xs font-semibold uppercase tracking-wider text-muted-foreground">Contact & practice details</h4>
+                    <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
+                      <div className="md:col-span-3 space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-doctor-email">Email (login ID)</Label>
+                        <Input
+                          id="edit-doctor-email"
+                          disabled
+                          className="h-10 rounded-xl bg-muted text-muted-foreground cursor-not-allowed"
+                          value={editTarget?.email || "Pending activation"}
+                        />
+                      </div>
+                      <div className="md:col-span-3 space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-doctor-phone">Phone</Label>
+                        <Input
+                          id="edit-doctor-phone"
+                          className="h-10 rounded-xl"
+                          placeholder="+91 98765 43210"
+                          value={editStaffPhone}
+                          onChange={(e) => setEditStaffPhone(e.target.value)}
+                        />
+                      </div>
+                      <div className="md:col-span-3 space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-doctor-fee">Consultation fee (₹)</Label>
+                        <Input
+                          id="edit-doctor-fee"
+                          type="number"
+                          min={0}
+                          step="0.01"
+                          className="h-10 rounded-xl"
+                          placeholder="500"
+                          value={editStaffConsultationFee}
+                          onChange={(e) => setEditStaffConsultationFee(Number(e.target.value))}
+                        />
+                      </div>
+                      <div className="md:col-span-3 space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-doctor-hours">Working hours</Label>
+                        <Input
+                          id="edit-doctor-hours"
+                          className="h-10 rounded-xl"
+                          placeholder="9:00 AM – 5:00 PM"
+                          value={editStaffWorkingHours}
+                          onChange={(e) => setEditStaffWorkingHours(e.target.value)}
+                        />
+                      </div>
+                      <div className="md:col-span-6 space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-doctor-notes">Notes</Label>
+                        <Textarea
+                          id="edit-doctor-notes"
+                          rows={2}
+                          className="rounded-xl"
+                          placeholder="Available on weekends, etc."
+                          value={editStaffNotes}
+                          onChange={(e) => setEditStaffNotes(e.target.value)}
+                        />
+                      </div>
+                      <div className="md:col-span-6 space-y-1.5">
+                        <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-doctor-status">Status</Label>
+                        <Select
+                          value={editStaffStatus}
+                          onValueChange={(val) => setEditStaffStatus(val as any)}
+                        >
+                          <SelectTrigger id="edit-doctor-status" className="h-10 rounded-xl">
+                            <SelectValue placeholder="Status" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Active">Active</SelectItem>
+                            <SelectItem value="Invited">Invited</SelectItem>
+                            <SelectItem value="Inactive">Inactive</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </section>
+                </>
+              ) : editTarget?.role === "receptionist" ? (
+                <>
+                  {/* Receptionist Fields matching Add Receptionist */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-rec-name">Full name *</Label>
+                    <Input
+                      id="edit-rec-name"
+                      required
+                      className="h-11 rounded-xl"
+                      value={editStaffName}
+                      onChange={(e) => setEditStaffName(e.target.value)}
+                      placeholder="Sofia Romero"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-rec-email">Email (login ID)</Label>
+                    <Input
+                      id="edit-rec-email"
+                      disabled
+                      value={editTarget?.email || "Pending activation"}
+                      className="h-11 rounded-xl bg-muted text-muted-foreground cursor-not-allowed"
+                    />
+                    <p className="text-[11px] text-muted-foreground">Email is tied to auth identity and cannot be edited directly.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-rec-phone">Phone</Label>
+                    <Input
+                      id="edit-rec-phone"
+                      className="h-11 rounded-xl"
+                      value={editStaffPhone}
+                      onChange={(e) => setEditStaffPhone(e.target.value)}
+                      placeholder="+91 …"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-rec-shift">Shift</Label>
+                    <Input
+                      id="edit-rec-shift"
+                      className="h-11 rounded-xl"
+                      value={editStaffShift}
+                      onChange={(e) => setEditStaffShift(e.target.value)}
+                      placeholder="Morning (9–5)"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-rec-status">Status</Label>
+                    <Select
+                      value={editStaffStatus}
+                      onValueChange={(val) => setEditStaffStatus(val as any)}
+                    >
+                      <SelectTrigger id="edit-rec-status" className="h-11 rounded-xl">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Active">Active</SelectItem>
+                        <SelectItem value="Invited">Invited</SelectItem>
+                        <SelectItem value="Inactive">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              ) : (
+                <>
+                  {/* Admin Roles matching Add Admin */}
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-admin-name">Full name *</Label>
+                    <Input
+                      id="edit-admin-name"
+                      required
+                      className="h-11 rounded-xl"
+                      value={editStaffName}
+                      onChange={(e) => setEditStaffName(e.target.value)}
+                      placeholder="Full name"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-admin-email">Email (login ID)</Label>
+                    <Input
+                      id="edit-admin-email"
+                      disabled
+                      value={editTarget?.email || "Pending activation"}
+                      className="h-11 rounded-xl bg-muted text-muted-foreground cursor-not-allowed"
+                    />
+                    <p className="text-[11px] text-muted-foreground">Email is tied to auth identity and cannot be edited directly.</p>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-admin-phone">Phone</Label>
+                    <Input
+                      id="edit-admin-phone"
+                      className="h-11 rounded-xl"
+                      value={editStaffPhone}
+                      onChange={(e) => setEditStaffPhone(e.target.value)}
+                      placeholder="+91 …"
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-admin-status">Status</Label>
+                    <Select
+                      value={editStaffStatus}
+                      onValueChange={(val) => setEditStaffStatus(val as any)}
+                    >
+                      <SelectTrigger id="edit-admin-status" className="h-11 rounded-xl">
+                        <SelectValue placeholder="Status" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Active">Active</SelectItem>
+                        <SelectItem value="Invited">Invited</SelectItem>
+                        <SelectItem value="Inactive">Inactive</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
               )}
-
-              {editTarget?.role === "receptionist" && (
-                <div className="space-y-1.5">
-                  <Label htmlFor="edit-staff-shift">Shift</Label>
-                  <Select value={editStaffShift} onValueChange={setEditStaffShift}>
-                    <SelectTrigger id="edit-staff-shift">
-                      <SelectValue placeholder="Select Shift" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Morning">Morning Shift</SelectItem>
-                      <SelectItem value="Evening">Evening Shift</SelectItem>
-                      <SelectItem value="Night">Night Shift</SelectItem>
-                      <SelectItem value="General">General / Full Day</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              )}
-
-              <div className="space-y-1.5">
-                <Label htmlFor="edit-staff-status">Status</Label>
-                <Select
-                  value={editStaffStatus}
-                  onValueChange={(val) => setEditStaffStatus(val as "Active" | "Invited" | "Inactive" | "Expired")}
-                >
-                  <SelectTrigger id="edit-staff-status">
-                    <SelectValue placeholder="Status" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Active">Active</SelectItem>
-                    <SelectItem value="Invited">Invited</SelectItem>
-                    <SelectItem value="Inactive">Inactive</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
 
-            <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
+            <DialogFooter className="gap-2 sm:gap-0 pt-3 border-t">
               <Button
                 type="button"
                 variant="outline"
@@ -1861,7 +2071,7 @@ function UsersPage() {
                 Cancel
               </Button>
               <Button type="submit" disabled={isSavingStaff}>
-                {isSavingStaff ? "Saving..." : "Save Changes"}
+                {isSavingStaff ? "Saving..." : "Save changes"}
               </Button>
             </DialogFooter>
           </form>

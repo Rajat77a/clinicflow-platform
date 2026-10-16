@@ -1183,163 +1183,183 @@ function PatientProfile() {
 
       {/* Edit Patient Details Dialog */}
       <Dialog open={isEditingPatient} onOpenChange={setIsEditingPatient}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <form onSubmit={handleSavePatient}>
             <DialogHeader>
-              <DialogTitle>Edit Patient Details</DialogTitle>
+              <DialogTitle className="flex items-center gap-2">
+                <Pencil className="h-4 w-4 text-primary" />
+                Edit Patient Details
+              </DialogTitle>
               <DialogDescription>
-                Update demographic, contact and clinical information for {patient.name} ({formatPatientId(patient.id, patient.medicalRecordNumber)}).
+                Update demographic, contact and medical info for {patient.name} ({formatPatientId(patient.id, patient.medicalRecordNumber)}).
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-4 py-4">
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="edit-name">Full Name *</Label>
-                  <Input
-                    id="edit-name"
-                    required
-                    value={editName}
-                    onChange={(e) => setEditName(e.target.value)}
-                    placeholder="Patient full name"
-                  />
+            <div className="space-y-6 py-4">
+              {/* Section 1: Personal information */}
+              <section className="rounded-2xl border bg-card p-5 shadow-soft">
+                <h3 className="mb-4 font-display text-sm font-semibold text-foreground">Personal information</h3>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
+                  <div className="md:col-span-4 space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-name">Full name *</Label>
+                    <Input
+                      id="edit-name"
+                      required
+                      className="h-11 rounded-xl"
+                      placeholder="Liam Andersson"
+                      value={editName}
+                      onChange={(e) => setEditName(e.target.value)}
+                    />
+                  </div>
+                  <div className="md:col-span-2 space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-dob">Date of birth</Label>
+                    <Input
+                      id="edit-dob"
+                      type="date"
+                      max={new Date().toISOString().slice(0, 10)}
+                      className="h-11 rounded-xl"
+                      value={editDateOfBirth}
+                      onChange={(e) => setEditDateOfBirth(e.target.value)}
+                    />
+                  </div>
+                  <div className="md:col-span-2 space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-gender">Gender</Label>
+                    <Select value={editGender} onValueChange={setEditGender}>
+                      <SelectTrigger id="edit-gender" className="h-11 rounded-xl">
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="male">Male</SelectItem>
+                        <SelectItem value="female">Female</SelectItem>
+                        <SelectItem value="unknown">Other</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="md:col-span-2 space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-blood-group">Blood group</Label>
+                    <Select value={editBloodGroup} onValueChange={setEditBloodGroup}>
+                      <SelectTrigger id="edit-blood-group" className="h-11 rounded-xl">
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((bg) => (
+                          <SelectItem key={bg} value={bg}>
+                            {bg}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
+              </section>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="edit-dob">Date of Birth</Label>
-                  <Input
-                    id="edit-dob"
-                    type="date"
-                    max={new Date().toISOString().slice(0, 10)}
-                    value={editDateOfBirth}
-                    onChange={(e) => setEditDateOfBirth(e.target.value)}
-                  />
+              {/* Section 2: Contact */}
+              <section className="rounded-2xl border bg-card p-5 shadow-soft">
+                <h3 className="mb-4 font-display text-sm font-semibold text-foreground">Contact</h3>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
+                  <div className="md:col-span-3 space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-phone">Phone *</Label>
+                    <Input
+                      id="edit-phone"
+                      required
+                      maxLength={40}
+                      className="h-11 rounded-xl"
+                      value={editPhone}
+                      onChange={(e) => setEditPhone(e.target.value)}
+                      placeholder="+91 …"
+                    />
+                  </div>
+                  <div className="md:col-span-3 space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-email">Email</Label>
+                    <Input
+                      id="edit-email"
+                      type="email"
+                      maxLength={254}
+                      className="h-11 rounded-xl"
+                      value={editEmail}
+                      onChange={(e) => setEditEmail(e.target.value)}
+                      placeholder="patient@example.com"
+                    />
+                  </div>
+                  <div className="md:col-span-3 space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-whatsapp">WhatsApp</Label>
+                    <Input
+                      id="edit-whatsapp"
+                      maxLength={40}
+                      className="h-11 rounded-xl"
+                      value={editWhatsappPhone}
+                      onChange={(e) => setEditWhatsappPhone(e.target.value)}
+                      placeholder="+91 …"
+                    />
+                  </div>
+                  <div className="md:col-span-6 space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-address">Address</Label>
+                    <Textarea
+                      id="edit-address"
+                      maxLength={1000}
+                      rows={2}
+                      className="rounded-xl"
+                      value={editAddress}
+                      onChange={(e) => setEditAddress(e.target.value)}
+                      placeholder="Residential address"
+                    />
+                  </div>
+                  <div className="md:col-span-3 space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-emergency-name">Emergency contact name</Label>
+                    <Input
+                      id="edit-emergency-name"
+                      maxLength={200}
+                      className="h-11 rounded-xl"
+                      value={editEmergencyName}
+                      onChange={(e) => setEditEmergencyName(e.target.value)}
+                      placeholder="Contact person name"
+                    />
+                  </div>
+                  <div className="md:col-span-3 space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-emergency-phone">Emergency contact phone</Label>
+                    <Input
+                      id="edit-emergency-phone"
+                      maxLength={40}
+                      className="h-11 rounded-xl"
+                      value={editEmergencyPhone}
+                      onChange={(e) => setEditEmergencyPhone(e.target.value)}
+                      placeholder="+91 …"
+                    />
+                  </div>
                 </div>
+              </section>
 
-                <div className="space-y-1.5">
-                  <Label htmlFor="edit-gender">Gender</Label>
-                  <Select value={editGender} onValueChange={setEditGender}>
-                    <SelectTrigger id="edit-gender">
-                      <SelectValue placeholder="Select gender" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="male">Male</SelectItem>
-                      <SelectItem value="female">Female</SelectItem>
-                      <SelectItem value="unknown">Other</SelectItem>
-                    </SelectContent>
-                  </Select>
+              {/* Section 3: Medical */}
+              <section className="rounded-2xl border bg-card p-5 shadow-soft">
+                <h3 className="mb-4 font-display text-sm font-semibold text-foreground">Medical</h3>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-6">
+                  <div className="md:col-span-3 space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-allergies">Allergies</Label>
+                    <Input
+                      id="edit-allergies"
+                      maxLength={1000}
+                      value={editAllergies}
+                      onChange={(e) => setEditAllergies(e.target.value)}
+                      className="h-11 rounded-xl"
+                      placeholder="None / penicillin / …"
+                    />
+                  </div>
+                  <div className="md:col-span-3 space-y-1.5">
+                    <Label className="text-xs font-semibold text-muted-foreground" htmlFor="edit-chronic">Existing conditions</Label>
+                    <Input
+                      id="edit-chronic"
+                      maxLength={1000}
+                      value={editChronicConditions}
+                      onChange={(e) => setEditChronicConditions(e.target.value)}
+                      className="h-11 rounded-xl"
+                      placeholder="Hypertension, asthma…"
+                    />
+                  </div>
                 </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="edit-phone">Phone Number *</Label>
-                  <Input
-                    id="edit-phone"
-                    required
-                    maxLength={40}
-                    value={editPhone}
-                    onChange={(e) => setEditPhone(e.target.value)}
-                    placeholder="+91..."
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="edit-email">Email Address</Label>
-                  <Input
-                    id="edit-email"
-                    type="email"
-                    maxLength={254}
-                    value={editEmail}
-                    onChange={(e) => setEditEmail(e.target.value)}
-                    placeholder="patient@example.com"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="edit-whatsapp">WhatsApp Phone</Label>
-                  <Input
-                    id="edit-whatsapp"
-                    maxLength={40}
-                    value={editWhatsappPhone}
-                    onChange={(e) => setEditWhatsappPhone(e.target.value)}
-                    placeholder="+91..."
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="edit-blood-group">Blood Group</Label>
-                  <Select value={editBloodGroup} onValueChange={setEditBloodGroup}>
-                    <SelectTrigger id="edit-blood-group">
-                      <SelectValue placeholder="Select blood group" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"].map((bg) => (
-                        <SelectItem key={bg} value={bg}>
-                          {bg}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="edit-address">Address</Label>
-                  <Textarea
-                    id="edit-address"
-                    rows={2}
-                    maxLength={1000}
-                    value={editAddress}
-                    onChange={(e) => setEditAddress(e.target.value)}
-                    placeholder="Residential address"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="edit-emergency-name">Emergency Contact Name</Label>
-                  <Input
-                    id="edit-emergency-name"
-                    maxLength={200}
-                    value={editEmergencyName}
-                    onChange={(e) => setEditEmergencyName(e.target.value)}
-                    placeholder="Contact person name"
-                  />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label htmlFor="edit-emergency-phone">Emergency Contact Phone</Label>
-                  <Input
-                    id="edit-emergency-phone"
-                    maxLength={40}
-                    value={editEmergencyPhone}
-                    onChange={(e) => setEditEmergencyPhone(e.target.value)}
-                    placeholder="+91..."
-                  />
-                </div>
-
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="edit-allergies">Allergies (comma separated)</Label>
-                  <Input
-                    id="edit-allergies"
-                    maxLength={1000}
-                    value={editAllergies}
-                    onChange={(e) => setEditAllergies(e.target.value)}
-                    placeholder="Penicillin, Peanuts, Pollen..."
-                  />
-                </div>
-
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="edit-chronic">Existing / Chronic Conditions (comma separated)</Label>
-                  <Input
-                    id="edit-chronic"
-                    maxLength={1000}
-                    value={editChronicConditions}
-                    onChange={(e) => setEditChronicConditions(e.target.value)}
-                    placeholder="Hypertension, Diabetes, Asthma..."
-                  />
-                </div>
-              </div>
+              </section>
             </div>
 
-            <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
+            <DialogFooter className="gap-2 sm:gap-0 pt-3 border-t">
               <Button
                 type="button"
                 variant="outline"
@@ -1349,7 +1369,7 @@ function PatientProfile() {
                 Cancel
               </Button>
               <Button type="submit" disabled={isSavingPatient}>
-                {isSavingPatient ? "Saving changes..." : "Save Changes"}
+                {isSavingPatient ? "Saving changes..." : "Save changes"}
               </Button>
             </DialogFooter>
           </form>

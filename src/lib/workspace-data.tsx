@@ -714,7 +714,25 @@ type Command =
   | { type: "patient.bulk_restored"; patientIds: string[]; actor: AuthUser }
   | { type: "patient.bulk_permanently_deleted"; patientIds: string[]; actor: AuthUser }
   | { type: "patient.updated"; value: Patient; actor: AuthUser }
-  | { type: "staff.updated"; value: { id: string; name?: string; phone?: string; specialty?: string; shift?: string; status?: "Active" | "Invited" | "Inactive" | "Expired" }; actor: AuthUser };
+  | {
+      type: "staff.updated";
+      value: {
+        id: string;
+        name?: string;
+        phone?: string;
+        specialty?: string;
+        gender?: "female" | "male" | "other" | "";
+        qualification?: string;
+        medicalRegistrationNumber?: string;
+        experienceYears?: number;
+        consultationFee?: number;
+        workingHours?: string;
+        notes?: string;
+        shift?: string;
+        status?: "Active" | "Invited" | "Inactive" | "Expired";
+      };
+      actor: AuthUser;
+    };
 
 function createId(prefix: string) {
   const suffix = globalThis.crypto?.randomUUID?.().slice(0, 8).toUpperCase()
@@ -972,7 +990,21 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       );
     }
     case "staff.updated": {
-      const { id, name, phone, specialty, shift, status } = command.value;
+      const {
+        id,
+        name,
+        phone,
+        specialty,
+        gender,
+        qualification,
+        medicalRegistrationNumber,
+        experienceYears,
+        consultationFee,
+        workingHours,
+        notes,
+        shift,
+        status,
+      } = command.value;
       return appendAudit(
         {
           ...state,
@@ -992,6 +1024,13 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
               ...(name ? { name } : {}),
               ...(phone !== undefined ? { phone } : {}),
               ...(specialty ? { specialty } : {}),
+              ...(gender !== undefined ? { gender } : {}),
+              ...(qualification !== undefined ? { qualification } : {}),
+              ...(medicalRegistrationNumber !== undefined ? { medicalRegistrationNumber } : {}),
+              ...(experienceYears !== undefined ? { experienceYears } : {}),
+              ...(consultationFee !== undefined ? { consultationFee } : {}),
+              ...(workingHours !== undefined ? { workingHours } : {}),
+              ...(notes !== undefined ? { notes } : {}),
               ...(status ? { status } : {}),
             };
           }),
@@ -1801,7 +1840,21 @@ interface WorkspaceData {
   resendStaffInvitation: (userId: string) => Promise<{ data: StaffMember; setupUrl: string; emailSent?: boolean; emailId?: string; emailError?: string } | void>;
   createPatient: (input: PatientInput) => Promise<Patient>;
   updatePatient: (input: Partial<PatientInput> & { id: string }) => Promise<Patient>;
-  updateStaff: (input: { id: string; name?: string; phone?: string; specialty?: string; shift?: string; status?: "Active" | "Invited" | "Inactive" | "Expired" }) => Promise<void>;
+  updateStaff: (input: {
+    id: string;
+    name?: string;
+    phone?: string;
+    specialty?: string;
+    gender?: "female" | "male" | "other" | "";
+    qualification?: string;
+    medicalRegistrationNumber?: string;
+    experienceYears?: number;
+    consultationFee?: number;
+    workingHours?: string;
+    notes?: string;
+    shift?: string;
+    status?: "Active" | "Invited" | "Inactive" | "Expired";
+  }) => Promise<void>;
   createAppointment: (input: AppointmentInput) => Promise<Appointment>;
   updateAppointment: (appointment: Appointment) => Promise<Appointment>;
   savePrescription: (input: PrescriptionInput) => Promise<Prescription>;

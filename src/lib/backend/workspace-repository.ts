@@ -74,8 +74,21 @@ export interface WorkspaceRepository {
   saveLabReports(reports: Omit<LabReport, "clinicId">[]): Promise<LabReport[]>;
   createBill(input: BillInput): Promise<Bill>;
   updateBill(bill: Bill): Promise<Bill>;
-  updateStaff?(input: { id: string; name?: string; phone?: string; specialty?: string; shift?: string; status?: "Active" | "Invited" | "Inactive" | "Expired" }): Promise<void>;
-  inviteSuperAdmin(input: { name: string; email: string; phone: string; tempPassword?: string }): Promise<{ data: StaffMember; setupUrl?: string; emailSent?: boolean; emailId?: string; emailError?: string }>;
+  updateStaff?(input: {
+    id: string;
+    name?: string;
+    phone?: string;
+    specialty?: string;
+    gender?: "female" | "male" | "other" | "";
+    qualification?: string;
+    medicalRegistrationNumber?: string;
+    experienceYears?: number;
+    consultationFee?: number;
+    workingHours?: string;
+    notes?: string;
+    shift?: string;
+    status?: "Active" | "Invited" | "Inactive" | "Expired";
+  }): Promise<void>;
   deactivateStaff(userId: string, reason: string): Promise<void>;
   softDeleteStaff?(userId: string): Promise<void>;
   bulkSoftDeleteStaff?(userIds: string[]): Promise<void>;
