@@ -235,13 +235,13 @@ function NewPrescription() {
 
   const shareRx = () => {
     if (!patient) return;
-    const targetPhone = patient.raw?.whatsappPhone?.trim() || patient.tertiary?.trim() || "";
+    const targetPhone = patient.raw?.whatsappPhone?.trim() || "";
     if (!targetPhone) {
-      toast.error("No WhatsApp number available for this patient");
+      toast.error("WhatsApp number is not available");
       return;
     }
     const parts = [
-      `Hi ${patient.primary}, here is your prescription from ${user?.clinic}.`,
+      `Hi ${patient.primary}, here is your prescription from ${user?.clinic ?? "ClinicFlow"}:`,
       presentingComplaints.trim() ? `Presenting Complaints:\n${presentingComplaints.trim()}` : "",
       pastIllnessHistory.trim() ? `History of Past Illness:\n${pastIllnessHistory.trim()}` : "",
       clinicalFindings.trim() ? `Clinical Findings:\n${clinicalFindings.trim()}` : "",
@@ -252,7 +252,7 @@ function NewPrescription() {
     ].filter(Boolean);
     const msg = parts.join("\n\n");
     sendWhatsApp(targetPhone, msg);
-    toast.success(`Opening WhatsApp for ${patient.primary}`);
+    toast.success(`Opening WhatsApp chat for ${patient.primary}`);
   };
 
   if (edit) {
