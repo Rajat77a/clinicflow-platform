@@ -38,23 +38,35 @@ function PrescriptionsPage() {
   const printRx = (rx: Prescription) => {
     const details = resolvePrescriptionDetails(rx);
     const displayPatientId = formatPatientId(rx.patientId);
+    const primaryReason = details.primaryIllness || (rx.diagnosis && rx.diagnosis !== "Not recorded" ? rx.diagnosis : "");
     printDocument(`
       <h2>${user?.clinic ?? "ClinicFlow"}</h2>
-      <div class="muted">Prescription ${rx.id} · ${rx.date}</div>
+      <div class="muted">Prescription ${rx.id} · Issued on ${rx.date}</div>
       <div class="card">
-        <div class="row"><b>Patient</b><span>${rx.patient} (${displayPatientId})</span></div>
-        <div class="row"><b>Doctor</b><span>${rx.doctor}</span></div>
+        <div class="row"><b>Patient Name</b><span>${rx.patient} (${displayPatientId})</span></div>
+        <div class="row"><b>Consulting Doctor</b><span>${rx.doctor}</span></div>
         ${details.presentingComplaints ? `<div class="section"><div class="label">Presenting Complaints</div><div class="val">${details.presentingComplaints}</div></div>` : ""}
+        ${primaryReason ? `<div class="section"><div class="label">Primary Illness / Diagnosis</div><div class="val">${primaryReason}</div></div>` : ""}
         ${details.pastIllnessHistory ? `<div class="section"><div class="label">History of Past Illness</div><div class="val">${details.pastIllnessHistory}</div></div>` : ""}
         ${details.clinicalFindings ? `<div class="section"><div class="label">Clinical Findings</div><div class="val">${details.clinicalFindings}</div></div>` : ""}
-        <div class="section"><div class="label">Diagnosis / Primary Illness</div><div class="val">${rx.diagnosis || details.primaryIllness}</div></div>
-        ${details.treatmentNotes ? `<div class="section"><div class="label">Treatment Notes</div><div class="val">${details.treatmentNotes}</div></div>` : ""}
+        ${details.treatmentNotes ? `<div class="section"><div class="label">Treatment Notes / Advice</div><div class="val">${details.treatmentNotes}</div></div>` : ""}
         ${details.additionalNotes ? `<div class="section"><div class="label">Additional Notes</div><div class="val">${details.additionalNotes}</div></div>` : ""}
-        ${rx.followUp ? `<div class="row"><b>Follow-up</b><span>${rx.followUp}</span></div>` : ""}
+        ${rx.followUp ? `<div class="row"><b>Follow-up Date</b><span>${rx.followUp}</span></div>` : ""}
       </div>
-      <h3>Medicines</h3>
-      <table><thead><tr><th>Medicine</th><th>Dosage</th><th>Frequency</th><th>Duration</th></tr></thead>
-      <tbody>${rx.medicines.map(m => `<tr><td>${m.name}</td><td>${m.dosage}</td><td>${m.frequency}</td><td>${m.duration}</td></tr>`).join("")}</tbody></table>
+      <h3>Prescribed Medicines (Rx)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 40%">Medicine Name</th>
+            <th style="width: 20%">Dosage</th>
+            <th style="width: 20%">Frequency</th>
+            <th style="width: 20%">Duration</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rx.medicines.map(m => `<tr><td><b>${m.name}</b></td><td>${m.dosage}</td><td>${m.frequency}</td><td>${m.duration}</td></tr>`).join("")}
+        </tbody>
+      </table>
     `, `Prescription ${rx.id}`);
   };
 
@@ -252,7 +264,7 @@ function PrescriptionsPage() {
                       Primary Illness / Reason / Diagnosis
                     </span>
                     <p className="text-sm font-semibold text-foreground whitespace-pre-wrap">
-                      {viewingRx.diagnosis || activeDetails.primaryIllness}
+                      {activeDetails.primaryIllness}
                     </p>
                   </div>
 

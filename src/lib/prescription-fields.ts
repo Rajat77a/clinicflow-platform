@@ -92,8 +92,9 @@ export function resolvePrescriptionDetails(rx: {
   const additionalNotes = parsed.additionalNotes;
 
   // The primary illness / main reason of the prescription:
-  // Use diagnosis if provided, or presenting complaints
-  const primaryIllness = rx.diagnosis || presentingComplaints || "General Consultation";
+  // If diagnosis is missing or "Not recorded", use presenting complaints instead of showing "Not recorded"
+  const cleanDiagnosis = rx.diagnosis && rx.diagnosis.trim().toLowerCase() !== "not recorded" ? rx.diagnosis.trim() : "";
+  const primaryIllness = cleanDiagnosis || presentingComplaints || "General Consultation";
 
   return {
     presentingComplaints,
