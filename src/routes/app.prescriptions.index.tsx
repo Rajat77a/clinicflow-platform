@@ -12,7 +12,7 @@ import { PaginationFooter } from "@/components/data/pagination-footer";
 import { useRecordPage } from "@/lib/use-record-page";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { printDocument } from "@/lib/exporters";
-import { resolvePrescriptionDetails } from "@/lib/prescription-fields";
+import { resolvePrescriptionDetails, formatPatientId } from "@/lib/prescription-fields";
 import { toast } from "sonner";
 import type { Prescription } from "@/lib/workspace-data";
 
@@ -37,11 +37,12 @@ function PrescriptionsPage() {
 
   const printRx = (rx: Prescription) => {
     const details = resolvePrescriptionDetails(rx);
+    const displayPatientId = formatPatientId(rx.patientId);
     printDocument(`
       <h2>${user?.clinic ?? "ClinicFlow"}</h2>
       <div class="muted">Prescription ${rx.id} · ${rx.date}</div>
       <div class="card">
-        <div class="row"><b>Patient</b><span>${rx.patient} (${rx.patientId})</span></div>
+        <div class="row"><b>Patient</b><span>${rx.patient} (${displayPatientId})</span></div>
         <div class="row"><b>Doctor</b><span>${rx.doctor}</span></div>
         ${details.presentingComplaints ? `<div class="section"><div class="label">Presenting Complaints</div><div class="val">${details.presentingComplaints}</div></div>` : ""}
         ${details.pastIllnessHistory ? `<div class="section"><div class="label">History of Past Illness</div><div class="val">${details.pastIllnessHistory}</div></div>` : ""}
@@ -230,7 +231,7 @@ function PrescriptionsPage() {
                   <div>
                     <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Patient</div>
                     <div className="font-medium text-sm mt-0.5">{viewingRx.patient}</div>
-                    <div className="font-mono text-xs text-muted-foreground truncate">{viewingRx.patientId}</div>
+                    <div className="font-mono text-xs font-semibold text-primary">{formatPatientId(viewingRx.patientId)}</div>
                   </div>
                   <div>
                     <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Doctor</div>

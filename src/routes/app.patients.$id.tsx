@@ -18,7 +18,7 @@ import {
 } from "@/lib/workspace-data";
 import { printDocument } from "@/lib/exporters";
 import { sendWhatsApp } from "@/lib/whatsapp";
-import { resolvePrescriptionDetails } from "@/lib/prescription-fields";
+import { resolvePrescriptionDetails, formatPatientId } from "@/lib/prescription-fields";
 import { useAuth } from "@/lib/auth";
 import { hasPermission } from "@/lib/access-control";
 import { supabaseConfig } from "@/lib/supabase/config";
@@ -222,11 +222,12 @@ function PatientProfile() {
 
   const printRx = (rx: Prescription) => {
     const details = resolvePrescriptionDetails(rx);
+    const displayPatientId = formatPatientId(patient.id, patient.medicalRecordNumber);
     printDocument(`
       <h2>${user?.clinic ?? "ClinicFlow"}</h2>
       <div class="muted">Prescription ${rx.id} · ${rx.date}</div>
       <div class="card">
-        <div class="row"><b>Patient</b><span>${patient.name} (${patient.id})</span></div>
+        <div class="row"><b>Patient</b><span>${patient.name} (${displayPatientId})</span></div>
         <div class="row"><b>Doctor</b><span>${rx.doctor}</span></div>
         ${details.presentingComplaints ? `<div class="section"><div class="label">Presenting Complaints</div><div class="val">${details.presentingComplaints}</div></div>` : ""}
         ${details.pastIllnessHistory ? `<div class="section"><div class="label">History of Past Illness</div><div class="val">${details.pastIllnessHistory}</div></div>` : ""}
@@ -282,7 +283,7 @@ function PatientProfile() {
 
   return (
     <>
-      <PageHeader title={patient.name} description={`Patient ID ${patient.medicalRecordNumber ?? patient.id}`}
+      <PageHeader title={patient.name} description={`Patient ID ${formatPatientId(patient.id, patient.medicalRecordNumber)}`}
         actions={
           <div className="flex flex-wrap gap-2">
             {canEditRx && <Button asChild variant="outline"><Link to="/app/prescriptions/new" search={{ patient: patient.id }}>New prescription</Link></Button>}

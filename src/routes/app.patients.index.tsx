@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useWorkspaceData, type Patient } from "@/lib/workspace-data";
 import { useAuth } from "@/lib/auth";
 import { hasPermission } from "@/lib/access-control";
+import { formatPatientId } from "@/lib/prescription-fields";
 import { ChevronLeft, ChevronRight, Search, Plus, Trash2, AlertTriangle, UserCheck, Users } from "lucide-react";
 import { toast } from "sonner";
 
@@ -179,7 +180,7 @@ function PatientsPage() {
                       <div className="font-semibold">{p.name}</div>
                     </div>
                   </TableCell>
-                  <TableCell className="font-mono text-xs">{p.id}</TableCell>
+                  <TableCell className="font-mono text-xs font-semibold">{formatPatientId(p.id, p.medicalRecordNumber)}</TableCell>
                   <TableCell>{p.age}</TableCell>
                   <TableCell className="text-muted-foreground">{p.gender}</TableCell>
                   <TableCell>{p.phone}</TableCell>

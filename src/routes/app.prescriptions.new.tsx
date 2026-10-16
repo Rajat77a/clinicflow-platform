@@ -12,6 +12,7 @@ import { useWorkspaceData } from "@/lib/workspace-data";
 import { Activity, Plus, Trash2, Send, Printer, FlaskConical, Paperclip, Upload, X } from "lucide-react";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { printDocument } from "@/lib/exporters";
+import { formatPatientId } from "@/lib/prescription-fields";
 import { supabaseConfig } from "@/lib/supabase/config";
 import { toast } from "sonner";
 
@@ -213,11 +214,12 @@ function NewPrescription() {
   };
 
   const printRx = () => {
+    const displayPatientId = formatPatientId(patient?.id, patient?.raw?.medicalRecordNumber);
     printDocument(`
       <h2>${user?.clinic ?? "ClinicFlow"}</h2>
       <div class="muted">Prescription · ${new Date().toLocaleDateString()}</div>
       <div class="card">
-        <div class="row"><b>Patient</b><span>${patient?.primary ?? "—"} (${patient?.id ?? ""})</span></div>
+        <div class="row"><b>Patient</b><span>${patient?.primary ?? "—"} (${displayPatientId})</span></div>
         <div class="row"><b>Doctor</b><span>${doctor?.primary ?? "—"}</span></div>
         ${presentingComplaints ? `<div class="section"><div class="label">Presenting Complaints</div><div class="val">${presentingComplaints}</div></div>` : ""}
         ${pastIllnessHistory ? `<div class="section"><div class="label">History of Past Illness</div><div class="val">${pastIllnessHistory}</div></div>` : ""}
@@ -529,7 +531,7 @@ function NewPrescription() {
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
               <div><div className="text-muted-foreground">Patient</div><div className="font-semibold">{patient?.primary ?? "—"}</div></div>
-              <div><div className="text-muted-foreground">Patient ID</div><div className="font-mono">{patient?.id ?? "—"}</div></div>
+              <div><div className="text-muted-foreground">Patient ID</div><div className="font-mono font-semibold text-primary">{patient ? formatPatientId(patient.id, patient.raw?.medicalRecordNumber) : "—"}</div></div>
               <div><div className="text-muted-foreground">Age / Gender</div><div>{patient?.secondary ?? "—"}</div></div>
               <div><div className="text-muted-foreground">Date</div><div>{new Date().toISOString().slice(0, 10)}</div></div>
             </div>

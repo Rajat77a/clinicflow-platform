@@ -104,3 +104,47 @@ export function resolvePrescriptionDetails(rx: {
     primaryIllness,
   };
 }
+
+/**
+ * Formats any patient ID (UUID or long alphanumeric string) into a clean, friendly short ID like "PT-101".
+ * If patient already has a clean short ID (e.g. PT-101 or PT-12) or medical record number, it formats that appropriately.
+ */
+export function formatPatientId(patientId?: string, medicalRecordNumber?: string): string {
+  if (medicalRecordNumber && /^PT-\d+$/i.test(medicalRecordNumber.trim())) {
+    return medicalRecordNumber.trim().toUpperCase();
+  }
+
+  if (!patientId) return "PT-101";
+
+  const clean = patientId.trim();
+
+  // If already like PT-101 or PT-123
+  if (/^PT-\d+$/i.test(clean)) {
+    return clean.toUpperCase();
+  }
+
+  // If starts with PT- and a short number
+  const ptMatch = clean.match(/^PT-(\d+)/i);
+  if (ptMatch) {
+    return `PT-${ptMatch[1]}`;
+  }
+
+  // If it's a medical record number like CF-2026-0000101
+  const mrnMatch = (medicalRecordNumber || "").match(/(\d+)$/);
+  if (mrnMatch) {
+    const num = parseInt(mrnMatch[1], 10);
+    if (!isNaN(num) && num > 0) {
+      return `PT-${100 + (num % 9000)}`;
+    }
+  }
+
+  // Derive a deterministic friendly small number 101-999 from UUID/hash
+  let hash = 0;
+  for (let i = 0; i < clean.length; i++) {
+    hash = (hash << 5) - hash + clean.charCodeAt(i);
+    hash |= 0;
+  }
+  const smallNum = 101 + (Math.abs(hash) % 899);
+  return `PT-${smallNum}`;
+}
+
