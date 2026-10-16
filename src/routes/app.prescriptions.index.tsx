@@ -5,15 +5,18 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useAuth } from "@/lib/auth";
 import { useWorkspaceData } from "@/lib/workspace-data";
 import { hasPermission } from "@/lib/access-control";
-import { Plus, FileText, Edit, Eye } from "lucide-react";
+import { Plus, FileText, Edit, Eye, Send } from "lucide-react";
 import { PaginationFooter } from "@/components/data/pagination-footer";
 import { useRecordPage } from "@/lib/use-record-page";
+import { sendWhatsApp } from "@/lib/whatsapp";
+import { toast } from "sonner";
+import type { Prescription } from "@/lib/workspace-data";
 
 export const Route = createFileRoute("/app/prescriptions/")({ component: PrescriptionsPage });
 
 function PrescriptionsPage() {
   const { user } = useAuth();
-  const { listPrescriptions } = useWorkspaceData();
+  const { patients, getPatient, listPrescriptions } = useWorkspaceData();
   const {
     rows,
     total,
@@ -25,6 +28,35 @@ function PrescriptionsPage() {
   } = useRecordPage(listPrescriptions);
   const canCreateRx = Boolean(user && hasPermission(user.role, "prescriptions.write"));
   const canEdit = canCreateRx;
+
+  const shareRxWhatsApp = async (rx: Prescription) => {
+    let p = patients.find(pt => pt.id === rx.patientId);
+    if (!p) {
+      try {
+        p = (await getPatient(rx.patientId)) ?? undefined;
+      } catch {
+        // Ignore
+      }
+    }
+    const targetPhone = p?.whatsappPhone?.trim() || p?.phone?.trim() || "";
+    if (!targetPhone) {
+      toast.error("No WhatsApp number available for this patient");
+      return;
+    }
+    const parts = [
+      `Hi ${rx.patient}, prescription ${rx.id} (${rx.date}):`,
+      rx.presentingComplaints?.trim() ? `Presenting Complaints:\n${rx.presentingComplaints.trim()}` : "",
+      rx.pastIllnessHistory?.trim() ? `History of Past Illness:\n${rx.pastIllnessHistory.trim()}` : "",
+      rx.clinicalFindings?.trim() ? `Clinical Findings:\n${rx.clinicalFindings.trim()}` : "",
+      `Diagnosis:\n${rx.diagnosis}`,
+      rx.treatmentNotes?.trim() ? `Treatment Notes:\n${rx.treatmentNotes.trim()}` : "",
+      `Medicines:\n${rx.medicines.map(m => `• ${m.name} — ${m.dosage} ${m.frequency} × ${m.duration}`).join("\n")}`,
+      rx.followUp ? `Follow-up: ${rx.followUp}` : "",
+    ].filter(Boolean);
+    const msg = parts.join("\n\n");
+    sendWhatsApp(targetPhone, msg);
+    toast.success(`Opening WhatsApp for ${rx.patient}`);
+  };
   return (
     <>
       <PageHeader title="Prescriptions" description="Issued prescriptions and lab reports."
@@ -72,6 +104,15 @@ function PrescriptionsPage() {
                         <Eye className="mr-1 h-3.5 w-3.5" />View
                       </Link>
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => shareRxWhatsApp(r)}
+                      title="Send on WhatsApp"
+                      aria-label={`Send prescription ${r.id} on WhatsApp`}
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                    </Button>
                     {canEdit && (
                       <Button asChild size="sm" variant="ghost">
                         <Link to="/app/prescriptions/new" search={{ edit: r.id }}>
@@ -79,7 +120,6 @@ function PrescriptionsPage() {
                         </Link>
                       </Button>
                     )}
-                    
                   </div>
                 </TableCell>
               </TableRow>
