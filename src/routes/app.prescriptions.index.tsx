@@ -352,22 +352,18 @@ function PrescriptionsPage() {
                 </div>
               </div>
 
-              <DialogFooter className="p-4 border-t bg-muted/10 flex items-center justify-between gap-2 sm:justify-between">
-                <Button variant="outline" size="sm" asChild>
-                  <Link to="/app/patients/$id" params={{ id: viewingRx.patientId }}>
-                    Open Patient Profile
-                  </Link>
+              <DialogFooter className="p-4 border-t bg-muted/10 flex items-center justify-end gap-2">
+                <Button variant="outline" size="sm" onClick={() => printRx(viewingRx)}>
+                  <Printer className="mr-1.5 h-3.5 w-3.5" />
+                  Print
                 </Button>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => printRx(viewingRx)}>
-                    <Printer className="mr-1.5 h-3.5 w-3.5" />
-                    Print
-                  </Button>
-                  <Button variant="default" size="sm" onClick={() => shareRxWhatsApp(viewingRx)}>
-                    <Send className="mr-1.5 h-3.5 w-3.5" />
-                    Send WhatsApp
-                  </Button>
-                </div>
+                <Button variant="default" size="sm" onClick={() => shareRxWhatsApp(viewingRx)}>
+                  <Send className="mr-1.5 h-3.5 w-3.5" />
+                  Send WhatsApp
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => setViewingRx(null)}>
+                  Close
+                </Button>
               </DialogFooter>
             </>
           )}
