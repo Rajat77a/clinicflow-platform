@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { CheckCircle2, Eye, Pencil } from "lucide-react";
+import { CheckCircle2, Eye, Pencil, Send } from "lucide-react";
 import { toast } from "sonner";
 import { PaginationFooter } from "@/components/data/pagination-footer";
 import { PageHeader } from "@/components/layout/page-header";
@@ -33,12 +33,13 @@ import { useAuth } from "@/lib/auth";
 import { hasPermission } from "@/lib/access-control";
 import { useRecordPage } from "@/lib/use-record-page";
 import { useWorkspaceData, type Bill } from "@/lib/workspace-data";
+import { sendWhatsApp } from "@/lib/whatsapp";
 
 export const Route = createFileRoute("/app/billing/")({ component: BillingPage });
 
 function BillingPage() {
   const { user } = useAuth();
-  const { listBills, updateBill, updateBillNotes } = useWorkspaceData();
+  const { patients, getPatient, listBills, updateBill, updateBillNotes } = useWorkspaceData();
   const {
     rows: bills,
     total,
@@ -57,6 +58,25 @@ function BillingPage() {
 
   const canEditNotes = user?.role === "clinic_admin" || user?.role === "receptionist" || user?.role === "super_admin";
   const canWriteBilling = user ? hasPermission(user.role, "billing.write") : false;
+
+  const shareBillWhatsApp = async (bill: Bill) => {
+    let p = patients.find(pt => pt.id === bill.patientId);
+    if (!p) {
+      try {
+        p = (await getPatient(bill.patientId)) ?? undefined;
+      } catch {
+        // Ignore
+      }
+    }
+    const targetPhone = p?.whatsappPhone?.trim() || p?.phone?.trim() || "";
+    if (!targetPhone) {
+      toast.error("No WhatsApp number available for this patient");
+      return;
+    }
+    const msg = `Hi ${bill.patient}, invoice ${bill.id} from ${user?.clinic ?? "ClinicFlow"}: Amount: INR ${bill.amount.toFixed(2)} (${bill.status}). Date: ${bill.date}`;
+    sendWhatsApp(targetPhone, msg);
+    toast.success(`Opening WhatsApp for ${bill.patient}`);
+  };
 
   const markPaid = async () => {
     if (!viewing) return;
@@ -117,17 +137,28 @@ function BillingPage() {
                   </Badge>
                 </TableCell>
                 <TableCell className="text-right">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
-                      setViewing(bill);
-                      setPayMethod(bill.method === "-" ? "Card" : bill.method);
-                    }}
-                  >
-                    <Eye className="mr-1 h-3.5 w-3.5" />
-                    View
-                  </Button>
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setViewing(bill);
+                        setPayMethod(bill.method === "-" ? "Card" : bill.method);
+                      }}
+                    >
+                      <Eye className="mr-1 h-3.5 w-3.5" />
+                      View
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => shareBillWhatsApp(bill)}
+                      title="Send on WhatsApp"
+                      aria-label={`Send bill ${bill.id} on WhatsApp`}
+                    >
+                      <Send className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
             ))}
@@ -275,6 +306,16 @@ function BillingPage() {
             </div>
           )}
           <DialogFooter>
+            {viewing && (
+              <Button
+                variant="outline"
+                onClick={() => shareBillWhatsApp(viewing)}
+                title="Send invoice on WhatsApp"
+              >
+                <Send className="mr-1.5 h-4 w-4" />
+                Send on WhatsApp
+              </Button>
+            )}
             {canWriteBilling && viewing?.status !== "Paid" && (
               <Button onClick={markPaid} disabled={isRecordingPayment}>
                 <CheckCircle2 className="mr-1.5 h-4 w-4" />

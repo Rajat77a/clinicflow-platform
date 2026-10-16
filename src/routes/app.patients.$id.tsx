@@ -240,7 +240,16 @@ function PatientProfile() {
     `, `Prescription ${rx.id}`);
   };
 
+  const getPatientWhatsAppNumber = () => {
+    return patient.whatsappPhone?.trim() || patient.phone?.trim() || "";
+  };
+
   const shareRx = (rx: Prescription) => {
+    const targetPhone = getPatientWhatsAppNumber();
+    if (!targetPhone) {
+      toast.error("No WhatsApp number available for this patient");
+      return;
+    }
     const parts = [
       `Hi ${patient.name}, prescription ${rx.id} (${rx.date}):`,
       rx.presentingComplaints?.trim() ? `Presenting Complaints:\n${rx.presentingComplaints.trim()}` : "",
@@ -252,7 +261,19 @@ function PatientProfile() {
       rx.followUp ? `Follow-up: ${rx.followUp}` : "",
     ].filter(Boolean);
     const msg = parts.join("\n\n");
-    sendWhatsApp(patient.phone, msg);
+    sendWhatsApp(targetPhone, msg);
+    toast.success(`Opening WhatsApp for ${patient.name}`);
+  };
+
+  const shareBill = (b: Bill) => {
+    const targetPhone = getPatientWhatsAppNumber();
+    if (!targetPhone) {
+      toast.error("No WhatsApp number available for this patient");
+      return;
+    }
+    const msg = `Hi ${patient.name}, invoice ${b.id} from ${user?.clinic ?? "ClinicFlow"}: Amount: ₹${b.amount.toFixed(2)} (${b.status}). Date: ${b.date}`;
+    sendWhatsApp(targetPhone, msg);
+    toast.success(`Opening WhatsApp for ${patient.name}`);
   };
 
   return (
@@ -462,9 +483,16 @@ function PatientProfile() {
                       <TableCell className="text-right tabular-nums">₹{b.amount.toFixed(2)}</TableCell>
                       <TableCell><Badge variant={b.status === "Paid" ? "secondary" : b.status === "Overdue" ? "destructive" : "outline"}>{b.status}</Badge></TableCell>
                       <TableCell className="text-right">
-                        <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setViewingBill(b); }}>
-                          <Eye className="h-3.5 w-3.5" />
-                        </Button>
+                        <div className="flex justify-end gap-1">
+                          <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setViewingBill(b); }} aria-label={`View ${b.id}`} title={`View ${b.id}`}>
+                            <Eye className="h-3.5 w-3.5" />
+                          </Button>
+                          {canUseExternalSharing && (
+                            <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); shareBill(b); }} aria-label={`Share ${b.id} on WhatsApp`} title="Send on WhatsApp">
+                              <Send className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   )) : <TableRow><TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-6">No bills</TableCell></TableRow>)}
@@ -755,7 +783,7 @@ function PatientProfile() {
           )}
           <DialogFooter>
             {canUseExternalSharing && (
-              <Button variant="outline" onClick={() => viewingBill && sendWhatsApp(patient.phone, `Invoice ${viewingBill.id} — ₹${viewingBill.amount.toFixed(2)} (${viewingBill.status})`)}>
+              <Button variant="outline" onClick={() => viewingBill && shareBill(viewingBill)}>
                 <Send className="mr-1.5 h-4 w-4" />Send on WhatsApp
               </Button>
             )}
