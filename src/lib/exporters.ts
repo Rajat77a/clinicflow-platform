@@ -59,18 +59,91 @@ export function printDocument(html: string, title = "ClinicFlow") {
   const safeContent = sanitizePrintContent(html);
   const style = w.document.createElement("style");
   style.textContent = `
-    body{font-family:ui-sans-serif,system-ui,-apple-system,sans-serif;padding:32px;color:#0f172a;line-height:1.5}
-    h1,h2,h3{margin:0 0 8px;font-weight:700}
-    table{width:100%;border-collapse:collapse;margin-top:16px}
-    td,th{padding:10px 8px;border-bottom:1px solid #e2e8f0;text-align:left;font-size:13px}
-    th{font-weight:600;color:#475569;background:#f8fafc}
-    .muted{color:#64748b;font-size:12px}
-    .row{display:flex;justify-content:space-between;margin:6px 0;font-size:13px}
-    .card{border:1px solid #e2e8f0;border-radius:12px;padding:20px;margin-top:16px;background:#ffffff}
-    .total{font-weight:700;font-size:18px;border-top:2px solid #0f172a;padding-top:8px;margin-top:8px}
-    .section{margin-top:12px;padding-top:10px;border-top:1px dashed #e2e8f0}
-    .label{font-size:11px;font-weight:700;color:#475569;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:3px}
-    .val{font-size:13px;color:#0f172a;white-space:pre-wrap;margin-bottom:8px}
+    @page { margin: 15mm 20mm; size: auto; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      padding: 24px;
+      color: #0f172a;
+      line-height: 1.5;
+      background: #ffffff;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    h1, h2, h3 { margin: 0 0 6px; font-weight: 700; color: #0f172a; letter-spacing: -0.01em; }
+    h2 { font-size: 22px; border-bottom: 2px solid #0f172a; padding-bottom: 8px; margin-bottom: 12px; }
+    h3 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.05em; color: #334155; margin-top: 24px; margin-bottom: 10px; border-bottom: 1px solid #e2e8f0; padding-bottom: 4px; }
+    .muted { color: #64748b; font-size: 12px; margin-bottom: 12px; }
+    .card {
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 18px 20px;
+      margin-top: 14px;
+      background: #f8fafc;
+    }
+    .row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 6px 0;
+      font-size: 13px;
+      border-bottom: 1px dotted #e2e8f0;
+    }
+    .row:last-child { border-bottom: none; }
+    .row b { color: #334155; font-weight: 600; min-width: 140px; }
+    .row span { color: #0f172a; font-weight: 500; text-align: right; }
+    .section {
+      margin-top: 14px;
+      padding-top: 12px;
+      border-top: 1px solid #e2e8f0;
+    }
+    .label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #475569;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 4px;
+    }
+    .val {
+      font-size: 13.5px;
+      color: #0f172a;
+      white-space: pre-wrap;
+      line-height: 1.5;
+      font-weight: 500;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    th {
+      font-weight: 700;
+      color: #1e293b;
+      background: #f1f5f9;
+      padding: 10px 12px;
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 2px solid #cbd5e1;
+      text-align: left;
+    }
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #e2e8f0;
+      font-size: 13px;
+      color: #0f172a;
+    }
+    tr:nth-child(even) td { background: #fafafa; }
+    .total {
+      font-weight: 700;
+      font-size: 18px;
+      border-top: 2px solid #0f172a;
+      padding-top: 10px;
+      margin-top: 12px;
+    }
   `;
   w.document.title = title;
   w.document.head.appendChild(style);

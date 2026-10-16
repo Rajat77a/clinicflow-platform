@@ -215,23 +215,35 @@ function NewPrescription() {
 
   const printRx = () => {
     const displayPatientId = formatPatientId(patient?.id, patient?.raw?.medicalRecordNumber);
+    const primaryReason = diagnosis.trim() || presentingComplaints.trim() || "General Consultation";
     printDocument(`
       <h2>${user?.clinic ?? "ClinicFlow"}</h2>
-      <div class="muted">Prescription · ${new Date().toLocaleDateString()}</div>
+      <div class="muted">Prescription ${edit ? `(${edit})` : ""} · Issued on ${new Date().toLocaleDateString()}</div>
       <div class="card">
-        <div class="row"><b>Patient</b><span>${patient?.primary ?? "—"} (${displayPatientId})</span></div>
-        <div class="row"><b>Doctor</b><span>${doctor?.primary ?? "—"}</span></div>
+        <div class="row"><b>Patient Name</b><span>${patient?.primary ?? "—"} (${displayPatientId})</span></div>
+        <div class="row"><b>Consulting Doctor</b><span>${doctor?.primary ?? "—"}</span></div>
         ${presentingComplaints ? `<div class="section"><div class="label">Presenting Complaints</div><div class="val">${presentingComplaints}</div></div>` : ""}
+        ${primaryReason ? `<div class="section"><div class="label">Primary Illness / Diagnosis</div><div class="val">${primaryReason}</div></div>` : ""}
         ${pastIllnessHistory ? `<div class="section"><div class="label">History of Past Illness</div><div class="val">${pastIllnessHistory}</div></div>` : ""}
         ${clinicalFindings ? `<div class="section"><div class="label">Clinical Findings</div><div class="val">${clinicalFindings}</div></div>` : ""}
-        <div class="section"><div class="label">Diagnosis / Primary Illness</div><div class="val">${diagnosis || presentingComplaints || "General Consultation"}</div></div>
-        ${treatmentNotes ? `<div class="section"><div class="label">Treatment Notes</div><div class="val">${treatmentNotes}</div></div>` : ""}
+        ${treatmentNotes ? `<div class="section"><div class="label">Treatment Notes / Advice</div><div class="val">${treatmentNotes}</div></div>` : ""}
         ${notes ? `<div class="section"><div class="label">Additional Notes</div><div class="val">${notes}</div></div>` : ""}
-        ${followup ? `<div class="row"><b>Follow-up</b><span>${followup}</span></div>` : ""}
+        ${followup ? `<div class="row"><b>Follow-up Date</b><span>${followup}</span></div>` : ""}
       </div>
-      <h3>Medicines</h3>
-      <table><thead><tr><th>Medicine</th><th>Dosage</th><th>Frequency</th><th>Duration</th></tr></thead>
-        <tbody>${meds.map(m => `<tr><td>${m.name}</td><td>${m.dosage}</td><td>${m.frequency}</td><td>${m.duration}</td></tr>`).join("")}</tbody></table>
+      <h3>Prescribed Medicines (Rx)</h3>
+      <table>
+        <thead>
+          <tr>
+            <th style="width: 40%">Medicine Name</th>
+            <th style="width: 20%">Dosage</th>
+            <th style="width: 20%">Frequency</th>
+            <th style="width: 20%">Duration</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${meds.map(m => `<tr><td><b>${m.name}</b></td><td>${m.dosage}</td><td>${m.frequency}</td><td>${m.duration}</td></tr>`).join("")}
+        </tbody>
+      </table>
     `, `Prescription ${edit ?? ""}`);
   };
 
