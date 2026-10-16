@@ -410,9 +410,9 @@ function PatientProfile() {
 
                         {/* Concise summary: Presenting complaints only */}
                         {details.presentingComplaints && (
-                          <div className="mt-2.5 rounded-lg bg-muted/30 px-3 py-2 text-xs">
+                          <div className="mt-2.5 rounded-lg bg-muted/40 px-3 py-2 text-xs">
                             <span className="font-semibold text-muted-foreground uppercase tracking-wide text-[11px] mr-1.5">
-                              Presenting Complaints:
+                              PRESENTING COMPLAINTS:
                             </span>
                             <span className="text-foreground">{details.presentingComplaints}</span>
                           </div>
