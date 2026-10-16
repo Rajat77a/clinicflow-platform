@@ -219,12 +219,12 @@ function NewPrescription() {
       <div class="card">
         <div class="row"><b>Patient</b><span>${patient?.primary ?? "—"} (${patient?.id ?? ""})</span></div>
         <div class="row"><b>Doctor</b><span>${doctor?.primary ?? "—"}</span></div>
-        ${presentingComplaints ? `<div class="row"><b>Presenting Complaints</b><span style="white-space: pre-wrap;">${presentingComplaints}</span></div>` : ""}
-        ${pastIllnessHistory ? `<div class="row"><b>History of Past Illness</b><span style="white-space: pre-wrap;">${pastIllnessHistory}</span></div>` : ""}
-        ${clinicalFindings ? `<div class="row"><b>Clinical Findings</b><span style="white-space: pre-wrap;">${clinicalFindings}</span></div>` : ""}
-        <div class="row"><b>Diagnosis</b><span style="white-space: pre-wrap;">${diagnosis}</span></div>
-        ${treatmentNotes ? `<div class="row"><b>Treatment Notes</b><span style="white-space: pre-wrap;">${treatmentNotes}</span></div>` : ""}
-        ${notes ? `<div class="row"><b>Additional Notes</b><span style="white-space: pre-wrap;">${notes}</span></div>` : ""}
+        ${presentingComplaints ? `<div class="section"><div class="label">Presenting Complaints</div><div class="val">${presentingComplaints}</div></div>` : ""}
+        ${pastIllnessHistory ? `<div class="section"><div class="label">History of Past Illness</div><div class="val">${pastIllnessHistory}</div></div>` : ""}
+        ${clinicalFindings ? `<div class="section"><div class="label">Clinical Findings</div><div class="val">${clinicalFindings}</div></div>` : ""}
+        <div class="section"><div class="label">Diagnosis / Primary Illness</div><div class="val">${diagnosis || presentingComplaints || "General Consultation"}</div></div>
+        ${treatmentNotes ? `<div class="section"><div class="label">Treatment Notes</div><div class="val">${treatmentNotes}</div></div>` : ""}
+        ${notes ? `<div class="section"><div class="label">Additional Notes</div><div class="val">${notes}</div></div>` : ""}
         ${followup ? `<div class="row"><b>Follow-up</b><span>${followup}</span></div>` : ""}
       </div>
       <h3>Medicines</h3>

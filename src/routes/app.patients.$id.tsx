@@ -18,6 +18,7 @@ import {
 } from "@/lib/workspace-data";
 import { printDocument } from "@/lib/exporters";
 import { sendWhatsApp } from "@/lib/whatsapp";
+import { resolvePrescriptionDetails } from "@/lib/prescription-fields";
 import { useAuth } from "@/lib/auth";
 import { hasPermission } from "@/lib/access-control";
 import { supabaseConfig } from "@/lib/supabase/config";
@@ -220,18 +221,19 @@ function PatientProfile() {
   };
 
   const printRx = (rx: Prescription) => {
+    const details = resolvePrescriptionDetails(rx);
     printDocument(`
       <h2>${user?.clinic ?? "ClinicFlow"}</h2>
       <div class="muted">Prescription ${rx.id} · ${rx.date}</div>
       <div class="card">
         <div class="row"><b>Patient</b><span>${patient.name} (${patient.id})</span></div>
         <div class="row"><b>Doctor</b><span>${rx.doctor}</span></div>
-        ${rx.presentingComplaints ? `<div class="row"><b>Presenting Complaints</b><span style="white-space: pre-wrap;">${rx.presentingComplaints}</span></div>` : ""}
-        ${rx.pastIllnessHistory ? `<div class="row"><b>History of Past Illness</b><span style="white-space: pre-wrap;">${rx.pastIllnessHistory}</span></div>` : ""}
-        ${rx.clinicalFindings ? `<div class="row"><b>Clinical Findings</b><span style="white-space: pre-wrap;">${rx.clinicalFindings}</span></div>` : ""}
-        <div class="row"><b>Diagnosis</b><span style="white-space: pre-wrap;">${rx.diagnosis}</span></div>
-        ${rx.treatmentNotes ? `<div class="row"><b>Treatment Notes</b><span style="white-space: pre-wrap;">${rx.treatmentNotes}</span></div>` : ""}
-        ${rx.notes ? `<div class="row"><b>Additional Notes</b><span style="white-space: pre-wrap;">${rx.notes}</span></div>` : ""}
+        ${details.presentingComplaints ? `<div class="section"><div class="label">Presenting Complaints</div><div class="val">${details.presentingComplaints}</div></div>` : ""}
+        ${details.pastIllnessHistory ? `<div class="section"><div class="label">History of Past Illness</div><div class="val">${details.pastIllnessHistory}</div></div>` : ""}
+        ${details.clinicalFindings ? `<div class="section"><div class="label">Clinical Findings</div><div class="val">${details.clinicalFindings}</div></div>` : ""}
+        <div class="section"><div class="label">Diagnosis / Primary Illness</div><div class="val">${rx.diagnosis || details.primaryIllness}</div></div>
+        ${details.treatmentNotes ? `<div class="section"><div class="label">Treatment Notes</div><div class="val">${details.treatmentNotes}</div></div>` : ""}
+        ${details.additionalNotes ? `<div class="section"><div class="label">Additional Notes</div><div class="val">${details.additionalNotes}</div></div>` : ""}
         ${rx.followUp ? `<div class="row"><b>Follow-up</b><span>${rx.followUp}</span></div>` : ""}
       </div>
       <h3>Medicines</h3>
@@ -250,13 +252,15 @@ function PatientProfile() {
       toast.error("WhatsApp number is not available");
       return;
     }
+    const details = resolvePrescriptionDetails(rx);
     const parts = [
       `Hi ${patient.name}, prescription ${rx.id} (${rx.date}):`,
-      rx.presentingComplaints?.trim() ? `Presenting Complaints:\n${rx.presentingComplaints.trim()}` : "",
-      rx.pastIllnessHistory?.trim() ? `History of Past Illness:\n${rx.pastIllnessHistory.trim()}` : "",
-      rx.clinicalFindings?.trim() ? `Clinical Findings:\n${rx.clinicalFindings.trim()}` : "",
-      `Diagnosis:\n${rx.diagnosis}`,
-      rx.treatmentNotes?.trim() ? `Treatment Notes:\n${rx.treatmentNotes.trim()}` : "",
+      details.presentingComplaints?.trim() ? `Presenting Complaints:\n${details.presentingComplaints.trim()}` : "",
+      details.pastIllnessHistory?.trim() ? `History of Past Illness:\n${details.pastIllnessHistory.trim()}` : "",
+      details.clinicalFindings?.trim() ? `Clinical Findings:\n${details.clinicalFindings.trim()}` : "",
+      `Diagnosis:\n${rx.diagnosis || details.primaryIllness}`,
+      details.treatmentNotes?.trim() ? `Treatment Notes:\n${details.treatmentNotes.trim()}` : "",
+      details.additionalNotes?.trim() ? `Additional Notes:\n${details.additionalNotes.trim()}` : "",
       `Medicines:\n${rx.medicines.map(m => `• ${m.name} — ${m.dosage} ${m.frequency} × ${m.duration}`).join("\n")}`,
       rx.followUp ? `Follow-up: ${rx.followUp}` : "",
     ].filter(Boolean);
@@ -368,38 +372,46 @@ function PatientProfile() {
               {prescriptionsPage.isLoading && <EmptyCard label="Loading prescriptions..." />}
               {!prescriptionsPage.isLoading && prescriptionsPage.error && <EmptyCard label={prescriptionsPage.error} />}
               {!prescriptionsPage.isLoading && !prescriptionsPage.error && myRx.length === 0 && <EmptyCard label="No prescriptions yet" />}
-              {myRx.map(r => (
+              {myRx.map(r => {
+                const details = resolvePrescriptionDetails(r);
+                return (
                 <div key={r.id} className="rounded-2xl border bg-card p-5 shadow-soft">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="font-mono text-xs text-muted-foreground">{r.id} · {r.date}</div>
-                      <div className="mt-1 font-display text-base font-semibold whitespace-pre-wrap">{r.diagnosis}</div>
+                      <div className="mt-1 font-display text-base font-semibold whitespace-pre-wrap">{r.diagnosis || details.primaryIllness}</div>
                       <div className="text-xs text-muted-foreground">{r.doctor}{r.followUp ? ` · Follow-up ${r.followUp}` : ""}</div>
 
-                      {(r.presentingComplaints || r.pastIllnessHistory || r.clinicalFindings || r.treatmentNotes) && (
-                        <div className="mt-3 space-y-1.5 border-t pt-2 text-xs">
-                          {r.presentingComplaints && (
+                      {(details.presentingComplaints || details.pastIllnessHistory || details.clinicalFindings || details.treatmentNotes || details.additionalNotes) && (
+                        <div className="mt-3 space-y-2 border-t pt-2.5 text-xs">
+                          {details.presentingComplaints && (
                             <div>
-                              <span className="font-semibold text-muted-foreground">Complaints: </span>
-                              <span className="whitespace-pre-wrap">{r.presentingComplaints}</span>
+                              <span className="font-semibold text-muted-foreground uppercase tracking-wide text-[11px] block">Presenting Complaints:</span>
+                              <span className="whitespace-pre-wrap text-foreground">{details.presentingComplaints}</span>
                             </div>
                           )}
-                          {r.pastIllnessHistory && (
+                          {details.pastIllnessHistory && (
                             <div>
-                              <span className="font-semibold text-muted-foreground">Past Illness: </span>
-                              <span className="whitespace-pre-wrap">{r.pastIllnessHistory}</span>
+                              <span className="font-semibold text-muted-foreground uppercase tracking-wide text-[11px] block">History of Past Illness:</span>
+                              <span className="whitespace-pre-wrap text-foreground">{details.pastIllnessHistory}</span>
                             </div>
                           )}
-                          {r.clinicalFindings && (
+                          {details.clinicalFindings && (
                             <div>
-                              <span className="font-semibold text-muted-foreground">Findings: </span>
-                              <span className="whitespace-pre-wrap">{r.clinicalFindings}</span>
+                              <span className="font-semibold text-muted-foreground uppercase tracking-wide text-[11px] block">Clinical Findings:</span>
+                              <span className="whitespace-pre-wrap text-foreground">{details.clinicalFindings}</span>
                             </div>
                           )}
-                          {r.treatmentNotes && (
+                          {details.treatmentNotes && (
                             <div>
-                              <span className="font-semibold text-muted-foreground">Treatment: </span>
-                              <span className="whitespace-pre-wrap">{r.treatmentNotes}</span>
+                              <span className="font-semibold text-muted-foreground uppercase tracking-wide text-[11px] block">Treatment Notes:</span>
+                              <span className="whitespace-pre-wrap text-foreground">{details.treatmentNotes}</span>
+                            </div>
+                          )}
+                          {details.additionalNotes && (
+                            <div>
+                              <span className="font-semibold text-muted-foreground uppercase tracking-wide text-[11px] block">Additional Notes:</span>
+                              <span className="whitespace-pre-wrap text-foreground">{details.additionalNotes}</span>
                             </div>
                           )}
                         </div>
@@ -424,7 +436,8 @@ function PatientProfile() {
                     ))}
                   </ul>
                 </div>
-              ))}
+                );
+              })}
               <PaginationFooter
                 offset={prescriptionsPage.offset}
                 limit={prescriptionsPage.limit}
