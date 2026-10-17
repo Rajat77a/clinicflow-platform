@@ -339,4 +339,58 @@ export function formatLabReportId(labId?: string | null, clinicHint?: string | n
   return formatClinicEntityId("LB", clean, clinicHint);
 }
 
+/**
+ * Formats entity IDs appearing in audit log action text:
+ * Replaces raw UUIDs or long IDs after words like clinic, patient, doctor, receptionist,
+ * appointment, prescription, invoice, bill with the clean, clinic-connected ID.
+ */
+export function formatAuditAction(action: string, clinicHint?: string | null): string {
+  if (!action) return "";
+
+  // 1. Replace "clinic <uuid/id>"
+  let formatted = action.replace(/\bclinic\s+([0-9a-fA-F-]{8,36}|CL-[0-9a-fA-F-]+)\b/gi, (_match, rawId) => {
+    return `clinic ${formatClinicCode(rawId || clinicHint)}`;
+  });
+
+  // 2. Replace "patient <name> (<id>)" or "patient <id>"
+  formatted = formatted.replace(/\bpatient\s+([^()]+?)\s+\(([0-9a-fA-F-]{8,36}|PT-[0-9a-fA-F-]+)\)/gi, (_match, name, rawId) => {
+    return `patient ${name.trim()} (${formatPatientId(rawId, undefined, clinicHint)})`;
+  });
+  formatted = formatted.replace(/\bpatient\s+([0-9a-fA-F-]{8,36}|PT-[0-9a-fA-F-]+)\b/gi, (_match, rawId) => {
+    return `patient ${formatPatientId(rawId, undefined, clinicHint)}`;
+  });
+
+  // 3. Replace "doctor <id>"
+  formatted = formatted.replace(/\bdoctor\s+([0-9a-fA-F-]{8,36}|DR-[0-9a-fA-F-]+)\b/gi, (_match, rawId) => {
+    return `doctor ${formatDoctorId(rawId, clinicHint)}`;
+  });
+
+  // 4. Replace "receptionist <id>"
+  formatted = formatted.replace(/\breceptionist\s+([0-9a-fA-F-]{8,36}|RC-[0-9a-fA-F-]+)\b/gi, (_match, rawId) => {
+    return `receptionist ${formatClinicEntityId("RC", rawId, clinicHint)}`;
+  });
+
+  // 5. Replace "appointment <id>"
+  formatted = formatted.replace(/\bappointment\s+([0-9a-fA-F-]{8,36}|AP-[0-9a-fA-F-]+)\b/gi, (_match, rawId) => {
+    return `appointment ${formatAppointmentId(rawId, clinicHint)}`;
+  });
+
+  // 6. Replace "prescription <id>"
+  formatted = formatted.replace(/\bprescription\s+([0-9a-fA-F-]{8,36}|RX-[0-9a-fA-F-]+)\b/gi, (_match, rawId) => {
+    return `prescription ${formatPrescriptionId(rawId, clinicHint)}`;
+  });
+
+  // 7. Replace "invoice <id>" or "bill <id>"
+  formatted = formatted.replace(/\b(?:invoice|bill)\s+([0-9a-fA-F-]{8,36}|INV-[0-9a-fA-F-]+)\b/gi, (_match, rawId) => {
+    return `invoice ${formatInvoiceId(rawId, clinicHint)}`;
+  });
+
+  // 8. Replace "staff member <id>" or "user <id>"
+  formatted = formatted.replace(/\b(?:staff member|user)\s+([0-9a-fA-F-]{8,36}|ST-[0-9a-fA-F-]+)\b/gi, (_match, rawId) => {
+    return `staff member ${formatClinicEntityId("ST", rawId, clinicHint)}`;
+  });
+
+  return formatted;
+}
+
 

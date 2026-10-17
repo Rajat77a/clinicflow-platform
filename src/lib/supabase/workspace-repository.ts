@@ -40,6 +40,7 @@ import { toSafeBackendError } from "../backend/safe-error";
 import { sendInvitationEmail, getAppBaseUrl, registerLocalInviteToken } from "../email-service";
 import { deactivateClinicAccounts, reactivateClinicAccounts, deleteClinicAccounts } from "../account-store";
 import { supabaseConfig } from "./config";
+import { formatAuditAction } from "../prescription-fields";
 
 // Supabase query results are validated and normalized at this repository boundary.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -518,11 +519,12 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
       auditLogs: ((auditResult.data ?? []) as Row[]).map((row) => {
         const occurred = new Date(row.occurred_at);
         const profile = firstRelation(row.profiles);
+        const rawAction = `${row.action} ${row.entity_type}${row.entity_id ? ` ${row.entity_id}` : ""}`;
         return {
           id: String(row.id),
           clinicId: row.hospital_id,
           user: profile?.display_name ?? "System",
-          action: `${row.action} ${row.entity_type}${row.entity_id ? ` ${row.entity_id}` : ""}`,
+          action: formatAuditAction(rawAction, row.hospital_id),
           date: occurred.toISOString().slice(0, 10),
           time: occurred.toISOString().slice(11, 16),
         };
@@ -793,11 +795,12 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     return {
       rows: ((result.data ?? []) as Row[]).map((row) => {
         const occurred = new Date(row.occurred_at);
+        const rawAction = `${row.action} ${row.entity_type}${row.entity_id ? ` ${row.entity_id}` : ""}`;
         return {
           id: String(row.id),
           clinicId: row.hospital_id,
           user: firstRelation(row.profiles)?.display_name ?? "System",
-          action: `${row.action} ${row.entity_type}${row.entity_id ? ` ${row.entity_id}` : ""}`,
+          action: formatAuditAction(rawAction, row.hospital_id),
           date: occurred.toISOString().slice(0, 10),
           time: occurred.toISOString().slice(11, 16),
         };
