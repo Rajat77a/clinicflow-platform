@@ -214,7 +214,7 @@ function NewPrescription() {
   };
 
   const printRx = () => {
-    const displayPatientId = formatPatientId(patient?.id, patient?.raw?.medicalRecordNumber);
+    const displayPatientId = formatPatientId(patient?.id, patient?.raw?.medicalRecordNumber, patient?.raw?.clinicId || user?.clinicId);
     const primaryReason = diagnosis.trim() || presentingComplaints.trim() || "General Consultation";
     printDocument(`
       <h2>${user?.clinic ?? "ClinicFlow"}</h2>
@@ -543,7 +543,7 @@ function NewPrescription() {
             </div>
             <div className="mt-4 grid grid-cols-2 gap-3 text-xs">
               <div><div className="text-muted-foreground">Patient</div><div className="font-semibold">{patient?.primary ?? "—"}</div></div>
-              <div><div className="text-muted-foreground">Patient ID</div><div className="font-mono font-semibold text-primary">{patient ? formatPatientId(patient.id, patient.raw?.medicalRecordNumber) : "—"}</div></div>
+              <div><div className="text-muted-foreground">Patient ID</div><div className="font-mono font-semibold text-primary">{patient ? formatPatientId(patient.id, patient.raw?.medicalRecordNumber, patient.raw?.clinicId || user?.clinicId) : "—"}</div></div>
               <div><div className="text-muted-foreground">Age / Gender</div><div>{patient?.secondary ?? "—"}</div></div>
               <div><div className="text-muted-foreground">Date</div><div>{new Date().toISOString().slice(0, 10)}</div></div>
             </div>

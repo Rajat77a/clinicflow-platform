@@ -185,7 +185,9 @@ function PatientsPage() {
                       <div className="font-semibold text-foreground group-hover:text-primary transition-colors">{p.name}</div>
                     </Link>
                   </TableCell>
-                  <TableCell className="font-mono text-xs font-semibold">{formatPatientId(p.id, p.medicalRecordNumber)}</TableCell>
+                  <TableCell className="font-mono text-xs font-semibold">
+                    {formatPatientId(p.id, p.medicalRecordNumber, p.clinicId || user?.clinicId)}
+                  </TableCell>
                   <TableCell>{p.age}</TableCell>
                   <TableCell className="text-muted-foreground">{p.gender}</TableCell>
                   <TableCell>{p.phone}</TableCell>

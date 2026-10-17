@@ -18,7 +18,7 @@ import {
 } from "@/lib/workspace-data";
 import { printDocument } from "@/lib/exporters";
 import { sendWhatsApp } from "@/lib/whatsapp";
-import { resolvePrescriptionDetails, formatPatientId } from "@/lib/prescription-fields";
+import { resolvePrescriptionDetails, formatPatientId, formatPrescriptionId, formatInvoiceId } from "@/lib/prescription-fields";
 import { useAuth } from "@/lib/auth";
 import { hasPermission } from "@/lib/access-control";
 import { supabaseConfig } from "@/lib/supabase/config";
@@ -304,11 +304,12 @@ function PatientProfile() {
 
   const printRx = (rx: Prescription) => {
     const details = resolvePrescriptionDetails(rx);
-    const displayPatientId = formatPatientId(patient.id, patient.medicalRecordNumber);
+    const displayPatientId = formatPatientId(patient.id, patient.medicalRecordNumber, patient.clinicId || user?.clinicId);
+    const displayRxId = formatPrescriptionId(rx.id, rx.clinicId || patient.clinicId || user?.clinicId);
     const primaryReason = details.primaryIllness || (rx.diagnosis && rx.diagnosis !== "Not recorded" ? rx.diagnosis : "");
     printDocument(`
       <h2>${user?.clinic ?? "ClinicFlow"}</h2>
-      <div class="muted">Prescription ${rx.id} · Issued on ${rx.date}</div>
+      <div class="muted">Prescription ${displayRxId} · Issued on ${rx.date}</div>
       <div class="card">
         <div class="row"><b>Patient Name</b><span>${patient.name} (${displayPatientId})</span></div>
         <div class="row"><b>Consulting Doctor</b><span>${rx.doctor}</span></div>
@@ -385,7 +386,7 @@ function PatientProfile() {
           <ArrowLeft className="h-3.5 w-3.5" /> Back to Patients
         </Link>
       </div>
-      <PageHeader title={patient.name} description={`Patient ID ${formatPatientId(patient.id, patient.medicalRecordNumber)}`}
+      <PageHeader title={patient.name} description={`Patient ID ${formatPatientId(patient.id, patient.medicalRecordNumber, patient.clinicId || user?.clinicId)}`}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -509,7 +510,7 @@ function PatientProfile() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs text-muted-foreground">{r.id}</span>
+                          <span className="font-mono text-xs font-semibold text-primary">{formatPrescriptionId(r.id, r.clinicId || patient.clinicId || user?.clinicId)}</span>
                           <span className="text-xs text-muted-foreground">·</span>
                           <span className="text-xs text-muted-foreground">{r.date}</span>
                         </div>
@@ -640,7 +641,7 @@ function PatientProfile() {
                   {!billsPage.isLoading && billsPage.error && <TableRow><TableCell colSpan={5} className="py-6 text-center text-sm text-destructive">{billsPage.error}</TableCell></TableRow>}
                   {!billsPage.isLoading && !billsPage.error && (myBills.length ? myBills.map(b => (
                     <TableRow key={b.id} className="cursor-pointer hover:bg-muted/40" onClick={() => setViewingBill(b)}>
-                      <TableCell className="font-mono text-xs">{b.id}</TableCell>
+                      <TableCell className="font-mono text-xs font-semibold text-primary">{formatInvoiceId(b.id, b.clinicId || patient.clinicId || user?.clinicId)}</TableCell>
                       <TableCell>{b.date}</TableCell>
                       <TableCell className="text-right tabular-nums">₹{b.amount.toFixed(2)}</TableCell>
                       <TableCell><Badge variant={b.status === "Paid" ? "secondary" : b.status === "Overdue" ? "destructive" : "outline"}>{b.status}</Badge></TableCell>
@@ -830,7 +831,7 @@ function PatientProfile() {
         }}
       >
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Invoice {viewingBill?.id}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Invoice {viewingBill ? formatInvoiceId(viewingBill.id, viewingBill.clinicId || patient.clinicId || user?.clinicId) : ""}</DialogTitle></DialogHeader>
           {viewingBill && (
             <div className="space-y-4 text-sm">
                 <div className="grid grid-cols-2 gap-3">
@@ -1040,7 +1041,8 @@ function PatientProfile() {
         <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
           {viewingRx && (() => {
             const details = resolvePrescriptionDetails(viewingRx);
-            const displayPatientId = formatPatientId(patient.id, patient.medicalRecordNumber);
+            const displayPatientId = formatPatientId(patient.id, patient.medicalRecordNumber, patient.clinicId || user?.clinicId);
+            const displayRxId = formatPrescriptionId(viewingRx.id, viewingRx.clinicId || patient.clinicId || user?.clinicId);
             return (
               <>
                 <DialogHeader className="p-6 pb-4 border-b">
@@ -1051,7 +1053,7 @@ function PatientProfile() {
                         Prescription Details
                       </DialogTitle>
                       <DialogDescription className="font-mono text-xs mt-1">
-                        {viewingRx.id} · Issued {viewingRx.date}
+                        {displayRxId} · Issued {viewingRx.date}
                       </DialogDescription>
                     </div>
                   </div>
@@ -1203,7 +1205,7 @@ function PatientProfile() {
                 Edit Patient Details
               </DialogTitle>
               <DialogDescription>
-                Update demographic, contact and medical info for {patient.name} ({formatPatientId(patient.id, patient.medicalRecordNumber)}).
+                Update demographic, contact and medical info for {patient.name} ({formatPatientId(patient.id, patient.medicalRecordNumber, patient.clinicId || user?.clinicId)}).
               </DialogDescription>
             </DialogHeader>
 

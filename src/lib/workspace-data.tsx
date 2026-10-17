@@ -734,10 +734,12 @@ type Command =
       actor: AuthUser;
     };
 
-function createId(prefix: string) {
+function createId(prefix: string, clinicHint?: string | null) {
   const suffix = globalThis.crypto?.randomUUID?.().slice(0, 8).toUpperCase()
     ?? `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase();
-  return `${prefix}-${suffix}`;
+  const clMatch = (clinicHint || "").trim().match(/^CL-?(\d+)/i);
+  const clPrefix = clMatch ? `CL-${clMatch[1]}` : (clinicHint?.startsWith("CL-") ? clinicHint : "");
+  return clPrefix ? `${clPrefix}-${prefix}-${suffix}` : `${prefix}-${suffix}`;
 }
 
 
@@ -3490,14 +3492,17 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           chronicConditions: input.chronicConditions,
           doctor: assignedDoctor?.name ?? "General Practice",
           id: (() => {
+            const clinicObj = state.clinics.find(c => c.id === tenantId || c.shortId === tenantId);
+            const clPrefix = clinicObj?.shortId || (tenantId.startsWith("CL-") ? tenantId : `CL-${tenantId.slice(0, 3)}`);
             const existingNums = state.patients
+              .filter(p => p.clinicId === tenantId)
               .map(p => {
-                const m = p.id.match(/^PT-(\d+)$/i);
+                const m = p.id.match(/PT-(\d+)$/i);
                 return m ? parseInt(m[1], 10) : 0;
               })
               .filter(n => n >= 100);
             const nextNum = existingNums.length > 0 ? Math.max(...existingNums) + 1 : 101;
-            return `PT-${nextNum}`;
+            return `${clPrefix}-PT-${nextNum}`;
           })(),
           clinicId: tenantId,
           lastVisit: new Date().toISOString().slice(0, 10),
@@ -3560,8 +3565,10 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         if (actor.role === "doctor" && doctor.name !== actor.name) {
           throw new Error("Doctors can only book appointments into their own queue");
         }
+        const clinicObj = state.clinics.find(c => c.id === tenantId || c.shortId === tenantId);
+        const clPrefix = clinicObj?.shortId || tenantId;
         const appointment: Appointment = {
-          id: createId("AP"),
+          id: createId("AP", clPrefix),
           clinicId: tenantId,
           patient: patient.name,
           patientId: patient.id,
@@ -3596,11 +3603,13 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           return prescription;
         }
         const tenantId = requireClinic(actor);
+        const clinicObj = state.clinics.find(c => c.id === tenantId || c.shortId === tenantId);
+        const clPrefix = clinicObj?.shortId || tenantId;
         const patient = state.patients.find(item => item.id === input.patientId && item.clinicId === tenantId);
         const doctor = state.doctors.find(item => item.id === input.doctorId && item.clinicId === tenantId);
         if (!patient || !doctor || doctor.name !== actor.name) throw new Error("Doctors can only sign their own clinic prescriptions");
         const prescription: Prescription = {
-          id: input.id ?? createId("RX"),
+          id: input.id ?? createId("RX", clPrefix),
           clinicId: tenantId,
           patient: patient.name,
           patientId: patient.id,
@@ -3641,11 +3650,13 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           return bill;
         }
         const tenantId = requireClinic(actor);
+        const clinicObj = state.clinics.find(c => c.id === tenantId || c.shortId === tenantId);
+        const clPrefix = clinicObj?.shortId || tenantId;
         const patient = state.patients.find(item => item.id === input.patientId && item.clinicId === tenantId);
         if (!patient) throw new Error("Patient must belong to the active clinic");
         const taxAmount = Math.round(Math.max(0, input.subtotal - input.discount) * input.taxRate) / 100;
         const bill: Bill = {
-          id: createId("INV"),
+          id: createId("INV", clPrefix),
           clinicId: tenantId,
           patientId: patient.id,
           patient: patient.name,

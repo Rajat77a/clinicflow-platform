@@ -172,7 +172,7 @@ export type PatientOption = EntityOption & { raw: Patient };
 export type DoctorOption = EntityOption & { raw: Doctor };
 
 export const toPatientOptions = (patients: Patient[]): PatientOption[] => patients.map(p => {
-  const shortId = formatPatientId(p.id, p.medicalRecordNumber);
+  const shortId = formatPatientId(p.id, p.medicalRecordNumber, p.clinicId);
   return {
     id: p.id,
     displayId: shortId,

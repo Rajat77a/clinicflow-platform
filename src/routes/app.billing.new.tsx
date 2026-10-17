@@ -153,7 +153,7 @@ function NewBill() {
   };
 
   const billHtml = () => {
-    const displayPatientId = formatPatientId(patient?.id, patient?.raw?.medicalRecordNumber);
+    const displayPatientId = formatPatientId(patient?.id, patient?.raw?.medicalRecordNumber, patient?.raw?.clinicId || user?.clinicId);
     return `
     <h2>${user?.clinic ?? "ClinicFlow"}</h2>
     <div class="muted">Invoice · ${new Date().toLocaleDateString()}</div>
