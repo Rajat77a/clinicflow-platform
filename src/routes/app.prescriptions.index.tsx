@@ -12,7 +12,7 @@ import { PaginationFooter } from "@/components/data/pagination-footer";
 import { useRecordPage } from "@/lib/use-record-page";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { printDocument } from "@/lib/exporters";
-import { resolvePrescriptionDetails, formatPatientId, formatPrescriptionId } from "@/lib/prescription-fields";
+import { resolvePrescriptionDetails, formatPatientId, formatPrescriptionId, resolveClinicCode } from "@/lib/prescription-fields";
 import { toast } from "sonner";
 import type { Prescription } from "@/lib/workspace-data";
 
@@ -20,7 +20,7 @@ export const Route = createFileRoute("/app/prescriptions/")({ component: Prescri
 
 function PrescriptionsPage() {
   const { user } = useAuth();
-  const { patients, getPatient, listPrescriptions } = useWorkspaceData();
+  const { patients, clinics, getPatient, listPrescriptions } = useWorkspaceData();
   const {
     rows,
     total,
@@ -37,8 +37,9 @@ function PrescriptionsPage() {
 
   const printRx = (rx: Prescription) => {
     const details = resolvePrescriptionDetails(rx);
-    const displayPatientId = formatPatientId(rx.patientId, undefined, rx.clinicId || user?.clinicId);
-    const displayRxId = formatPrescriptionId(rx.id, rx.clinicId || user?.clinicId);
+    const clinicCode = resolveClinicCode(rx.clinicId, clinics, user?.clinicId);
+    const displayPatientId = formatPatientId(rx.patientId, undefined, clinicCode);
+    const displayRxId = formatPrescriptionId(rx.id, clinicCode);
     const primaryReason = details.primaryIllness || (rx.diagnosis && rx.diagnosis !== "Not recorded" ? rx.diagnosis : "");
     printDocument(`
       <h2>${user?.clinic ?? "ClinicFlow"}</h2>
@@ -148,7 +149,7 @@ function PrescriptionsPage() {
                   <TableCell>
                     <div className="flex items-center gap-2 font-mono text-xs font-semibold text-primary">
                       <FileText className="h-3.5 w-3.5 text-info" />
-                      {formatPrescriptionId(r.id, r.clinicId || user?.clinicId)}
+                      {formatPrescriptionId(r.id, resolveClinicCode(r.clinicId, clinics, user?.clinicId))}
                     </div>
                   </TableCell>
                   <TableCell className="font-semibold">{r.patient}</TableCell>
@@ -232,7 +233,7 @@ function PrescriptionsPage() {
                       Prescription Details
                     </DialogTitle>
                     <DialogDescription className="font-mono text-xs mt-1">
-                      {formatPrescriptionId(viewingRx.id, viewingRx.clinicId || user?.clinicId)} · Issued {viewingRx.date}
+                      {formatPrescriptionId(viewingRx.id, resolveClinicCode(viewingRx.clinicId, clinics, user?.clinicId))} · Issued {viewingRx.date}
                     </DialogDescription>
                   </div>
                   </div>
@@ -244,7 +245,7 @@ function PrescriptionsPage() {
                     <div>
                       <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Patient</div>
                       <div className="font-medium text-sm mt-0.5">{viewingRx.patient}</div>
-                      <div className="font-mono text-xs font-semibold text-primary">{formatPatientId(viewingRx.patientId, undefined, viewingRx.clinicId || user?.clinicId)}</div>
+                      <div className="font-mono text-xs font-semibold text-primary">{formatPatientId(viewingRx.patientId, undefined, resolveClinicCode(viewingRx.clinicId, clinics, user?.clinicId))}</div>
                     </div>
                   <div>
                     <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Doctor</div>

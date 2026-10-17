@@ -9,6 +9,7 @@ import { useWorkspaceData, type Doctor } from "@/lib/workspace-data";
 import { useAuth } from "@/lib/auth";
 import { Plus, Trash2, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
+import { formatDoctorId, resolveClinicCode } from "@/lib/prescription-fields";
 
 export const Route = createFileRoute("/app/doctors")({ component: DoctorsRoute });
 
@@ -20,7 +21,7 @@ function DoctorsRoute() {
 }
 
 function DoctorsPage() {
-  const { doctors, softDeleteStaff } = useWorkspaceData();
+  const { doctors, clinics, softDeleteStaff } = useWorkspaceData();
   const { user } = useAuth();
   const [deleteTarget, setDeleteTarget] = useState<Doctor | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -73,7 +74,9 @@ function DoctorsPage() {
                     )}
                     <div>
                       <div className="font-semibold">{d.name}</div>
-                      <div className="text-xs text-muted-foreground">{d.id}</div>
+                      <div className="font-mono text-xs text-muted-foreground">
+                        {formatDoctorId(d.id, resolveClinicCode(d.clinicId, clinics, user?.clinicId))}
+                      </div>
                     </div>
                   </div>
                 </TableCell>
