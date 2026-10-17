@@ -4,6 +4,7 @@ import { Search } from "lucide-react";
 import { PaginationFooter } from "@/components/data/pagination-footer";
 import { PageHeader } from "@/components/layout/page-header";
 import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -14,11 +15,12 @@ import {
 } from "@/components/ui/table";
 import { useRecordPage } from "@/lib/use-record-page";
 import { useWorkspaceData } from "@/lib/workspace-data";
+import { resolveClinicCode, formatAuditAction } from "@/lib/prescription-fields";
 
 export const Route = createFileRoute("/app/audit-logs")({ component: AuditLogs });
 
 function AuditLogs() {
-  const { listAuditLogs } = useWorkspaceData();
+  const { listAuditLogs, clinics } = useWorkspaceData();
   const [query, setQuery] = useState("");
   const deferredQuery = useDeferredValue(query.trim());
   const {
@@ -39,7 +41,7 @@ function AuditLogs() {
           <div className="relative max-w-md">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Search by action..."
+              placeholder="Search by action or clinic..."
               className="h-10 rounded-xl bg-muted/30 pl-9"
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -50,6 +52,7 @@ function AuditLogs() {
           <TableHeader>
             <TableRow>
               <TableHead>User</TableHead>
+              <TableHead>Clinic</TableHead>
               <TableHead>Action</TableHead>
               <TableHead>Date</TableHead>
               <TableHead>Time</TableHead>
@@ -57,22 +60,35 @@ function AuditLogs() {
           </TableHeader>
           <TableBody>
             {isLoading && (
-              <TableRow><TableCell colSpan={4} className="py-8 text-center text-muted-foreground">Loading audit events...</TableCell></TableRow>
+              <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">Loading audit events...</TableCell></TableRow>
             )}
             {!isLoading && error && (
-              <TableRow><TableCell colSpan={4} className="py-8 text-center text-destructive">{error}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={5} className="py-8 text-center text-destructive">{error}</TableCell></TableRow>
             )}
             {!isLoading && !error && rows.length === 0 && (
-              <TableRow><TableCell colSpan={4} className="py-8 text-center text-muted-foreground">No audit events found.</TableCell></TableRow>
+              <TableRow><TableCell colSpan={5} className="py-8 text-center text-muted-foreground">No audit events found.</TableCell></TableRow>
             )}
-            {rows.map((entry) => (
-              <TableRow key={entry.id}>
-                <TableCell className="font-semibold">{entry.user}</TableCell>
-                <TableCell>{entry.action}</TableCell>
-                <TableCell className="text-muted-foreground">{entry.date}</TableCell>
-                <TableCell className="font-mono text-xs">{entry.time}</TableCell>
-              </TableRow>
-            ))}
+            {rows.map((entry) => {
+              const clinicCode = resolveClinicCode(entry.clinicId, clinics);
+              const formattedAction = formatAuditAction(entry.action, clinicCode || entry.clinicId);
+              return (
+                <TableRow key={entry.id}>
+                  <TableCell className="font-semibold">{entry.user}</TableCell>
+                  <TableCell>
+                    {clinicCode ? (
+                      <Badge variant="outline" className="font-mono text-xs font-semibold">
+                        {clinicCode}
+                      </Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground font-medium">Platform</span>
+                    )}
+                  </TableCell>
+                  <TableCell>{formattedAction}</TableCell>
+                  <TableCell className="text-muted-foreground">{entry.date}</TableCell>
+                  <TableCell className="font-mono text-xs">{entry.time}</TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
         <PaginationFooter

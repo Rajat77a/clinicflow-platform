@@ -23,6 +23,7 @@ import type {
 } from "./backend/workspace-repository";
 import { localRecordPage } from "./record-page";
 import { sendInvitationEmail, registerLocalInviteToken, getAppBaseUrl } from "./email-service";
+import { formatAuditAction } from "./prescription-fields";
 import {
   deactivateClinicAccounts,
   reactivateClinicAccounts,
@@ -763,10 +764,11 @@ function emptySnapshot(): WorkspaceSnapshot {
 
 function appendAudit(state: WorkspaceSnapshot, actor: AuthUser, action: string): WorkspaceSnapshot {
   const now = new Date();
+  const formattedAction = formatAuditAction(action, actor.clinicId);
   const entry: AuditEntry = {
     id: createId("AUD"),
     user: actor.name,
-    action,
+    action: formattedAction,
     date: now.toISOString().slice(0, 10),
     time: now.toTimeString().slice(0, 5),
     clinicId: actor.clinicId,

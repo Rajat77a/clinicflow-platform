@@ -13,6 +13,7 @@ import { downloadCSV } from "@/lib/exporters";
 import { toast } from "sonner";
 import { useNavigate } from "@tanstack/react-router";
 import { ClinicStaffDirectoryModal } from "@/components/clinics/ClinicStaffDirectoryModal";
+import { resolveClinicCode } from "@/lib/prescription-fields";
 
 export const Route = createFileRoute("/app/clinics/")({ component: ClinicsPage });
 
@@ -38,7 +39,9 @@ function ClinicsPage() {
       (c) =>
         c.name.toLowerCase().includes(q) ||
         c.city.toLowerCase().includes(q) ||
-        c.id.toLowerCase().includes(q)
+        c.id.toLowerCase().includes(q) ||
+        (c.shortId && c.shortId.toLowerCase().includes(q)) ||
+        resolveClinicCode(c.shortId || c.id, clinics).toLowerCase().includes(q)
     );
   }, [clinics, searchQuery]);
 
@@ -70,18 +73,19 @@ function ClinicsPage() {
   };
 
   const exportClinic = (c: Clinic) => {
+    const code = resolveClinicCode(c.shortId || c.id, clinics);
     const summary = [{
-      clinicId: c.id, clinicName: c.name, location: c.city,
+      clinicId: code, clinicName: c.name, location: c.city,
       admins: c.clinicalAdmins, doctors: c.doctors, receptionists: c.receptionists, patients: c.patients,
       plan: c.plan, subscriptionStatus: c.status, renews: c.expires,
     }];
-    downloadCSV(`${c.id}-summary.csv`, summary);
+    downloadCSV(`${code}-summary.csv`, summary);
     toast.success(`Exported ${c.name}`);
   };
 
   const exportAll = () => {
     const combined = clinics.map(c => ({
-      clinicId: c.id, clinicName: c.name, location: c.city,
+      clinicId: resolveClinicCode(c.shortId || c.id, clinics), clinicName: c.name, location: c.city,
       admins: c.clinicalAdmins, doctors: c.doctors, receptionists: c.receptionists, patients: c.patients,
       plan: c.plan, subscriptionStatus: c.status, renews: c.expires,
     }));
@@ -274,7 +278,7 @@ function ClinicsPage() {
                         </button>
                         <div className="min-w-0">
                           <div className="font-semibold">{c.name}</div>
-                          <div className="text-xs text-muted-foreground">{c.id}</div>
+                          <div className="text-xs font-mono font-medium text-muted-foreground">{resolveClinicCode(c.shortId || c.id, clinics)}</div>
                         </div>
                       </div>
                     </TableCell>

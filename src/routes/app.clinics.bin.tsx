@@ -15,6 +15,7 @@ import {
   getTrashRetentionStatus,
   isEligibleForPermanentDelete,
 } from "@/lib/workspace-data";
+import { resolveClinicCode, formatClinicEntityId, formatPatientId } from "@/lib/prescription-fields";
 import {
   Trash2,
   RotateCcw,
@@ -51,6 +52,7 @@ function getDaysRemaining(deletedAt?: string): number {
 function TrashBinPage() {
   const { user } = useAuth();
   const {
+    clinics,
     binClinics,
     restoreClinic,
     permanentlyDeleteClinic,
@@ -624,7 +626,7 @@ function TrashBinPage() {
                             </div>
                           </TableCell>
                           <TableCell className="font-mono text-xs text-muted-foreground">
-                            {c.id}
+                            {resolveClinicCode(c.shortId || c.id, [...clinics, ...binClinics])}
                           </TableCell>
                           <TableCell className="text-muted-foreground tabular-nums text-sm">
                             {deletedFormatted}
@@ -798,7 +800,7 @@ function TrashBinPage() {
                               </div>
                               <div className="min-w-0">
                                 <div className="font-semibold line-through text-muted-foreground">{member.name}</div>
-                                <div className="font-mono text-xs text-muted-foreground">{member.id}</div>
+                                <div className="font-mono text-xs text-muted-foreground">{formatClinicEntityId("ST", member.employeeNumber || member.id, resolveClinicCode(member.clinicId || member.previousClinicId, [...clinics, ...binClinics]))}</div>
                               </div>
                             </div>
                           </TableCell>
@@ -1000,12 +1002,12 @@ function TrashBinPage() {
                               </div>
                               <div className="min-w-0">
                                 <div className="font-semibold line-through text-muted-foreground">{patient.name}</div>
-                                <div className="text-xs text-muted-foreground">{patient.clinicId}</div>
+                                <div className="text-xs font-mono font-medium text-muted-foreground">{resolveClinicCode(patient.clinicId, [...clinics, ...binClinics])}</div>
                               </div>
                             </div>
                           </TableCell>
                           <TableCell className="font-mono text-xs text-muted-foreground">
-                            {patient.medicalRecordNumber || patient.id}
+                            {formatPatientId(patient.id, patient.medicalRecordNumber, resolveClinicCode(patient.clinicId, [...clinics, ...binClinics]))}
                           </TableCell>
                           <TableCell className="text-muted-foreground text-sm">
                             {patient.phone}
