@@ -29,7 +29,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Phone, Mail, MapPin, MessageCircle, Calendar, FileText, Receipt,
   FolderOpen, FlaskConical, Download, Send, Printer, Edit, Eye,
-  Trash2, AlertTriangle, Pencil, Check, X, Upload, Plus, File,
+  Trash2, AlertTriangle, Pencil, Check, X, Upload, Plus, File, ArrowLeft,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useRecordPage } from "@/lib/use-record-page";
@@ -377,6 +377,14 @@ function PatientProfile() {
 
   return (
     <>
+      <div className="mb-2">
+        <Link
+          to="/app/patients"
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" /> Back to Patients
+        </Link>
+      </div>
       <PageHeader title={patient.name} description={`Patient ID ${formatPatientId(patient.id, patient.medicalRecordNumber)}`}
         actions={
           <div className="flex flex-wrap gap-2">
@@ -410,9 +418,13 @@ function PatientProfile() {
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="rounded-2xl border bg-card p-6 shadow-soft">
           <div className="flex items-center gap-4">
-            <div className="grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-primary to-info text-primary-foreground text-xl font-bold">
+            <Link
+              to="/app/patients"
+              title="Back to Patients list"
+              className="grid h-16 w-16 place-items-center rounded-2xl bg-gradient-to-br from-primary to-info text-primary-foreground text-xl font-bold shadow-sm transition-all hover:scale-105 hover:opacity-95 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
+            >
               {patient.name.split(" ").map(n => n[0]).slice(0, 2).join("")}
-            </div>
+            </Link>
             <div className="min-w-0 flex-1">
               <div className="flex items-center justify-between">
                 <div className="font-display text-lg font-bold truncate">{patient.name}</div>

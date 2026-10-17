@@ -173,12 +173,17 @@ function PatientsPage() {
               {rows.map((p) => (
                 <TableRow key={p.id}>
                   <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-primary to-info text-primary-foreground text-xs font-semibold">
+                    <Link
+                      to="/app/patients/$id"
+                      params={{ id: p.id }}
+                      className="group flex items-center gap-3 transition-opacity hover:opacity-80"
+                      title={`View ${p.name}'s profile`}
+                    >
+                      <div className="grid h-9 w-9 place-items-center rounded-full bg-gradient-to-br from-primary to-info text-primary-foreground text-xs font-semibold shadow-xs group-hover:scale-105 transition-transform">
                         {p.name.split(" ").map(n => n[0]).slice(0, 2).join("")}
                       </div>
-                      <div className="font-semibold">{p.name}</div>
-                    </div>
+                      <div className="font-semibold text-foreground group-hover:text-primary transition-colors">{p.name}</div>
+                    </Link>
                   </TableCell>
                   <TableCell className="font-mono text-xs font-semibold">{formatPatientId(p.id, p.medicalRecordNumber)}</TableCell>
                   <TableCell>{p.age}</TableCell>
