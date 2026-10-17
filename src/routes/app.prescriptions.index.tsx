@@ -12,7 +12,7 @@ import { PaginationFooter } from "@/components/data/pagination-footer";
 import { useRecordPage } from "@/lib/use-record-page";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { printDocument } from "@/lib/exporters";
-import { resolvePrescriptionDetails, formatPatientId } from "@/lib/prescription-fields";
+import { resolvePrescriptionDetails, formatPatientId, formatPrescriptionId } from "@/lib/prescription-fields";
 import { toast } from "sonner";
 import type { Prescription } from "@/lib/workspace-data";
 
@@ -37,11 +37,12 @@ function PrescriptionsPage() {
 
   const printRx = (rx: Prescription) => {
     const details = resolvePrescriptionDetails(rx);
-    const displayPatientId = formatPatientId(rx.patientId);
+    const displayPatientId = formatPatientId(rx.patientId, undefined, rx.clinicId || user?.clinicId);
+    const displayRxId = formatPrescriptionId(rx.id, rx.clinicId || user?.clinicId);
     const primaryReason = details.primaryIllness || (rx.diagnosis && rx.diagnosis !== "Not recorded" ? rx.diagnosis : "");
     printDocument(`
       <h2>${user?.clinic ?? "ClinicFlow"}</h2>
-      <div class="muted">Prescription ${rx.id} · Issued on ${rx.date}</div>
+      <div class="muted">Prescription ${displayRxId} · Issued on ${rx.date}</div>
       <div class="card">
         <div class="row"><b>Patient Name</b><span>${rx.patient} (${displayPatientId})</span></div>
         <div class="row"><b>Consulting Doctor</b><span>${rx.doctor}</span></div>
@@ -145,9 +146,9 @@ function PrescriptionsPage() {
                   onClick={() => setViewingRx(r)}
                 >
                   <TableCell>
-                    <div className="flex items-center gap-2 font-mono text-xs">
+                    <div className="flex items-center gap-2 font-mono text-xs font-semibold text-primary">
                       <FileText className="h-3.5 w-3.5 text-info" />
-                      {r.id}
+                      {formatPrescriptionId(r.id, r.clinicId || user?.clinicId)}
                     </div>
                   </TableCell>
                   <TableCell className="font-semibold">{r.patient}</TableCell>
@@ -231,20 +232,20 @@ function PrescriptionsPage() {
                       Prescription Details
                     </DialogTitle>
                     <DialogDescription className="font-mono text-xs mt-1">
-                      {viewingRx.id} · Issued {viewingRx.date}
+                      {formatPrescriptionId(viewingRx.id, viewingRx.clinicId || user?.clinicId)} · Issued {viewingRx.date}
                     </DialogDescription>
                   </div>
-                </div>
-              </DialogHeader>
-
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                {/* Meta details */}
-                <div className="grid grid-cols-2 gap-4 rounded-xl border bg-muted/20 p-4">
-                  <div>
-                    <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Patient</div>
-                    <div className="font-medium text-sm mt-0.5">{viewingRx.patient}</div>
-                    <div className="font-mono text-xs font-semibold text-primary">{formatPatientId(viewingRx.patientId)}</div>
                   </div>
+                </DialogHeader>
+
+                <div className="flex-1 overflow-y-auto p-6 space-y-6">
+                  {/* Meta details */}
+                  <div className="grid grid-cols-2 gap-4 rounded-xl border bg-muted/20 p-4">
+                    <div>
+                      <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Patient</div>
+                      <div className="font-medium text-sm mt-0.5">{viewingRx.patient}</div>
+                      <div className="font-mono text-xs font-semibold text-primary">{formatPatientId(viewingRx.patientId, undefined, viewingRx.clinicId || user?.clinicId)}</div>
+                    </div>
                   <div>
                     <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Doctor</div>
                     <div className="font-medium text-sm mt-0.5">{viewingRx.doctor}</div>

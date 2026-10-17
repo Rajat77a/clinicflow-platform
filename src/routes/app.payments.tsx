@@ -7,12 +7,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { useWorkspaceData } from "@/lib/workspace-data";
+import { useAuth } from "@/lib/auth";
+import { formatInvoiceId } from "@/lib/prescription-fields";
 import { CheckCircle2, Clock3, IndianRupee, Search, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/payments")({ component: PaymentsPage });
 
 function PaymentsPage() {
+  const { user } = useAuth();
   const { bills, clinics } = useWorkspaceData();
   const [query, setQuery] = useState("");
 
@@ -89,7 +92,7 @@ function PaymentsPage() {
             <TableBody>
               {visibleBills.map((bill) => (
                 <TableRow key={bill.id}>
-                  <TableCell className="font-mono text-xs">{bill.id}</TableCell>
+                  <TableCell className="font-mono text-xs font-semibold text-primary">{formatInvoiceId(bill.id, bill.clinicId || user?.clinicId)}</TableCell>
                   <TableCell className="font-semibold">{bill.patient}</TableCell>
                   <TableCell className="text-muted-foreground">{bill.date}</TableCell>
                   <TableCell className="text-muted-foreground">{bill.method || "—"}</TableCell>

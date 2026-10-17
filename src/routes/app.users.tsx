@@ -14,6 +14,7 @@ import { UserMinus, UserPlus, Eye, EyeOff, Building2, ShieldCheck, Stethoscope, 
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { formatClinicEntityId } from "@/lib/prescription-fields";
 
 export const Route = createFileRoute("/app/users")({ component: UsersPage });
 
@@ -1121,7 +1122,13 @@ function UsersPage() {
                       </div>
                       <div>
                         <div className="font-semibold text-foreground">{member.name}</div>
-                        <div className="font-mono text-xs text-muted-foreground">{member.employeeNumber || member.id}</div>
+                        <div className="font-mono text-xs text-muted-foreground">
+                          {formatClinicEntityId(
+                            member.role === "doctor" ? "DR" : member.role === "clinic_admin" ? "CA" : member.role === "receptionist" ? "RC" : member.role === "super_admin" ? "SA" : "ST",
+                            member.employeeNumber || member.id,
+                            assignedClinic?.shortId || assignedClinic?.id || member.clinicId || user?.clinicId
+                          )}
+                        </div>
                       </div>
                     </div>
                   </TableCell>
