@@ -106,6 +106,12 @@ export function resolvePrescriptionDetails(rx: {
   };
 }
 
+export interface ClinicLookupItem {
+  id: string;
+  shortId?: string;
+  name?: string;
+}
+
 /**
  * Clean clinic hint helper: converts a clinicId, clinic shortId, or hospital UUID
  * into a clean standard token like "CL-101" or "CL-001".
@@ -128,11 +134,65 @@ export function formatClinicCode(clinicHint?: string | null): string {
 }
 
 /**
+ * Authoritative clinic code resolver:
+ * Matches against a list of clinics by id, shortId, or name,
+ * returning the canonical shortId (e.g., "CL-101") so that
+ * the same clinic never has conflicting codes across different screens or entities.
+ */
+export function resolveClinicCode(
+  clinicHint?: string | null,
+  clinics?: ClinicLookupItem[] | null,
+  fallbackClinicHint?: string | null,
+): string {
+  const primary = (clinicHint || "").trim();
+  const fallback = (fallbackClinicHint || "").trim();
+
+  // If clinics list provided, search for matching clinic
+  if (clinics && clinics.length > 0) {
+    if (primary) {
+      const match = clinics.find(
+        (c) =>
+          c.id === primary ||
+          (c.shortId && c.shortId.toLowerCase() === primary.toLowerCase()) ||
+          (c.name && c.name.toLowerCase() === primary.toLowerCase()),
+      );
+      if (match?.shortId) {
+        return formatClinicCode(match.shortId);
+      }
+    }
+    if (fallback) {
+      const matchFallback = clinics.find(
+        (c) =>
+          c.id === fallback ||
+          (c.shortId && c.shortId.toLowerCase() === fallback.toLowerCase()) ||
+          (c.name && c.name.toLowerCase() === fallback.toLowerCase()),
+      );
+      if (matchFallback?.shortId) {
+        return formatClinicCode(matchFallback.shortId);
+      }
+    }
+  }
+
+  // Next, if primary has an explicit CL-xxx pattern
+  if (primary) {
+    const clMatch = primary.match(/^CL-?(\d+)/i);
+    if (clMatch) return `CL-${clMatch[1]}`;
+  }
+  if (fallback) {
+    const clMatch = fallback.match(/^CL-?(\d+)/i);
+    if (clMatch) return `CL-${clMatch[1]}`;
+  }
+
+  // Fallback to formatClinicCode
+  return formatClinicCode(primary || fallback);
+}
+
+/**
  * Universal formatter that creates unified clinic-linked entity identifiers:
- * e.g. "CL-101-PT-101", "CL-101-DR-102", "CL-101-RX-101", "CL-101-INV-101"
+ * e.g. "CL-101-PT-101", "CL-101-DR-102", "CL-101-AP-101", "CL-101-LB-101", "CL-101-RX-101", "CL-101-INV-101"
  */
 export function formatClinicEntityId(
-  typePrefix: "PT" | "DR" | "RC" | "CA" | "SA" | "ST" | "RX" | "INV",
+  typePrefix: "PT" | "DR" | "RC" | "CA" | "SA" | "ST" | "RX" | "INV" | "AP" | "LB",
   rawId?: string | null,
   clinicHint?: string | null,
   mrnHint?: string | null,
@@ -140,13 +200,17 @@ export function formatClinicEntityId(
   const clinicPrefix = formatClinicCode(clinicHint);
   const clean = (rawId || mrnHint || "").trim();
 
-  // If already full compound ID like CL-101-PT-105
+  // If already full compound ID like CL-101-PT-105 or CL-183-DR-101
   const fullMatch = clean.match(/^(CL-\d+)-([A-Z]{2})-(\d+)$/i);
   if (fullMatch) {
+    if (clinicPrefix && fullMatch[1].toUpperCase() !== clinicPrefix.toUpperCase()) {
+      // Re-link with the authoritative clinic prefix for consistency across views
+      return `${clinicPrefix}-${fullMatch[2].toUpperCase()}-${fullMatch[3]}`;
+    }
     return `${fullMatch[1].toUpperCase()}-${fullMatch[2].toUpperCase()}-${fullMatch[3]}`;
   }
 
-  // Extract short number if already has type prefix like PT-101, DR-102, INV-2026-101
+  // Extract short number if already has type prefix like PT-101, DR-102, AP-105, LB-101, INV-2026-101
   let subNum = 101;
   const numMatch = clean.match(/(\d+)$/);
   if (numMatch) {
@@ -222,7 +286,7 @@ export function formatPatientId(patientId?: string, medicalRecordNumber?: string
 export function formatPrescriptionId(rxId?: string | null, clinicHint?: string | null): string {
   if (!rxId) return "RX-101";
   const clean = rxId.trim();
-  if (/^CL-\d+-RX-\d+$/i.test(clean)) return clean.toUpperCase();
+  if (/^CL-\d+-RX-\d+$/i.test(clean) && !clinicHint) return clean.toUpperCase();
   if (/^RX-\d+$/i.test(clean) && !clinicHint) return clean.toUpperCase();
   return formatClinicEntityId("RX", clean, clinicHint);
 }
@@ -230,9 +294,33 @@ export function formatPrescriptionId(rxId?: string | null, clinicHint?: string |
 export function formatInvoiceId(invoiceId?: string | null, clinicHint?: string | null): string {
   if (!invoiceId) return "INV-101";
   const clean = invoiceId.trim();
-  if (/^CL-\d+-INV-\d+$/i.test(clean)) return clean.toUpperCase();
+  if (/^CL-\d+-INV-\d+$/i.test(clean) && !clinicHint) return clean.toUpperCase();
   if (/^INV-\d+$/i.test(clean) && !clinicHint) return clean.toUpperCase();
   return formatClinicEntityId("INV", clean, clinicHint);
+}
+
+export function formatAppointmentId(aptId?: string | null, clinicHint?: string | null): string {
+  if (!aptId) return "AP-101";
+  const clean = aptId.trim();
+  if (/^CL-\d+-AP-\d+$/i.test(clean) && !clinicHint) return clean.toUpperCase();
+  if (/^AP-\d+$/i.test(clean) && !clinicHint) return clean.toUpperCase();
+  return formatClinicEntityId("AP", clean, clinicHint);
+}
+
+export function formatDoctorId(doctorId?: string | null, clinicHint?: string | null): string {
+  if (!doctorId) return "DR-101";
+  const clean = doctorId.trim();
+  if (/^CL-\d+-DR-\d+$/i.test(clean) && !clinicHint) return clean.toUpperCase();
+  if (/^DR-\d+$/i.test(clean) && !clinicHint) return clean.toUpperCase();
+  return formatClinicEntityId("DR", clean, clinicHint);
+}
+
+export function formatLabReportId(labId?: string | null, clinicHint?: string | null): string {
+  if (!labId) return "LB-101";
+  const clean = labId.trim();
+  if (/^CL-\d+-LB-\d+$/i.test(clean) && !clinicHint) return clean.toUpperCase();
+  if (/^LB-\d+$/i.test(clean) && !clinicHint) return clean.toUpperCase();
+  return formatClinicEntityId("LB", clean, clinicHint);
 }
 
 

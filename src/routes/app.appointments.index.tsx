@@ -17,6 +17,9 @@ import { useRecordPage } from "@/lib/use-record-page";
 import { localDateKey, localStartOfWeek } from "@/lib/calendar";
 import { TimeWheelPicker } from "@/components/forms/time-wheel-picker";
 
+import { useAuth } from "@/lib/auth";
+import { formatAppointmentId, resolveClinicCode } from "@/lib/prescription-fields";
+
 export const Route = createFileRoute("/app/appointments/")({ component: AppointmentsPage });
 
 type Appt = Appointment;
@@ -68,7 +71,8 @@ function CalendarView({ appts }: { appts: Appt[] }) {
 }
 
 function AppointmentsPage() {
-  const { appointments, listAppointments, updateAppointment } = useWorkspaceData();
+  const { user } = useAuth();
+  const { appointments, clinics, listAppointments, updateAppointment } = useWorkspaceData();
   const [tab, setTab] = useState("today");
   const {
     rows,
@@ -140,7 +144,9 @@ function AppointmentsPage() {
               )}
               {rows.map(a => (
                 <TableRow key={a.id}>
-                  <TableCell className="font-mono text-xs">{a.id}</TableCell>
+                  <TableCell className="font-mono text-xs">
+                    {formatAppointmentId(a.id, resolveClinicCode(a.clinicId, clinics, user?.clinicId))}
+                  </TableCell>
                   <TableCell className="font-semibold">
                     <Link
                       to="/app/patients/$id"

@@ -18,7 +18,15 @@ import {
 } from "@/lib/workspace-data";
 import { printDocument } from "@/lib/exporters";
 import { sendWhatsApp } from "@/lib/whatsapp";
-import { resolvePrescriptionDetails, formatPatientId, formatPrescriptionId, formatInvoiceId } from "@/lib/prescription-fields";
+import {
+  resolvePrescriptionDetails,
+  formatPatientId,
+  formatPrescriptionId,
+  formatInvoiceId,
+  formatLabReportId,
+  formatAppointmentId,
+  resolveClinicCode,
+} from "@/lib/prescription-fields";
 import { useAuth } from "@/lib/auth";
 import { hasPermission } from "@/lib/access-control";
 import { supabaseConfig } from "@/lib/supabase/config";
@@ -76,6 +84,7 @@ function PatientProfile() {
   const {
     patients,
     allPatients,
+    clinics,
     getPatient,
     listAppointments,
     listPrescriptions,
@@ -130,6 +139,8 @@ function PatientProfile() {
   const myBills = billsPage.rows;
   const myLabs = labsPage.rows;
   const myDocuments = documentsPage.rows;
+
+  const clinicCode = resolveClinicCode(patient?.clinicId, clinics, user?.clinicId);
 
   useEffect(() => {
     let current = true;
@@ -304,8 +315,8 @@ function PatientProfile() {
 
   const printRx = (rx: Prescription) => {
     const details = resolvePrescriptionDetails(rx);
-    const displayPatientId = formatPatientId(patient.id, patient.medicalRecordNumber, patient.clinicId || user?.clinicId);
-    const displayRxId = formatPrescriptionId(rx.id, rx.clinicId || patient.clinicId || user?.clinicId);
+    const displayPatientId = formatPatientId(patient.id, patient.medicalRecordNumber, clinicCode);
+    const displayRxId = formatPrescriptionId(rx.id, clinicCode);
     const primaryReason = details.primaryIllness || (rx.diagnosis && rx.diagnosis !== "Not recorded" ? rx.diagnosis : "");
     printDocument(`
       <h2>${user?.clinic ?? "ClinicFlow"}</h2>
@@ -386,7 +397,7 @@ function PatientProfile() {
           <ArrowLeft className="h-3.5 w-3.5" /> Back to Patients
         </Link>
       </div>
-      <PageHeader title={patient.name} description={`Patient ID ${formatPatientId(patient.id, patient.medicalRecordNumber, patient.clinicId || user?.clinicId)}`}
+      <PageHeader title={patient.name} description={`Patient ID ${formatPatientId(patient.id, patient.medicalRecordNumber, clinicCode)}`}
         actions={
           <div className="flex flex-wrap gap-2">
             <Button
@@ -510,7 +521,7 @@ function PatientProfile() {
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs font-semibold text-primary">{formatPrescriptionId(r.id, r.clinicId || patient.clinicId || user?.clinicId)}</span>
+                          <span className="font-mono text-xs font-semibold text-primary">{formatPrescriptionId(r.id, clinicCode)}</span>
                           <span className="text-xs text-muted-foreground">·</span>
                           <span className="text-xs text-muted-foreground">{r.date}</span>
                         </div>
@@ -608,7 +619,13 @@ function PatientProfile() {
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <div className="font-mono text-xs text-muted-foreground">{l.id} · {l.date}{l.prescriptionId ? ` · linked ${l.prescriptionId}` : ""}</div>
+                      <div className="font-mono text-xs text-muted-foreground">
+                        <span className="font-semibold text-primary">
+                          {formatLabReportId(l.id, resolveClinicCode(l.clinicId || patient.clinicId, clinics, user?.clinicId))}
+                        </span>
+                        {" · "}{l.date}
+                        {l.prescriptionId ? ` · linked ${formatPrescriptionId(l.prescriptionId, resolveClinicCode(l.clinicId || patient.clinicId, clinics, user?.clinicId))}` : ""}
+                      </div>
                       <div className="font-display text-base font-semibold">{l.test}</div>
                     </div>
                     <Eye className="h-4 w-4 text-muted-foreground" />
@@ -641,7 +658,7 @@ function PatientProfile() {
                   {!billsPage.isLoading && billsPage.error && <TableRow><TableCell colSpan={5} className="py-6 text-center text-sm text-destructive">{billsPage.error}</TableCell></TableRow>}
                   {!billsPage.isLoading && !billsPage.error && (myBills.length ? myBills.map(b => (
                     <TableRow key={b.id} className="cursor-pointer hover:bg-muted/40" onClick={() => setViewingBill(b)}>
-                      <TableCell className="font-mono text-xs font-semibold text-primary">{formatInvoiceId(b.id, b.clinicId || patient.clinicId || user?.clinicId)}</TableCell>
+                      <TableCell className="font-mono text-xs font-semibold text-primary">{formatInvoiceId(b.id, clinicCode)}</TableCell>
                       <TableCell>{b.date}</TableCell>
                       <TableCell className="text-right tabular-nums">₹{b.amount.toFixed(2)}</TableCell>
                       <TableCell><Badge variant={b.status === "Paid" ? "secondary" : b.status === "Overdue" ? "destructive" : "outline"}>{b.status}</Badge></TableCell>
@@ -672,13 +689,29 @@ function PatientProfile() {
 
             <TabsContent value="history" className="mt-4 rounded-2xl border bg-card shadow-soft">
               <Table>
-                <TableHeader><TableRow><TableHead>Date</TableHead><TableHead>Doctor</TableHead><TableHead>Type</TableHead><TableHead>Status</TableHead></TableRow></TableHeader>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Appointment ID</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Doctor</TableHead>
+                    <TableHead>Type</TableHead>
+                    <TableHead>Status</TableHead>
+                  </TableRow>
+                </TableHeader>
                 <TableBody>
-                  {visitsPage.isLoading && <TableRow><TableCell colSpan={4} className="py-6 text-center text-sm text-muted-foreground">Loading visits...</TableCell></TableRow>}
-                  {!visitsPage.isLoading && visitsPage.error && <TableRow><TableCell colSpan={4} className="py-6 text-center text-sm text-destructive">{visitsPage.error}</TableCell></TableRow>}
+                  {visitsPage.isLoading && <TableRow><TableCell colSpan={5} className="py-6 text-center text-sm text-muted-foreground">Loading visits...</TableCell></TableRow>}
+                  {!visitsPage.isLoading && visitsPage.error && <TableRow><TableCell colSpan={5} className="py-6 text-center text-sm text-destructive">{visitsPage.error}</TableCell></TableRow>}
                   {!visitsPage.isLoading && !visitsPage.error && (visits.length ? visits.map(v => (
-                    <TableRow key={v.id}><TableCell>{v.date} · {v.time}</TableCell><TableCell>{v.doctor}</TableCell><TableCell>{v.type}</TableCell><TableCell><Badge variant="secondary">{v.status}</Badge></TableCell></TableRow>
-                  )) : <TableRow><TableCell colSpan={4} className="text-center text-sm text-muted-foreground py-6">No visits yet</TableCell></TableRow>)}
+                    <TableRow key={v.id}>
+                      <TableCell className="font-mono text-xs font-semibold text-primary">
+                        {formatAppointmentId(v.id, resolveClinicCode(v.clinicId || patient.clinicId, clinics, user?.clinicId))}
+                      </TableCell>
+                      <TableCell>{v.date} · {v.time}</TableCell>
+                      <TableCell>{v.doctor}</TableCell>
+                      <TableCell>{v.type}</TableCell>
+                      <TableCell><Badge variant="secondary">{v.status}</Badge></TableCell>
+                    </TableRow>
+                  )) : <TableRow><TableCell colSpan={5} className="text-center text-sm text-muted-foreground py-6">No visits yet</TableCell></TableRow>)}
                 </TableBody>
               </Table>
               <PaginationFooter
@@ -831,7 +864,7 @@ function PatientProfile() {
         }}
       >
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Invoice {viewingBill ? formatInvoiceId(viewingBill.id, viewingBill.clinicId || patient.clinicId || user?.clinicId) : ""}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Invoice {viewingBill ? formatInvoiceId(viewingBill.id, clinicCode) : ""}</DialogTitle></DialogHeader>
           {viewingBill && (
             <div className="space-y-4 text-sm">
                 <div className="grid grid-cols-2 gap-3">
@@ -963,7 +996,13 @@ function PatientProfile() {
           <DialogHeader><DialogTitle>{viewingLab?.test}</DialogTitle></DialogHeader>
           {viewingLab && (
             <div className="space-y-4 text-sm">
-              <div className="text-xs text-muted-foreground font-mono">{viewingLab.id} · {viewingLab.date}{viewingLab.prescriptionId ? ` · linked ${viewingLab.prescriptionId}` : ""}</div>
+              <div className="text-xs text-muted-foreground font-mono">
+                <span className="font-semibold text-primary">
+                  {formatLabReportId(viewingLab.id, resolveClinicCode(viewingLab.clinicId || patient.clinicId, clinics, user?.clinicId))}
+                </span>
+                {" · "}{viewingLab.date}
+                {viewingLab.prescriptionId ? ` · linked ${formatPrescriptionId(viewingLab.prescriptionId, resolveClinicCode(viewingLab.clinicId || patient.clinicId, clinics, user?.clinicId))}` : ""}
+              </div>
               {viewingLab.fileName && (
                 <div className="rounded-xl border bg-muted/30 p-4 flex items-center gap-3">
                   <FolderOpen className="h-6 w-6 text-primary" />
@@ -995,7 +1034,16 @@ function PatientProfile() {
           )}
           <DialogFooter>
             {canUseExternalSharing && (
-              <Button variant="outline" onClick={() => viewingLab && sendWhatsApp(patient.phone, `Lab report ${viewingLab.id} — ${viewingLab.test}: ${viewingLab.result} (ref ${viewingLab.reference})`)}>
+              <Button
+                variant="outline"
+                onClick={() =>
+                  viewingLab &&
+                  sendWhatsApp(
+                    patient.phone,
+                    `Lab report ${formatLabReportId(viewingLab.id, resolveClinicCode(viewingLab.clinicId || patient.clinicId, clinics, user?.clinicId))} — ${viewingLab.test}: ${viewingLab.result} (ref ${viewingLab.reference})`
+                  )
+                }
+              >
                 <Send className="mr-1.5 h-4 w-4" />Send on WhatsApp
               </Button>
             )}
@@ -1041,8 +1089,8 @@ function PatientProfile() {
         <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col p-0 overflow-hidden">
           {viewingRx && (() => {
             const details = resolvePrescriptionDetails(viewingRx);
-            const displayPatientId = formatPatientId(patient.id, patient.medicalRecordNumber, patient.clinicId || user?.clinicId);
-            const displayRxId = formatPrescriptionId(viewingRx.id, viewingRx.clinicId || patient.clinicId || user?.clinicId);
+            const displayPatientId = formatPatientId(patient.id, patient.medicalRecordNumber, clinicCode);
+            const displayRxId = formatPrescriptionId(viewingRx.id, clinicCode);
             return (
               <>
                 <DialogHeader className="p-6 pb-4 border-b">
@@ -1205,7 +1253,7 @@ function PatientProfile() {
                 Edit Patient Details
               </DialogTitle>
               <DialogDescription>
-                Update demographic, contact and medical info for {patient.name} ({formatPatientId(patient.id, patient.medicalRecordNumber, patient.clinicId || user?.clinicId)}).
+                Update demographic, contact and medical info for {patient.name} ({formatPatientId(patient.id, patient.medicalRecordNumber, clinicCode)}).
               </DialogDescription>
             </DialogHeader>
 

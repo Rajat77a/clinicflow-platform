@@ -34,13 +34,13 @@ import { hasPermission } from "@/lib/access-control";
 import { useRecordPage } from "@/lib/use-record-page";
 import { useWorkspaceData, type Bill } from "@/lib/workspace-data";
 import { sendWhatsApp } from "@/lib/whatsapp";
-import { formatInvoiceId } from "@/lib/prescription-fields";
+import { formatInvoiceId, resolveClinicCode } from "@/lib/prescription-fields";
 
 export const Route = createFileRoute("/app/billing/")({ component: BillingPage });
 
 function BillingPage() {
   const { user } = useAuth();
-  const { patients, getPatient, listBills, updateBill, updateBillNotes } = useWorkspaceData();
+  const { patients, clinics, getPatient, listBills, updateBill, updateBillNotes } = useWorkspaceData();
   const {
     rows: bills,
     total,
@@ -125,7 +125,9 @@ function BillingPage() {
             )}
             {bills.map((bill) => (
               <TableRow key={bill.id}>
-                <TableCell className="font-mono text-xs font-semibold text-primary">{formatInvoiceId(bill.id, bill.clinicId || user?.clinicId)}</TableCell>
+                <TableCell className="font-mono text-xs font-semibold text-primary">
+                  {formatInvoiceId(bill.id, resolveClinicCode(bill.clinicId, clinics, user?.clinicId))}
+                </TableCell>
                 <TableCell className="font-semibold">{bill.patient}</TableCell>
                 <TableCell className="text-muted-foreground">{bill.date}</TableCell>
                 <TableCell className="text-right tabular-nums">
@@ -185,7 +187,7 @@ function BillingPage() {
         }}
       >
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>Invoice {viewing ? formatInvoiceId(viewing.id, viewing.clinicId || user?.clinicId) : ""}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Invoice {viewing ? formatInvoiceId(viewing.id, resolveClinicCode(viewing.clinicId, clinics, user?.clinicId)) : ""}</DialogTitle></DialogHeader>
           {viewing && (
             <div className="space-y-4 text-sm">
               <div className="grid grid-cols-2 gap-3">

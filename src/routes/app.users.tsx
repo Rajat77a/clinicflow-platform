@@ -14,7 +14,7 @@ import { UserMinus, UserPlus, Eye, EyeOff, Building2, ShieldCheck, Stethoscope, 
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
-import { formatClinicEntityId } from "@/lib/prescription-fields";
+import { formatClinicEntityId, resolveClinicCode } from "@/lib/prescription-fields";
 
 export const Route = createFileRoute("/app/users")({ component: UsersPage });
 
@@ -284,7 +284,14 @@ function UsersPage() {
   const [deactivationReason, setDeactivationReason] = useState("");
   const [isDeactivating, setIsDeactivating] = useState(false);
 
-  const clinicMap = useMemo(() => new Map(clinics.map((c) => [c.id, c])), [clinics]);
+  const clinicMap = useMemo(() => {
+    const map = new Map<string, typeof clinics[number]>();
+    for (const c of clinics) {
+      if (c.id) map.set(c.id, c);
+      if (c.shortId) map.set(c.shortId, c);
+    }
+    return map;
+  }, [clinics]);
 
   const canDeactivate = (member: StaffMember) => {
     if (TEST_EMAILS.includes(member.email.toLowerCase())) return false;
@@ -1126,7 +1133,7 @@ function UsersPage() {
                           {formatClinicEntityId(
                             member.role === "doctor" ? "DR" : member.role === "clinic_admin" ? "CA" : member.role === "receptionist" ? "RC" : member.role === "super_admin" ? "SA" : "ST",
                             member.employeeNumber || member.id,
-                            assignedClinic?.shortId || assignedClinic?.id || member.clinicId || user?.clinicId
+                            resolveClinicCode(assignedClinic?.shortId || member.clinicId, clinics, user?.clinicId)
                           )}
                         </div>
                       </div>
@@ -1324,11 +1331,13 @@ function UsersPage() {
                         <Icon className="h-3 w-3" />
                         {roleLabels[selectedProfile.role] || selectedProfile.role}
                       </Badge>
-                      {selectedProfile.employeeNumber && (
-                        <Badge variant="secondary" className="font-mono text-xs font-medium">
-                          ID: {selectedProfile.employeeNumber}
-                        </Badge>
-                      )}
+                      <Badge variant="secondary" className="font-mono text-xs font-medium">
+                        ID: {formatClinicEntityId(
+                          selectedProfile.role === "doctor" ? "DR" : selectedProfile.role === "clinic_admin" ? "CA" : selectedProfile.role === "receptionist" ? "RC" : selectedProfile.role === "super_admin" ? "SA" : "ST",
+                          selectedProfile.employeeNumber || selectedProfile.id,
+                          resolveClinicCode(selectedProfile.clinicId, clinics, user?.clinicId)
+                        )}
+                      </Badge>
                     </div>
                   </div>
                 </div>
@@ -1337,18 +1346,13 @@ function UsersPage() {
                   <div className="flex items-center justify-between p-3 gap-2">
                     <span className="font-medium text-muted-foreground shrink-0">Staff ID</span>
                     <span className="font-mono text-foreground font-semibold">
-                      {selectedProfile.employeeNumber || selectedProfile.id}
+                      {formatClinicEntityId(
+                        selectedProfile.role === "doctor" ? "DR" : selectedProfile.role === "clinic_admin" ? "CA" : selectedProfile.role === "receptionist" ? "RC" : selectedProfile.role === "super_admin" ? "SA" : "ST",
+                        selectedProfile.employeeNumber || selectedProfile.id,
+                        resolveClinicCode(selectedProfile.clinicId, clinics, user?.clinicId)
+                      )}
                     </span>
                   </div>
-
-                  {selectedProfile.employeeNumber && selectedProfile.id !== selectedProfile.employeeNumber && (
-                    <div className="flex items-center justify-between p-3 gap-2">
-                      <span className="font-medium text-muted-foreground shrink-0">System UUID</span>
-                      <span className="font-mono text-muted-foreground text-[11px] truncate max-w-[240px]" title={selectedProfile.id}>
-                        {selectedProfile.id}
-                      </span>
-                    </div>
-                  )}
 
                   <div className="flex items-center justify-between p-3 gap-2">
                     <span className="font-medium text-muted-foreground flex items-center gap-1.5 shrink-0">

@@ -10,14 +10,14 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useWorkspaceData, type Patient } from "@/lib/workspace-data";
 import { useAuth } from "@/lib/auth";
 import { hasPermission } from "@/lib/access-control";
-import { formatPatientId } from "@/lib/prescription-fields";
+import { formatPatientId, resolveClinicCode } from "@/lib/prescription-fields";
 import { ChevronLeft, ChevronRight, Search, Plus, Trash2, AlertTriangle, UserCheck, Users } from "lucide-react";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/app/patients/")({ component: PatientsPage });
 
 function PatientsPage() {
-  const { searchPatients, softDeletePatient } = useWorkspaceData();
+  const { searchPatients, softDeletePatient, clinics } = useWorkspaceData();
   const { user } = useAuth();
   const isDoctor = user?.role === "doctor";
   const [tab, setTab] = useState<"my" | "all">("my");
@@ -186,7 +186,7 @@ function PatientsPage() {
                     </Link>
                   </TableCell>
                   <TableCell className="font-mono text-xs font-semibold">
-                    {formatPatientId(p.id, p.medicalRecordNumber, p.clinicId || user?.clinicId)}
+                    {formatPatientId(p.id, p.medicalRecordNumber, resolveClinicCode(p.clinicId, clinics, user?.clinicId))}
                   </TableCell>
                   <TableCell>{p.age}</TableCell>
                   <TableCell className="text-muted-foreground">{p.gender}</TableCell>
