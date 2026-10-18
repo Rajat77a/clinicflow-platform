@@ -177,9 +177,9 @@ function NewBill() {
 
   const shareBill = () => {
     if (!patient) return;
-    const targetPhone = patient.raw?.whatsappPhone?.trim() || "";
+    const targetPhone = patient.raw?.whatsappPhone?.trim() || patient.raw?.phone?.trim() || "";
     if (!targetPhone) {
-      toast.error("WhatsApp number is not available");
+      toast.error("Contact phone number is not available for this patient");
       return;
     }
     const lineText = lines.map(l => `• ${l.name} (${l.category}) × ${l.qty} = ₹${(l.qty*l.unit).toFixed(2)}`).join("\n");

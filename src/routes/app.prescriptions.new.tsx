@@ -249,9 +249,9 @@ function NewPrescription() {
 
   const shareRx = () => {
     if (!patient) return;
-    const targetPhone = patient.raw?.whatsappPhone?.trim() || "";
+    const targetPhone = patient.raw?.whatsappPhone?.trim() || patient.raw?.phone?.trim() || "";
     if (!targetPhone) {
-      toast.error("WhatsApp number is not available");
+      toast.error("Contact phone number is not available for this patient");
       return;
     }
     const parts = [
