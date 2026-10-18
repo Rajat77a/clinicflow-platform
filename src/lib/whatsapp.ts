@@ -13,13 +13,13 @@ export function sendWhatsApp(phone: string, message: string) {
     try {
       const a = document.createElement("a");
       a.href = url;
-      a.target = "_blank";
+      a.target = "whatsapp_tab";
       a.rel = "noopener noreferrer";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
     } catch {
-      window.open(url, "_blank", "noopener,noreferrer");
+      window.open(url, "whatsapp_tab", "noopener,noreferrer");
     }
   }
 }
