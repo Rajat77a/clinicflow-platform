@@ -1041,6 +1041,14 @@ function UsersPage() {
               Clear
             </Button>
           )}
+
+          {/* Quick feedback right beneath the search bar */}
+          {searchQuery.trim() && displayedUsers.length === 0 && (
+            <div className="absolute top-full left-0 right-0 mt-1.5 z-20 flex items-center gap-2 rounded-xl border border-destructive/20 bg-destructive/10 px-3.5 py-2 text-xs text-destructive font-medium shadow-md backdrop-blur-sm animate-in fade-in-50 duration-150">
+              <AlertTriangle className="h-4 w-4 shrink-0" />
+              <span>No user matches &ldquo;{searchQuery.trim()}&rdquo;</span>
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-2.5 ml-auto">
           {canManageUsers && (
