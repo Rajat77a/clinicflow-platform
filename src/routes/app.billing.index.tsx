@@ -33,7 +33,7 @@ import { useAuth } from "@/lib/auth";
 import { hasPermission } from "@/lib/access-control";
 import { useRecordPage } from "@/lib/use-record-page";
 import { useWorkspaceData, type Bill } from "@/lib/workspace-data";
-import { sendWhatsApp } from "@/lib/whatsapp";
+import { sendWhatsApp, formatBillWhatsAppMessage } from "@/lib/whatsapp";
 import { formatInvoiceId, resolveClinicCode } from "@/lib/prescription-fields";
 
 export const Route = createFileRoute("/app/billing/")({ component: BillingPage });
@@ -75,7 +75,20 @@ function BillingPage() {
       toast.error("WhatsApp number not found");
       return;
     }
-    const msg = `Hi ${bill.patient}, invoice ${bill.id} from ${user?.clinic ?? "ClinicFlow"}:\nAmount: INR ${bill.amount.toFixed(2)} (${bill.status})\nDate: ${bill.date}`;
+    const displayInvoiceId = formatInvoiceId(bill.id, resolveClinicCode(bill.clinicId, clinics, user?.clinicId));
+    const msg = formatBillWhatsAppMessage({
+      patientName: bill.patient,
+      invoiceId: displayInvoiceId,
+      clinicName: user?.clinic,
+      date: bill.date,
+      status: bill.status,
+      items: bill.items,
+      subtotal: bill.subtotal ?? bill.amount,
+      discount: bill.discount ?? 0,
+      tax: bill.tax ?? 0,
+      amount: bill.amount,
+      notes: bill.notes,
+    });
     sendWhatsApp(targetPhone, msg);
     toast.success(`Opening WhatsApp chat for ${bill.patient}`);
   };
