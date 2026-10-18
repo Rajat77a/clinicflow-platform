@@ -62,9 +62,10 @@ function BillingPage() {
 
   const shareBillWhatsApp = async (bill: Bill) => {
     let p = patients.find(pt => pt.id === bill.patientId);
-    if (!p) {
+    if (!p?.whatsappPhone) {
       try {
-        p = (await getPatient(bill.patientId)) ?? undefined;
+        const fullPatient = await getPatient(bill.patientId);
+        if (fullPatient) p = fullPatient;
       } catch {
         // Ignore
       }

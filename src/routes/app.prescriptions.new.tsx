@@ -247,9 +247,19 @@ function NewPrescription() {
     `, `Prescription ${edit ?? ""}`);
   };
 
-  const shareRx = () => {
+  const shareRx = async () => {
     if (!patient) return;
-    const targetPhone = patient.raw?.whatsappPhone?.trim() || "";
+    let targetPhone = patient.raw?.whatsappPhone?.trim() || "";
+    if (!targetPhone) {
+      try {
+        const fullPatient = await getPatient(patient.id);
+        if (fullPatient?.whatsappPhone) {
+          targetPhone = fullPatient.whatsappPhone.trim();
+        }
+      } catch {
+        // Ignore
+      }
+    }
     if (!targetPhone) {
       toast.error("WhatsApp number not found");
       return;
@@ -474,8 +484,18 @@ function NewPrescription() {
                     </div>
                     {supabaseConfig.demoMode && (
                       <Button type="button" size="sm" variant="ghost"
-                        onClick={() => {
-                          const targetPhone = patient?.raw?.whatsappPhone?.trim() || "";
+                        onClick={async () => {
+                          let targetPhone = patient?.raw?.whatsappPhone?.trim() || "";
+                          if (!targetPhone && patient?.id) {
+                            try {
+                              const fullPatient = await getPatient(patient.id);
+                              if (fullPatient?.whatsappPhone) {
+                                targetPhone = fullPatient.whatsappPhone.trim();
+                              }
+                            } catch {
+                              // Ignore
+                            }
+                          }
                           if (!targetPhone) {
                             toast.error("WhatsApp number not found");
                             return;

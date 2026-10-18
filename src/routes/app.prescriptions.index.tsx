@@ -74,9 +74,10 @@ function PrescriptionsPage() {
 
   const shareRxWhatsApp = async (rx: Prescription) => {
     let p = patients.find(pt => pt.id === rx.patientId);
-    if (!p) {
+    if (!p?.whatsappPhone) {
       try {
-        p = (await getPatient(rx.patientId)) ?? undefined;
+        const fullPatient = await getPatient(rx.patientId);
+        if (fullPatient) p = fullPatient;
       } catch {
         // Ignore
       }

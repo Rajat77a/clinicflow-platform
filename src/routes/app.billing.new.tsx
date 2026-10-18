@@ -25,7 +25,7 @@ const CATS: Cat[] = ["Consultation", "Procedure", "Medicine", "Lab", "Other"];
 function NewBill() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { patients, doctors, prescriptions, searchPatients, createBill, listPrescriptions } = useWorkspaceData();
+  const { patients, doctors, prescriptions, searchPatients, getPatient, createBill, listPrescriptions } = useWorkspaceData();
   const patientOptions = toPatientOptions(patients);
   const searchPatientOptions = useCallback(
     async (query: string) =>
@@ -175,9 +175,19 @@ function NewBill() {
   `;
   };
 
-  const shareBill = () => {
+  const shareBill = async () => {
     if (!patient) return;
-    const targetPhone = patient.raw?.whatsappPhone?.trim() || "";
+    let targetPhone = patient.raw?.whatsappPhone?.trim() || "";
+    if (!targetPhone) {
+      try {
+        const fullPatient = await getPatient(patient.id);
+        if (fullPatient?.whatsappPhone) {
+          targetPhone = fullPatient.whatsappPhone.trim();
+        }
+      } catch {
+        // Ignore
+      }
+    }
     if (!targetPhone) {
       toast.error("WhatsApp number not found");
       return;
