@@ -249,9 +249,9 @@ function NewPrescription() {
 
   const shareRx = () => {
     if (!patient) return;
-    const targetPhone = patient.raw?.whatsappPhone?.trim() || patient.raw?.phone?.trim() || "";
+    const targetPhone = patient.raw?.whatsappPhone?.trim() || "";
     if (!targetPhone) {
-      toast.error("Contact phone number is not available for this patient");
+      toast.error("WhatsApp number not found");
       return;
     }
     const parts = [
@@ -474,7 +474,15 @@ function NewPrescription() {
                     </div>
                     {supabaseConfig.demoMode && (
                       <Button type="button" size="sm" variant="ghost"
-                        onClick={() => patient && sendWhatsApp(patient.tertiary ?? "", `Lab report — ${l.test}: ${l.result} (ref ${l.reference})`)}>
+                        onClick={() => {
+                          const targetPhone = patient?.raw?.whatsappPhone?.trim() || "";
+                          if (!targetPhone) {
+                            toast.error("WhatsApp number not found");
+                            return;
+                          }
+                          sendWhatsApp(targetPhone, `Lab report — ${l.test}: ${l.result} (ref ${l.reference})`);
+                          toast.success(`Opening WhatsApp chat for ${patient?.primary ?? "patient"}`);
+                        }}>
                         <Send className="mr-1 h-3.5 w-3.5" />WhatsApp
                       </Button>
                     )}

@@ -350,13 +350,13 @@ function PatientProfile() {
   };
 
   const getPatientWhatsAppNumber = () => {
-    return patient.whatsappPhone?.trim() || patient.phone?.trim() || "";
+    return patient.whatsappPhone?.trim() || "";
   };
 
   const shareRx = (rx: Prescription) => {
     const targetPhone = getPatientWhatsAppNumber();
     if (!targetPhone) {
-      toast.error("WhatsApp number is not available");
+      toast.error("WhatsApp number not found");
       return;
     }
     const details = resolvePrescriptionDetails(rx);
@@ -379,7 +379,7 @@ function PatientProfile() {
   const shareBill = (b: Bill) => {
     const targetPhone = getPatientWhatsAppNumber();
     if (!targetPhone) {
-      toast.error("WhatsApp number is not available");
+      toast.error("WhatsApp number not found");
       return;
     }
     const msg = `Hi ${patient.name}, invoice ${b.id} from ${user?.clinic ?? "ClinicFlow"}:\nAmount: ₹${b.amount.toFixed(2)} (${b.status})\nDate: ${b.date}`;
@@ -466,7 +466,7 @@ function PatientProfile() {
                 onClick={() => {
                   const targetPhone = getPatientWhatsAppNumber();
                   if (!targetPhone) {
-                    toast.error("WhatsApp number is not available");
+                    toast.error("WhatsApp number not found");
                     return;
                   }
                   sendWhatsApp(targetPhone, `Hello ${patient.name}, this is ${user?.clinic ?? "ClinicFlow"}.`);
@@ -1036,13 +1036,19 @@ function PatientProfile() {
             {canUseExternalSharing && (
               <Button
                 variant="outline"
-                onClick={() =>
-                  viewingLab &&
+                onClick={() => {
+                  if (!viewingLab) return;
+                  const targetPhone = getPatientWhatsAppNumber();
+                  if (!targetPhone) {
+                    toast.error("WhatsApp number not found");
+                    return;
+                  }
                   sendWhatsApp(
-                    patient.phone,
+                    targetPhone,
                     `Lab report ${formatLabReportId(viewingLab.id, resolveClinicCode(viewingLab.clinicId || patient.clinicId, clinics, user?.clinicId))} — ${viewingLab.test}: ${viewingLab.result} (ref ${viewingLab.reference})`
-                  )
-                }
+                  );
+                  toast.success(`Opening WhatsApp chat for ${patient.name}`);
+                }}
               >
                 <Send className="mr-1.5 h-4 w-4" />Send on WhatsApp
               </Button>
