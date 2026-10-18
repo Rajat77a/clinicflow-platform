@@ -10,7 +10,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useAuth, type Role } from "@/lib/auth";
 import { useWorkspaceData, type StaffMember, evaluateStaffInviteStatus } from "@/lib/workspace-data";
-import { UserMinus, UserPlus, Eye, EyeOff, Building2, ShieldCheck, Stethoscope, UserCog, Mail, Phone, Trash2, RotateCw, Send, CheckSquare, AlertTriangle, CheckCircle2, Check, Copy, KeyRound, Pencil } from "lucide-react";
+import { UserMinus, UserPlus, Eye, EyeOff, Building2, ShieldCheck, Stethoscope, UserCog, Mail, Phone, Trash2, RotateCw, Send, CheckSquare, AlertTriangle, CheckCircle2, Check, Copy, KeyRound, Pencil, Search } from "lucide-react";
 import { toast } from "sonner";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
@@ -209,11 +209,23 @@ function UsersPage() {
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [isBulkDeleting, setIsBulkDeleting] = useState(false);
   const [roleFilter, setRoleFilter] = useState<Role | "all">("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
   const displayedUsers = useMemo(() => {
-    if (roleFilter === "all") return allUsers;
-    return allUsers.filter((u) => u.role === roleFilter);
-  }, [allUsers, roleFilter]);
+    let result = allUsers;
+    if (roleFilter !== "all") {
+      result = result.filter((u) => u.role === roleFilter);
+    }
+    const q = searchQuery.trim().toLowerCase();
+    if (q) {
+      result = result.filter((u) => {
+        const nameMatch = u.name?.toLowerCase().includes(q);
+        const emailMatch = u.email?.toLowerCase().includes(q);
+        return Boolean(nameMatch || emailMatch);
+      });
+    }
+    return result;
+  }, [allUsers, roleFilter, searchQuery]);
 
   const [createdStaffInfo, setCreatedStaffInfo] = useState<{
     roleTitle: string;
@@ -1011,33 +1023,53 @@ function UsersPage() {
       />
 
       <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        {canManageUsers && (
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={toggleSelectAll}
-            className="gap-2"
-          >
-            <CheckSquare className="h-4 w-4" />
-            {allSelected ? "Deselect All Users" : "Select All Users"}
-          </Button>
-        )}
-        <div className="flex-1" />
-        <Select value={roleFilter} onValueChange={(v: any) => setRoleFilter(v)}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by role" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Roles</SelectItem>
-            {isSuperAdmin && (
-              <SelectItem value="super_admin">Super Admin</SelectItem>
-            )}
-            <SelectItem value="clinic_admin">Clinical Admin</SelectItem>
-            <SelectItem value="doctor">Doctor</SelectItem>
-            <SelectItem value="receptionist">Receptionist</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="relative min-w-[260px] flex-1 max-w-md">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            placeholder="Search users by name or email…"
+            className="h-10 rounded-xl bg-card pl-9 pr-9 shadow-xs"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+          {searchQuery && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setSearchQuery("")}
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 h-7 px-2 text-xs text-muted-foreground hover:text-foreground"
+            >
+              Clear
+            </Button>
+          )}
+        </div>
+        <div className="flex items-center gap-2.5 ml-auto">
+          {canManageUsers && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={toggleSelectAll}
+              className="gap-2 h-10 rounded-xl"
+            >
+              <CheckSquare className="h-4 w-4" />
+              {allSelected ? "Deselect All Users" : "Select All Users"}
+            </Button>
+          )}
+          <Select value={roleFilter} onValueChange={(v: any) => setRoleFilter(v)}>
+            <SelectTrigger className="w-[180px] h-10 rounded-xl bg-card shadow-xs">
+              <SelectValue placeholder="Filter by role" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Roles</SelectItem>
+              {isSuperAdmin && (
+                <SelectItem value="super_admin">Super Admin</SelectItem>
+              )}
+              <SelectItem value="clinic_admin">Clinical Admin</SelectItem>
+              <SelectItem value="doctor">Doctor</SelectItem>
+              <SelectItem value="receptionist">Receptionist</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {/* Bulk Selection Toolbar */}
@@ -1258,10 +1290,22 @@ function UsersPage() {
                 </TableRow>
               );
             })}
-            {allUsers.length === 0 && (
+            {displayedUsers.length === 0 && (
               <TableRow>
-                <TableCell colSpan={6} className="h-28 text-center text-muted-foreground">
-                  No staff memberships are visible for this account.
+                <TableCell colSpan={canManageUsers ? 7 : 6} className="h-32 text-center text-muted-foreground">
+                  {searchQuery ? (
+                    <div className="flex flex-col items-center justify-center gap-1.5">
+                      <p className="font-medium text-foreground">No users found</p>
+                      <p className="text-xs text-muted-foreground">No users match &ldquo;{searchQuery}&rdquo;{roleFilter !== "all" ? ` with role ${roleLabels[roleFilter] || roleFilter}` : ""}.</p>
+                    </div>
+                  ) : roleFilter !== "all" ? (
+                    <div className="flex flex-col items-center justify-center gap-1.5">
+                      <p className="font-medium text-foreground">No {roleLabels[roleFilter] || roleFilter}s found</p>
+                      <p className="text-xs text-muted-foreground">There are currently no users assigned to this role.</p>
+                    </div>
+                  ) : (
+                    "No staff memberships are visible for this account."
+                  )}
                 </TableCell>
               </TableRow>
             )}
