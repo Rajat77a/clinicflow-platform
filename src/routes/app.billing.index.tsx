@@ -69,9 +69,9 @@ function BillingPage() {
         // Ignore
       }
     }
-    const targetPhone = p?.whatsappPhone?.trim() || p?.phone?.trim() || "";
+    const targetPhone = p?.whatsappPhone?.trim() || "";
     if (!targetPhone) {
-      toast.error("Contact phone number is not available for this patient");
+      toast.error("WhatsApp number not found");
       return;
     }
     const msg = `Hi ${bill.patient}, invoice ${bill.id} from ${user?.clinic ?? "ClinicFlow"}:\nAmount: INR ${bill.amount.toFixed(2)} (${bill.status})\nDate: ${bill.date}`;
