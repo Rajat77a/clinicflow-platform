@@ -175,6 +175,8 @@ function NewBill() {
   `;
   };
 
+  const printBill = () => printDocument(billHtml(), "Invoice");
+
   const shareBill = async () => {
     if (!patient) return;
     let targetPhone = patient.raw?.whatsappPhone?.trim() || "";
