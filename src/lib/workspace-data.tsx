@@ -95,6 +95,7 @@ export interface StoredSoftDeletedStaff {
   deletedBy?: string;
   previousClinicId?: string | null;
   previousClinicName?: string | null;
+  member?: StaffMember;
 }
 
 export interface StoredSoftDeletedPatient {
@@ -922,6 +923,24 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         }
       });
 
+      // Ensure any soft-deleted staff members from storage are preserved in updatedStaffMembers
+      const existingStaffIds = new Set(updatedStaffMembers.map((m) => m.id));
+      for (const [id, soft] of Object.entries(storedSoftStaff)) {
+        if (!existingStaffIds.has(id) && !storedPermStaff.has(id)) {
+          if (soft.member) {
+            updatedStaffMembers.push({
+              ...soft.member,
+              status: "Inactive",
+              deletedAt: soft.member.deletedAt || soft.deletedAt,
+              deletedBy: soft.member.deletedBy || soft.deletedBy || "Super Admin",
+              previousClinicId: soft.member.previousClinicId || soft.previousClinicId || soft.member.clinicId,
+              previousClinicName: soft.member.previousClinicName || soft.previousClinicName || (soft.member.clinicId ? clinicNameMap.get(soft.member.clinicId) : null),
+            });
+            existingStaffIds.add(id);
+          }
+        }
+      }
+
       const storedSoftPatients = loadSoftDeletedPatientsFromStorage();
       const storedPermPatients = new Set(loadPermDeletedPatientsFromStorage());
 
@@ -1433,11 +1452,23 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       const prevClinicName = clinic?.name || member?.previousClinicName || null;
 
       const storedSoft = loadSoftDeletedStaffFromStorage();
+      const updatedMember: StaffMember | undefined = member
+        ? {
+            ...member,
+            status: "Inactive",
+            deletedAt: now,
+            deletedBy: command.actor.name,
+            previousClinicId: member.clinicId || member.previousClinicId || null,
+            previousClinicName: prevClinicName,
+          }
+        : undefined;
+
       storedSoft[command.userId] = {
         deletedAt: now,
         deletedBy: command.actor.name,
         previousClinicId: member?.clinicId || member?.previousClinicId || null,
         previousClinicName: prevClinicName,
+        member: updatedMember,
       };
       saveSoftDeletedStaffToStorage(storedSoft);
 
@@ -1546,11 +1577,21 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       const storedSoft = loadSoftDeletedStaffFromStorage();
       state.staffMembers.forEach((m) => {
         if (idSet.has(m.id)) {
+          const prevClinicName = m.clinicId ? (clinicMap.get(m.clinicId) || m.previousClinicName || null) : m.previousClinicName || null;
+          const updatedM: StaffMember = {
+            ...m,
+            status: "Inactive",
+            deletedAt: now,
+            deletedBy: command.actor.name,
+            previousClinicId: m.clinicId || m.previousClinicId || null,
+            previousClinicName: prevClinicName,
+          };
           storedSoft[m.id] = {
             deletedAt: now,
             deletedBy: command.actor.name,
-            previousClinicId: m.clinicId || m.previousClinicId,
-            previousClinicName: m.clinicId ? (clinicMap.get(m.clinicId) || m.previousClinicName || null) : m.previousClinicName || null,
+            previousClinicId: m.clinicId || m.previousClinicId || null,
+            previousClinicName: prevClinicName,
+            member: updatedM,
           };
         }
       });
@@ -2297,15 +2338,24 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           })()
         : [],
       binStaffMembers: user && hasPermission(user.role, "people.manage")
-        ? (isSuperAdmin ? state.staffMembers : clinicScope(state.staffMembers))
+        ? (isSuperAdmin
+            ? state.staffMembers
+            : state.staffMembers.filter((m) =>
+                !clinicId ||
+                !m.clinicId ||
+                allowedClinicIds.has(m.clinicId) ||
+                m.clinicId === clinicId ||
+                (m.previousClinicId && (allowedClinicIds.has(m.previousClinicId) || m.previousClinicId === clinicId))
+              )
+          )
             .filter((m) => {
+              if (Boolean(m.deletedAt) || m.status === "Inactive") {
+                return !m.deletedAt || isWithinRetentionPeriod(m.deletedAt, 60);
+              }
               const evalResult = evaluateStaffInviteStatus(m, undefined, isClinicalAdmin);
               if (evalResult.shouldAutoDelete) return false;
               if (isClinicalAdmin && (evalResult.isExpired || evalResult.status === "Expired" || m.status === "Expired")) {
                 return false;
-              }
-              if (Boolean(m.deletedAt) || m.status === "Inactive") {
-                return !m.deletedAt || isWithinRetentionPeriod(m.deletedAt, 60);
               }
               if (m.clinicId && state.clinics.some((c) => c.id === m.clinicId && Boolean(c.deletedAt))) {
                 return true;

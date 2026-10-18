@@ -104,10 +104,24 @@ function TrashBinPage() {
 
   const visibleStaffMembers = useMemo(() => {
     if (isSuperAdmin) return binStaffMembers;
-    return binStaffMembers.filter(
-      (m) => !m.clinicId || !user?.clinicId || m.clinicId === user.clinicId || m.previousClinicId === user.clinicId
+    const userClinicObj = clinics.find(
+      (c) =>
+        (user?.clinicId && (c.id === user.clinicId || c.shortId === user.clinicId)) ||
+        (user?.clinic && c.name?.toLowerCase() === user.clinic.toLowerCase())
     );
-  }, [binStaffMembers, isSuperAdmin, user?.clinicId]);
+    const userClinicIds = new Set<string>();
+    if (user?.clinicId) userClinicIds.add(user.clinicId);
+    if (userClinicObj?.id) userClinicIds.add(userClinicObj.id);
+    if (userClinicObj?.shortId) userClinicIds.add(userClinicObj.shortId);
+
+    return binStaffMembers.filter(
+      (m) =>
+        !userClinicIds.size ||
+        !m.clinicId ||
+        userClinicIds.has(m.clinicId) ||
+        (m.previousClinicId && userClinicIds.has(m.previousClinicId))
+    );
+  }, [binStaffMembers, isSuperAdmin, user?.clinicId, user?.clinic, clinics]);
 
   const visiblePatients = useMemo(() => {
     if (isSuperAdmin) return binPatients;
