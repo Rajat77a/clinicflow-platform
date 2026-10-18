@@ -1619,11 +1619,11 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
   }
 
   async softDeleteStaff(userId: string): Promise<void> {
+    const now = new Date().toISOString();
     const { error } = await this.client.rpc("soft_delete_staff_member", {
       p_user_id: userId,
     });
     if (error) {
-      const now = new Date().toISOString();
       let updateResult = await this.client
         .from("staff_memberships")
         .update({ active: false, status: "Inactive", deleted_at: now, updated_at: now })
@@ -1639,14 +1639,22 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         throw toSafeBackendError(error, "Failed to delete user");
       }
     }
+
+    // Ensure any invite tokens matching this user ID or token MD5 are also marked deleted
+    // so list_current_staff() immediately reflects deleted_at across both Super Admin and Clinical Admin portals
+    await this.client
+      .from("invite_tokens")
+      .update({ deleted_at: now, expires_at: new Date(Date.now() - 1000).toISOString() })
+      .or(`user_id.eq.${userId},token.eq.${userId}`)
+      .catch(() => undefined);
   }
 
   async restoreStaff(userId: string): Promise<void> {
+    const now = new Date().toISOString();
     const { error } = await this.client.rpc("restore_staff_member", {
       p_user_id: userId,
     });
     if (error) {
-      const now = new Date().toISOString();
       let updateResult = await this.client
         .from("staff_memberships")
         .update({ active: true, status: "Active", deleted_at: null, updated_at: now })
@@ -1662,6 +1670,13 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
         throw toSafeBackendError(error, "Failed to restore user");
       }
     }
+
+    // Ensure any invite tokens matching this user ID or token MD5 are also restored
+    await this.client
+      .from("invite_tokens")
+      .update({ deleted_at: null })
+      .or(`user_id.eq.${userId},token.eq.${userId}`)
+      .catch(() => undefined);
   }
 
   async permanentlyDeleteStaff(userId: string): Promise<void> {

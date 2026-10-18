@@ -873,6 +873,9 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       const staffMemberEmailRoles = new Set(updatedStaffMembers.map(m => m.email ? `${m.email.toLowerCase()}-${m.role}` : ""));
 
       (command.value.receptionists || []).forEach((r) => {
+        if (r.status === "Inactive" || storedSoftStaff[r.id] || storedPermStaff.has(r.id)) return;
+        const matchingStaff = updatedStaffMembers.find((m) => m.id === r.id || (r.email && m.email && m.email.toLowerCase() === r.email.toLowerCase()));
+        if (matchingStaff && (matchingStaff.deletedAt || matchingStaff.status === "Inactive")) return;
         const key = `${r.id}-receptionist`;
         const emailRole = r.email ? `${r.email.toLowerCase()}-receptionist` : "";
         if (!staffMemberKeys.has(key) && (!emailRole || !staffMemberEmailRoles.has(emailRole))) {
@@ -899,6 +902,9 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
 
       // Ensure all doctors are represented in updatedStaffMembers
       (command.value.doctors || []).forEach((d) => {
+        if (d.status === "Inactive" || storedSoftStaff[d.id] || storedPermStaff.has(d.id)) return;
+        const matchingStaff = updatedStaffMembers.find((m) => m.id === d.id || (d.email && m.email && m.email.toLowerCase() === d.email.toLowerCase()));
+        if (matchingStaff && (matchingStaff.deletedAt || matchingStaff.status === "Inactive")) return;
         const key = `${d.id}-doctor`;
         const emailRole = d.email ? `${d.email.toLowerCase()}-doctor` : "";
         if (!staffMemberKeys.has(key) && (!emailRole || !staffMemberEmailRoles.has(emailRole))) {
@@ -2216,6 +2222,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         if (d.status === "Inactive") return false;
         const matchingStaff = state.staffMembers.find((m) => m.id === d.id || (d.email && m.email && m.email.toLowerCase() === d.email.toLowerCase()));
         if (matchingStaff) {
+          if (matchingStaff.deletedAt || matchingStaff.status === "Inactive") return false;
           const evalResult = evaluateStaffInviteStatus(matchingStaff, undefined, isClinicalAdmin);
           if (evalResult.shouldAutoDelete) return false;
           if (isClinicalAdmin && (evalResult.isExpired || evalResult.status === "Expired")) return false;
@@ -2229,6 +2236,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         if (r.status === "Inactive") return false;
         const matchingStaff = state.staffMembers.find((m) => m.id === r.id || (r.email && m.email && m.email.toLowerCase() === r.email.toLowerCase()));
         if (matchingStaff) {
+          if (matchingStaff.deletedAt || matchingStaff.status === "Inactive") return false;
           const evalResult = evaluateStaffInviteStatus(matchingStaff, undefined, isClinicalAdmin);
           if (evalResult.shouldAutoDelete) return false;
           if (isClinicalAdmin && (evalResult.isExpired || evalResult.status === "Expired")) return false;
@@ -2288,6 +2296,8 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
 
             clinicScope(state.receptionists).forEach((r) => {
               if (r.status === "Inactive") return;
+              const matchingStaff = state.staffMembers.find((m) => m.id === r.id || (r.email && m.email && m.email.toLowerCase() === r.email.toLowerCase()));
+              if (matchingStaff && (matchingStaff.deletedAt || matchingStaff.status === "Inactive")) return;
               const key = `${r.id}-receptionist`;
               const emailRole = r.email ? `${r.email.toLowerCase()}-receptionist` : "";
               if (!currentKeys.has(key) && (!emailRole || !currentEmailRoles.has(emailRole))) {
@@ -2312,6 +2322,8 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
 
             clinicScope(state.doctors).forEach((d) => {
               if (d.status === "Inactive") return;
+              const matchingStaff = state.staffMembers.find((m) => m.id === d.id || (d.email && m.email && m.email.toLowerCase() === d.email.toLowerCase()));
+              if (matchingStaff && (matchingStaff.deletedAt || matchingStaff.status === "Inactive")) return;
               const key = `${d.id}-doctor`;
               const emailRole = d.email ? `${d.email.toLowerCase()}-doctor` : "";
               if (!currentKeys.has(key) && (!emailRole || !currentEmailRoles.has(emailRole))) {

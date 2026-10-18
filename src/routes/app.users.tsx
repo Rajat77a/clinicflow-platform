@@ -165,21 +165,10 @@ function UsersPage() {
       }
     });
     
-    // Add inactive/expired staff members (excluding deleted ones)
-    binStaffMembers.forEach(m => {
-      const evalResult = evaluateStaffInviteStatus(m);
-      if (evalResult.shouldAutoDelete) return;
-      if (isClinicalAdmin && (evalResult.isExpired || evalResult.status === "Expired" || m.status === "Expired")) return;
-      if (!m.deletedAt && !map.has(`${m.id}-${m.role}`)) {
-        const effectiveMember = evalResult.status === "Expired" && m.status !== "Expired"
-          ? { ...m, status: "Expired" as const }
-          : m;
-        map.set(`${effectiveMember.id}-${effectiveMember.role}`, effectiveMember);
-      }
-    });
-
+    // Receptionists and doctors are already mapped above into map
+    // Soft-deleted or inactive staff should not appear in active users list for any portal
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
-  }, [staffMembers, binStaffMembers, receptionists, doctors, isClinicalAdmin]);
+  }, [staffMembers, receptionists, doctors, isClinicalAdmin]);
 
   useEffect(() => {
     let mounted = true;
