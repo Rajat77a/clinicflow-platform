@@ -350,7 +350,7 @@ function PatientProfile() {
   };
 
   const getPatientWhatsAppNumber = () => {
-    return patient.whatsappPhone?.trim() || "";
+    return patient.whatsappPhone?.trim() || patient.phone?.trim() || "";
   };
 
   const shareRx = (rx: Prescription) => {

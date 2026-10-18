@@ -81,9 +81,9 @@ function PrescriptionsPage() {
         // Ignore
       }
     }
-    const targetPhone = p?.whatsappPhone?.trim() || "";
+    const targetPhone = p?.whatsappPhone?.trim() || p?.phone?.trim() || "";
     if (!targetPhone) {
-      toast.error("WhatsApp number is not available");
+      toast.error("Contact phone number is not available for this patient");
       return;
     }
     const details = resolvePrescriptionDetails(rx);
