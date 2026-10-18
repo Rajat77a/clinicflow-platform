@@ -23,3 +23,46 @@ export function sendWhatsApp(phone: string, message: string) {
     }
   }
 }
+
+export interface BillWhatsAppPayload {
+  patientName: string;
+  invoiceId: string;
+  clinicName?: string;
+  date: string;
+  status: string;
+  items?: { category: string; name: string; qty: number; unit: number }[];
+  subtotal: number;
+  discount: number;
+  tax: number;
+  amount: number;
+  notes?: string;
+}
+
+export function formatBillWhatsAppMessage(bill: BillWhatsAppPayload): string {
+  const parts: string[] = [
+    `Hi ${bill.patientName}, here is the itemized invoice ${bill.invoiceId} from ${bill.clinicName ?? "ClinicFlow"}:`,
+    `Date: ${bill.date}\nStatus: ${bill.status}`,
+  ];
+
+  if (bill.items && bill.items.length > 0) {
+    const itemLines = bill.items.map(
+      (item) => `• ${item.name} (${item.category}): ${item.qty} × ₹${item.unit.toFixed(2)} = ₹${(item.qty * item.unit).toFixed(2)}`
+    );
+    parts.push(`Items Breakdown:\n${itemLines.join("\n")}`);
+  }
+
+  const totals = [
+    `Subtotal: ₹${bill.subtotal.toFixed(2)}`,
+    bill.discount > 0 ? `Discount: -₹${bill.discount.toFixed(2)}` : "",
+    bill.tax > 0 ? `Tax: ₹${bill.tax.toFixed(2)}` : "",
+    `Total Amount: ₹${bill.amount.toFixed(2)}`,
+  ].filter(Boolean);
+
+  parts.push(totals.join("\n"));
+
+  if (bill.notes?.trim()) {
+    parts.push(`Notes:\n${bill.notes.trim()}`);
+  }
+
+  return parts.join("\n\n");
+}

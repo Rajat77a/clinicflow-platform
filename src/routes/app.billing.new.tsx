@@ -9,7 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { EntityPicker, toPatientOptions, type PatientOption } from "@/components/forms/entity-picker";
 import { useAuth } from "@/lib/auth";
 import { useWorkspaceData, type Prescription } from "@/lib/workspace-data";
-import { sendWhatsApp } from "@/lib/whatsapp";
+import { sendWhatsApp, formatBillWhatsAppMessage } from "@/lib/whatsapp";
 import { printDocument } from "@/lib/exporters";
 import { formatPatientId } from "@/lib/prescription-fields";
 import { Plus, Trash2, Send, Printer, Pill } from "lucide-react";
@@ -194,8 +194,18 @@ function NewBill() {
       toast.error("WhatsApp number not found");
       return;
     }
-    const lineText = lines.map(l => `• ${l.name} (${l.category}) × ${l.qty} = ₹${(l.qty*l.unit).toFixed(2)}`).join("\n");
-    const msg = `Hi ${patient.primary}, invoice from ${user?.clinic ?? "ClinicFlow"}:\n${lineText}\n\nSubtotal: ₹${subtotal.toFixed(2)}\nDiscount: ₹${discount.toFixed(2)}\nTax: ${tax}%\nTotal: ₹${total.toFixed(2)}`;
+    const msg = formatBillWhatsAppMessage({
+      patientName: patient.primary,
+      invoiceId: "Draft",
+      clinicName: user?.clinic,
+      date: new Date().toLocaleDateString(),
+      status: "Unpaid",
+      items: lines.map(l => ({ category: l.category, name: l.name || "Item", qty: l.qty, unit: l.unit })),
+      subtotal,
+      discount,
+      tax: taxAmount,
+      amount: total,
+    });
     sendWhatsApp(targetPhone, msg);
     toast.success(`Opening WhatsApp chat for ${patient.primary}`);
   };

@@ -17,7 +17,7 @@ import {
   type WorkspaceDocument,
 } from "@/lib/workspace-data";
 import { printDocument } from "@/lib/exporters";
-import { sendWhatsApp } from "@/lib/whatsapp";
+import { sendWhatsApp, formatBillWhatsAppMessage } from "@/lib/whatsapp";
 import {
   resolvePrescriptionDetails,
   formatPatientId,
@@ -382,7 +382,20 @@ function PatientProfile() {
       toast.error("WhatsApp number not found");
       return;
     }
-    const msg = `Hi ${patient.name}, invoice ${b.id} from ${user?.clinic ?? "ClinicFlow"}:\nAmount: ₹${b.amount.toFixed(2)} (${b.status})\nDate: ${b.date}`;
+    const displayInvoiceId = formatInvoiceId(b.id, clinicCode);
+    const msg = formatBillWhatsAppMessage({
+      patientName: patient.name,
+      invoiceId: displayInvoiceId,
+      clinicName: user?.clinic,
+      date: b.date,
+      status: b.status,
+      items: b.items,
+      subtotal: b.subtotal ?? b.amount,
+      discount: b.discount ?? 0,
+      tax: b.tax ?? 0,
+      amount: b.amount,
+      notes: b.notes,
+    });
     sendWhatsApp(targetPhone, msg);
     toast.success(`Opening WhatsApp chat for ${patient.name}`);
   };
