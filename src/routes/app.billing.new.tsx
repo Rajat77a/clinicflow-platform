@@ -15,7 +15,18 @@ import { formatPatientId } from "@/lib/prescription-fields";
 import { Plus, Trash2, Send, Printer, Pill } from "lucide-react";
 import { toast } from "sonner";
 
-export const Route = createFileRoute("/app/billing/new")({ component: NewBill });
+type NewBillSearch = {
+  patient?: string;
+};
+
+export const Route = createFileRoute("/app/billing/new")({
+  component: NewBill,
+  validateSearch: (s: Record<string, unknown>): NewBillSearch => {
+    const search: NewBillSearch = {};
+    if (typeof s.patient === "string") search.patient = s.patient;
+    return search;
+  },
+});
 
 type Cat = "Consultation" | "Procedure" | "Medicine" | "Lab" | "Other";
 type Line = { id: string; category: Cat; name: string; qty: number; unit: number };
@@ -24,6 +35,7 @@ const CATS: Cat[] = ["Consultation", "Procedure", "Medicine", "Lab", "Other"];
 
 function NewBill() {
   const navigate = useNavigate();
+  const search = Route.useSearch();
   const { user } = useAuth();
   const { patients, doctors, prescriptions, searchPatients, getPatient, createBill, listPrescriptions } = useWorkspaceData();
   const patientOptions = toPatientOptions(patients);
@@ -32,10 +44,24 @@ function NewBill() {
       toPatientOptions((await searchPatients({ query, limit: 12 })).rows),
     [searchPatients],
   );
-  const [patient, setPatient] = useState<PatientOption | null>(null);
+  const [patient, setPatient] = useState<PatientOption | null>(() => {
+    if (search.patient) {
+      const match = patients.find((p) => p.id === search.patient);
+      if (match) return toPatientOption(match);
+    }
+    return null;
+  });
   const [lines, setLines] = useState<Line[]>([
     { id: crypto.randomUUID(), category: "Consultation", name: "Doctor consultation", qty: 1, unit: 500 },
   ]);
+  useEffect(() => {
+    if (search.patient && !patient) {
+      const match = patients.find((p) => p.id === search.patient);
+      if (match) {
+        selectPatient(toPatientOption(match));
+      }
+    }
+  }, [search.patient, patients]);
   const [discount, setDiscount] = useState(0);
   const [tax, setTax] = useState(0);
   const [isSaving, setIsSaving] = useState(false);

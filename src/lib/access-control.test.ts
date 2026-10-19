@@ -17,6 +17,7 @@ test("each portal can reach its own operational routes", () => {
   assert.equal(canAccessPath("clinic_admin", "/app/followups"), true);
   assert.equal(canAccessPath("doctor", "/app/followups"), true);
   assert.equal(canAccessPath("doctor", "/app/billing"), true);
+  assert.equal(canAccessPath("doctor", "/app/billing/new"), true);
   assert.equal(canAccessPath("doctor", "/app/files"), true);
   assert.equal(canAccessPath("doctor", "/app/downloads"), false);
   assert.equal(canAccessPath("receptionist", "/app/billing/new"), true);
@@ -62,7 +63,7 @@ test("clinical duties remain separated by permission", () => {
   assert.equal(hasPermission("receptionist", "labs.write"), true);
   assert.equal(hasPermission("clinic_admin", "prescriptions.write"), false);
   assert.equal(hasPermission("doctor", "billing.read"), true);
-  assert.equal(hasPermission("doctor", "billing.write"), false);
+  assert.equal(hasPermission("doctor", "billing.write"), true);
   assert.equal(hasPermission("doctor", "files.read"), true);
   assert.equal(hasPermission("receptionist", "billing.write"), true);
   assert.equal(hasPermission("clinic_admin", "people.manage"), true);

@@ -74,6 +74,7 @@ const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     "prescriptions.write",
     "labs.write",
     "billing.read",
+    "billing.write",
     "files.read",
     "followups.manage",
     "settings.read",
