@@ -52,6 +52,7 @@ const NAV: Record<Role, NavSection[]> = {
        { to: "/app/prescriptions", label: "Prescriptions", icon: FileText },
        { to: "/app/billing", label: "Billing", icon: Receipt },
        { to: "/app/files", label: "Files", icon: FolderOpen },
+       { to: "/app/followups", label: "Follow-ups", icon: CalendarClock },
      ]},
      { label: "Data", items: [
        { to: "/app/downloads", label: "Download Center", icon: Download },
@@ -91,6 +92,7 @@ const NAV: Record<Role, NavSection[]> = {
       { to: "/app/prescriptions", label: "Prescriptions", icon: FileText },
       { to: "/app/billing", label: "Billing", icon: Receipt },
       { to: "/app/files", label: "Lab Reports", icon: FlaskConical },
+      { to: "/app/followups", label: "Follow-ups", icon: CalendarClock },
     ]},
     { label: "Account", items: [
       { to: "/app/settings", label: "Settings", icon: Settings },

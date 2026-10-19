@@ -91,6 +91,7 @@ const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
     "billing.read",
     "billing.write",
     "files.read",
+    "followups.manage",
     "settings.read",
     "support.read",
     "notifications.read",
