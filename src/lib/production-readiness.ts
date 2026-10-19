@@ -1,5 +1,5 @@
 const DEMO_ONLY_ROUTE_RULES: ReadonlyArray<RegExp> = [
-  /^\/app\/(?:files|followups|notifications|payments|reports|support)(?:\/|$)/,
+  /^\/app\/(?:files|notifications|payments|reports|support)(?:\/|$)/,
 ];
 
 export function isProductionReadyPath(pathname: string) {

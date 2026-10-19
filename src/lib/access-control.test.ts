@@ -14,12 +14,13 @@ test("each portal can reach its own operational routes", () => {
   assert.equal(canAccessPath("super_admin", "/app/users"), true);
   assert.equal(canAccessPath("super_admin", "/app/downloads"), true);
   assert.equal(canAccessPath("clinic_admin", "/app/doctors"), true);
-  assert.equal(canAccessPath("clinic_admin", "/app/downloads"), true);
+  assert.equal(canAccessPath("clinic_admin", "/app/followups"), true);
   assert.equal(canAccessPath("doctor", "/app/followups"), true);
   assert.equal(canAccessPath("doctor", "/app/billing"), true);
   assert.equal(canAccessPath("doctor", "/app/files"), true);
   assert.equal(canAccessPath("doctor", "/app/downloads"), false);
   assert.equal(canAccessPath("receptionist", "/app/billing/new"), true);
+  assert.equal(canAccessPath("receptionist", "/app/followups"), true);
   assert.equal(canAccessPath("receptionist", "/app/downloads"), false);
 });
 
