@@ -1,4 +1,4 @@
-let whatsAppWindow: Window | null = null;
+let whatsAppWindow: any = null;
 
 export function sendWhatsApp(phone: string, message: string) {
   let digits = phone.replace(/[^0-9]/g, "");
