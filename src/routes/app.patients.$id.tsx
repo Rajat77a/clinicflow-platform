@@ -172,6 +172,7 @@ function PatientProfile() {
 
   const canEditRx = Boolean(user && hasPermission(user.role, "prescriptions.write"));
   const canAddLab = Boolean(user && hasPermission(user.role, "labs.write"));
+  const canCreateBill = Boolean(user && hasPermission(user.role, "billing.write"));
   const canBook = Boolean(user && hasPermission(user.role, "appointments.create"));
   const canDelete = Boolean(user && (user.role === "clinic_admin" || user.role === "super_admin"));
   const canUseExternalSharing = supabaseConfig.demoMode;
@@ -663,7 +664,17 @@ function PatientProfile() {
               />
             </TabsContent>
 
-            <TabsContent value="bills" className="mt-4 rounded-2xl border bg-card shadow-soft">
+            <TabsContent value="bills" className="mt-4 space-y-3">
+              {canCreateBill && (
+                <div className="flex justify-end">
+                  <Button asChild size="sm">
+                    <Link to="/app/billing/new" search={{ patient: patient.id }}>
+                      <Receipt className="mr-1.5 h-3.5 w-3.5" />Create bill
+                    </Link>
+                  </Button>
+                </div>
+              )}
+              <div className="rounded-2xl border bg-card shadow-soft overflow-x-auto">
               <Table>
                 <TableHeader><TableRow><TableHead>Invoice</TableHead><TableHead>Date</TableHead><TableHead className="text-right">Amount</TableHead><TableHead>Status</TableHead><TableHead></TableHead></TableRow></TableHeader>
                 <TableBody>
@@ -698,6 +709,7 @@ function PatientProfile() {
                 onOffsetChange={billsPage.setOffset}
                 disabled={billsPage.isLoading}
               />
+              </div>
             </TabsContent>
 
             <TabsContent value="history" className="mt-4 rounded-2xl border bg-card shadow-soft">
