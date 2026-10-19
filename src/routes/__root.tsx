@@ -42,17 +42,18 @@ function ErrorComponent({ error, reset }: { error: unknown; reset: () => void })
   useEffect(() => {
     if (typeof window === "undefined") return;
     console.error("Router error:", error);
-    const errString = error instanceof Error ? error.message : String(error || "");
+    const errString = (error instanceof Error ? error.message : String(error || "")).toLowerCase();
     const isChunkLoadFailed =
-      errString.includes("Failed to fetch dynamically imported module") ||
-      errString.includes("Importing a module script failed") ||
-      errString.includes("error loading dynamically imported module");
+      errString.includes("failed to fetch dynamically imported module") ||
+      errString.includes("importing a module script failed") ||
+      errString.includes("error loading dynamically imported module") ||
+      errString.includes("loading chunk");
 
     if (isChunkLoadFailed) {
       const reloadKey = "cf_chunk_reload";
       const lastReload = sessionStorage.getItem(reloadKey);
       const now = Date.now();
-      if (!lastReload || now - Number(lastReload) > 10_000) {
+      if (!lastReload || now - Number(lastReload) > 15_000) {
         sessionStorage.setItem(reloadKey, String(now));
         window.location.reload();
       }
