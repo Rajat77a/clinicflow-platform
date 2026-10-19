@@ -52,22 +52,32 @@ function NewBill() {
     return null;
   });
   const getInitialLines = (currentPatient: PatientOption | null): Line[] => {
-    if (!currentPatient) return [];
-    const assignedDoctor = doctors.find(
-      (doctor) => doctor.name === currentPatient.raw.doctor && doctor.status === "Active",
-    );
-    if (assignedDoctor?.consultationFee != null && assignedDoctor.consultationFee > 0) {
+    if (!currentPatient) {
       return [
         {
           id: crypto.randomUUID(),
           category: "Consultation",
-          name: `${assignedDoctor.name} consultation`,
+          name: "Doctor consultation",
           qty: 1,
-          unit: assignedDoctor.consultationFee,
+          unit: 0,
         },
       ];
     }
-    return [];
+    const assignedDoctor = doctors.find(
+      (doctor) => doctor.name === currentPatient.raw.doctor && doctor.status === "Active",
+    );
+    const fee = assignedDoctor?.consultationFee != null && assignedDoctor.consultationFee > 0
+      ? assignedDoctor.consultationFee
+      : 0;
+    return [
+      {
+        id: crypto.randomUUID(),
+        category: "Consultation",
+        name: assignedDoctor?.name ? `${assignedDoctor.name} consultation` : "Doctor consultation",
+        qty: 1,
+        unit: fee,
+      },
+    ];
   };
 
   const [lines, setLines] = useState<Line[]>(() => getInitialLines(patient));
@@ -90,23 +100,24 @@ function NewBill() {
     const assignedDoctor = doctors.find(
       (doctor) => doctor.name === nextPatient.raw.doctor && doctor.status === "Active",
     );
-    const consultationFee = assignedDoctor?.consultationFee;
+    const consultationFee = assignedDoctor?.consultationFee != null && assignedDoctor.consultationFee > 0
+      ? assignedDoctor.consultationFee
+      : 0;
 
     setLines((current) => {
       const consultationIndex = current.findIndex((line) => line.category === "Consultation");
-      if (assignedDoctor?.consultationFee == null) {
-        // If consultation fee is not given, and we don't already have lines, keep it blank
-        return current;
-      }
       const consultation: Line = {
         id: consultationIndex >= 0
           ? current[consultationIndex].id
           : crypto.randomUUID(),
         category: "Consultation",
-        name: `${assignedDoctor.name} consultation`,
+        name: assignedDoctor?.name ? `${assignedDoctor.name} consultation` : "Doctor consultation",
         qty: 1,
         unit: consultationFee,
       };
+      if (assignedDoctor?.consultationFee == null) {
+        // If consultation fee was not entered, keep unit at 0 (displayed as blank)
+      }
       if (consultationIndex < 0) return [consultation, ...current];
       return current.map((line, index) => index === consultationIndex ? consultation : line);
     });
