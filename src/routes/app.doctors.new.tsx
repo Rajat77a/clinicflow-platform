@@ -103,8 +103,8 @@ function NewDoctor() {
   return (
     <>
       <PageHeader title="Add doctor" description="Register a new practitioner in your clinic." />
-      <form onSubmit={submit} className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
+      <form onSubmit={submit} className="grid gap-6 xl:grid-cols-3">
+        <div className="xl:col-span-2 min-w-0 space-y-6">
           <section className="rounded-2xl border bg-card p-6 shadow-soft">
             <h2 className="mb-4 font-display text-base font-semibold">Personal information</h2>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-6">

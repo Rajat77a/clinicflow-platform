@@ -270,8 +270,8 @@ function NewBill() {
   return (
     <>
       <PageHeader title="Create bill" description="Itemized invoice with clear breakdown for the patient." />
-      <form onSubmit={onSubmit} className="grid gap-6 lg:grid-cols-3">
-        <div className="lg:col-span-2 space-y-6">
+      <form onSubmit={onSubmit} className="grid gap-6 xl:grid-cols-3">
+        <div className="xl:col-span-2 min-w-0 space-y-6">
           <section className="rounded-2xl border bg-card p-6 shadow-soft space-y-4">
             <div className="space-y-1.5">
               <Label>Patient <span className="text-destructive">*</span></Label>
@@ -308,11 +308,11 @@ function NewBill() {
 
           <section className="rounded-2xl border bg-card p-6 shadow-soft space-y-3">
             <h3 className="font-display text-base font-semibold">Line items</h3>
-            <div className="space-y-2">
+            <div className="space-y-2 overflow-x-auto min-w-0 pb-1">
               {lines.map(l => (
                 <div
                   key={l.id}
-                  className="grid gap-2 rounded-xl border bg-muted/30 p-3 md:grid-cols-[minmax(120px,0.8fr)_minmax(240px,2fr)_80px_110px_100px_auto] md:items-center"
+                  className="grid min-w-[580px] sm:min-w-0 gap-2 rounded-xl border bg-muted/30 p-3 md:grid-cols-[minmax(120px,0.8fr)_minmax(240px,2fr)_80px_110px_100px_auto] md:items-center"
                 >
                   <Select value={l.category} onValueChange={(v) => updateLine(l.id, { category: v as Cat })}>
                     <SelectTrigger className="h-10 rounded-lg"><SelectValue /></SelectTrigger>
@@ -346,7 +346,7 @@ function NewBill() {
           </section>
         </div>
 
-        <aside className="space-y-4">
+        <aside className="space-y-4 xl:sticky xl:top-24 h-fit">
           <section className="rounded-2xl border bg-card p-6 shadow-soft">
             <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{user?.clinic}</div>
             <h3 className="mt-2 font-display text-lg font-bold">Invoice preview</h3>
