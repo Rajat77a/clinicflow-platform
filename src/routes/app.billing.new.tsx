@@ -51,9 +51,28 @@ function NewBill() {
     }
     return null;
   });
-  const [lines, setLines] = useState<Line[]>([
-    { id: crypto.randomUUID(), category: "Consultation", name: "Doctor consultation", qty: 1, unit: 500 },
-  ]);
+  const [lines, setLines] = useState<Line[]>(() => {
+    if (search.patient) {
+      const match = patients.find((p) => p.id === search.patient);
+      if (match) {
+        const assignedDoctor = doctors.find(
+          (d) => d.name === match.doctor && d.status === "Active",
+        );
+        if (assignedDoctor?.consultationFee != null && assignedDoctor.consultationFee > 0) {
+          return [
+            {
+              id: crypto.randomUUID(),
+              category: "Consultation",
+              name: `${assignedDoctor.name} consultation`,
+              qty: 1,
+              unit: assignedDoctor.consultationFee,
+            },
+          ];
+        }
+      }
+    }
+    return [];
+  });
   useEffect(() => {
     if (search.patient && !patient) {
       const match = patients.find((p) => p.id === search.patient);
@@ -73,7 +92,7 @@ function NewBill() {
     const assignedDoctor = doctors.find(
       (doctor) => doctor.name === nextPatient.raw.doctor && doctor.status === "Active",
     );
-    if (assignedDoctor?.consultationFee == null) return;
+    if (assignedDoctor?.consultationFee == null || assignedDoctor.consultationFee <= 0) return;
     const consultationFee = assignedDoctor.consultationFee;
 
     setLines((current) => {
