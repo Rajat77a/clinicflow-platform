@@ -51,28 +51,26 @@ function NewBill() {
     }
     return null;
   });
-  const [lines, setLines] = useState<Line[]>(() => {
-    if (search.patient) {
-      const match = patients.find((p) => p.id === search.patient);
-      if (match) {
-        const assignedDoctor = doctors.find(
-          (d) => d.name === match.doctor && d.status === "Active",
-        );
-        if (assignedDoctor?.consultationFee != null && assignedDoctor.consultationFee > 0) {
-          return [
-            {
-              id: crypto.randomUUID(),
-              category: "Consultation",
-              name: `${assignedDoctor.name} consultation`,
-              qty: 1,
-              unit: assignedDoctor.consultationFee,
-            },
-          ];
-        }
-      }
+  const getInitialLines = (currentPatient: PatientOption | null): Line[] => {
+    if (!currentPatient) return [];
+    const assignedDoctor = doctors.find(
+      (doctor) => doctor.name === currentPatient.raw.doctor && doctor.status === "Active",
+    );
+    if (assignedDoctor?.consultationFee != null && assignedDoctor.consultationFee > 0) {
+      return [
+        {
+          id: crypto.randomUUID(),
+          category: "Consultation",
+          name: `${assignedDoctor.name} consultation`,
+          qty: 1,
+          unit: assignedDoctor.consultationFee,
+        },
+      ];
     }
     return [];
-  });
+  };
+
+  const [lines, setLines] = useState<Line[]>(() => getInitialLines(patient));
   useEffect(() => {
     if (search.patient && !patient) {
       const match = patients.find((p) => p.id === search.patient);
@@ -92,11 +90,14 @@ function NewBill() {
     const assignedDoctor = doctors.find(
       (doctor) => doctor.name === nextPatient.raw.doctor && doctor.status === "Active",
     );
-    if (assignedDoctor?.consultationFee == null || assignedDoctor.consultationFee <= 0) return;
-    const consultationFee = assignedDoctor.consultationFee;
+    const consultationFee = assignedDoctor?.consultationFee;
 
     setLines((current) => {
       const consultationIndex = current.findIndex((line) => line.category === "Consultation");
+      if (assignedDoctor?.consultationFee == null) {
+        // If consultation fee is not given, and we don't already have lines, keep it blank
+        return current;
+      }
       const consultation: Line = {
         id: consultationIndex >= 0
           ? current[consultationIndex].id
@@ -152,7 +153,7 @@ function NewBill() {
 
   const importFromRx = (rx: Prescription) => {
     const medLines: Line[] = rx.medicines.map((m) => ({
-      id: crypto.randomUUID(), category: "Medicine", name: m.name, qty: 1, unit: m.unitPrice ?? 100,
+      id: crypto.randomUUID(), category: "Medicine", name: m.name, qty: 1, unit: m.unitPrice ?? 0,
     }));
     setLines((current) => [...current, ...medLines]);
     toast.success(`Imported ${medLines.length} medicines from ${rx.id}`);
@@ -308,10 +309,10 @@ function NewBill() {
                   </Select>
                   <Input placeholder="Item description" className="h-10 rounded-lg" value={l.name}
                     onChange={e => updateLine(l.id, { name: e.target.value })} />
-                  <Input type="number" min={1} placeholder="Qty" className="h-10 rounded-lg" value={l.qty}
-                    onChange={e => updateLine(l.id, { qty: +e.target.value })} />
-                  <Input type="number" min={0} step="0.01" placeholder="Unit ₹" className="h-10 rounded-lg" value={l.unit}
-                    onChange={e => updateLine(l.id, { unit: +e.target.value })} />
+                  <Input type="number" min={1} placeholder="Qty" className="h-10 rounded-lg" value={l.qty || ""}
+                    onChange={e => updateLine(l.id, { qty: e.target.value === "" ? 0 : +e.target.value })} />
+                  <Input type="number" min={0} step="0.01" placeholder="Unit ₹" className="h-10 rounded-lg" value={l.unit === 0 ? "" : l.unit}
+                    onChange={e => updateLine(l.id, { unit: e.target.value === "" ? 0 : +e.target.value })} />
                   <div className="text-right text-sm font-semibold tabular-nums">₹{(l.qty * l.unit).toFixed(2)}</div>
                   <Button type="button" variant="ghost" size="icon" onClick={() => removeLine(l.id)} aria-label={`Remove ${l.name || "line item"}`} title={`Remove ${l.name || "line item"}`}>
                     <Trash2 className="h-4 w-4" />
