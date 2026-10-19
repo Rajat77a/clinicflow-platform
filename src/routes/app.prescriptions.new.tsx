@@ -310,8 +310,8 @@ function NewPrescription() {
             : "Compose, sign and share a prescription."
         }
       />
-      <div className="grid gap-6 lg:grid-cols-5">
-        <form onSubmit={onSubmit} className="lg:col-span-3 space-y-6">
+      <div className="grid gap-6 xl:grid-cols-5">
+        <form onSubmit={onSubmit} className="xl:col-span-3 min-w-0 space-y-6">
           <fieldset className="space-y-6">
             <section className="rounded-2xl border bg-card p-6 shadow-soft space-y-4">
               <div className="space-y-1.5">
@@ -558,8 +558,8 @@ function NewPrescription() {
         </form>
 
         {/* Preview */}
-        <aside className="lg:col-span-2">
-          <div className="sticky top-24 rounded-2xl border bg-card p-6 shadow-card">
+        <aside className="xl:col-span-2">
+          <div className="xl:sticky xl:top-24 rounded-2xl border bg-card p-6 shadow-card">
             <div className="flex items-center gap-3 border-b pb-4">
               <div className="grid h-12 w-12 place-items-center rounded-xl bg-gradient-to-br from-primary to-info text-primary-foreground">
                 <Activity className="h-5 w-5" strokeWidth={2.5} />

@@ -138,8 +138,8 @@ function EditClinic() {
           ) : undefined
         }
       />
-      <form onSubmit={submit} className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
+      <form onSubmit={submit} className="grid gap-6 xl:grid-cols-3">
+        <div className="space-y-6 xl:col-span-2 min-w-0">
           <section className="rounded-2xl border bg-card p-6 shadow-soft">
             <h2 className="mb-4 font-display text-base font-semibold">Clinic details</h2>
             <div className="grid grid-cols-1 gap-4 md:grid-cols-6">

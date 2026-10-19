@@ -422,7 +422,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                 <div className="text-[11px] uppercase tracking-wider text-muted-foreground">
                   Clinic
                 </div>
-                <div className="text-sm font-semibold truncate max-w-[180px]">{user.clinic}</div>
+                <div className="text-sm font-semibold truncate max-w-[110px] xl:max-w-[180px]">{user.clinic}</div>
               </div>
             </div>
           </div>

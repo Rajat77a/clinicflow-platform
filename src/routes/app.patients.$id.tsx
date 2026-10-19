@@ -441,8 +441,8 @@ function PatientProfile() {
           </div>
         } />
 
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="rounded-2xl border bg-card p-6 shadow-soft">
+      <div className="grid gap-6 xl:grid-cols-3">
+        <div className="rounded-2xl border bg-card p-6 shadow-soft h-fit">
           <div className="flex items-center gap-4">
             <Link
               to="/app/patients"
@@ -510,7 +510,7 @@ function PatientProfile() {
           </div>
         </div>
 
-        <div className="lg:col-span-2">
+        <div className="xl:col-span-2 min-w-0">
           <Tabs defaultValue="rx">
             <TabsList className="rounded-xl bg-muted/60 p-1 flex-wrap h-auto">
               <TabsTrigger value="rx" className="rounded-lg"><FileText className="mr-1.5 h-3.5 w-3.5" />Prescriptions</TabsTrigger>
