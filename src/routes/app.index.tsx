@@ -10,6 +10,7 @@ import {
   Clock,
   FileText,
   IndianRupee,
+  Plus,
   Receipt,
   ShieldCheck,
   Stethoscope,
