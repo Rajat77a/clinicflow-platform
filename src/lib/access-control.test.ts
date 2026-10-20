@@ -64,6 +64,7 @@ test("clinical duties remain separated by permission", () => {
   assert.equal(hasPermission("clinic_admin", "prescriptions.write"), false);
   assert.equal(hasPermission("doctor", "billing.read"), true);
   assert.equal(hasPermission("doctor", "billing.write"), true);
+  assert.equal(hasPermission("doctor", "patients.create"), true);
   assert.equal(hasPermission("doctor", "files.read"), true);
   assert.equal(hasPermission("receptionist", "billing.write"), true);
   assert.equal(hasPermission("clinic_admin", "people.manage"), true);

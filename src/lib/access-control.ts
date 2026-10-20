@@ -67,6 +67,7 @@ const ROLE_PERMISSIONS: Record<Role, ReadonlySet<Permission>> = {
    ]),
   doctor: new Set([
     "patients.read",
+    "patients.create",
     "appointments.read",
     "appointments.create",
     "appointments.update",
