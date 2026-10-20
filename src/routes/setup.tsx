@@ -319,13 +319,21 @@ function SetupPage() {
           }
           
           // Accept the invite
-          const { error: activateErr } = await supabase.rpc("activate_invited_user", { p_token: token, p_password: null });
+          const { error: activateErr } = await supabase.rpc("activate_invited_user", {
+            p_token: token,
+            p_password: null,
+            p_full_name: tokenInfo.full_name || null,
+          });
           if (activateErr) throw new Error(activateErr.message || "Failed to accept invitation");
         } else {
           // New user
           const { data: activateResult, error: activateErr } = await supabase.rpc(
             "activate_invited_user",
-            { p_token: token, p_password: pw },
+            {
+              p_token: token,
+              p_password: pw,
+              p_full_name: tokenInfo.full_name || null,
+            },
           );
 
           if (activateErr) {

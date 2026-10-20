@@ -3374,6 +3374,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
                 const { data: actData, error: actErr } = await supabase.rpc("activate_invited_user", {
                   p_token: tokenToActivate,
                   p_password: newPassword,
+                  p_full_name: targetMember?.name || null,
                 });
                 if (!actErr) {
                   const actRes = actData as { success?: boolean };
