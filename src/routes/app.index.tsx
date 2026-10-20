@@ -451,7 +451,12 @@ function DoctorDashboard() {
       <PageHeader
         title="Today's clinic"
         description="Your scoped patients, appointments, and prescriptions."
-        actions={<Button asChild><Link to="/app/prescriptions/new">New prescription</Link></Button>}
+        actions={
+          <div className="flex items-center gap-2">
+            <Button asChild variant="outline"><Link to="/app/patients/new"><Plus className="mr-1.5 h-4 w-4" />Register patient</Link></Button>
+            <Button asChild><Link to="/app/prescriptions/new">New prescription</Link></Button>
+          </div>
+        }
       />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard label="Today's appointments" value={today.length} icon={<Calendar className="h-4 w-4" />} />
