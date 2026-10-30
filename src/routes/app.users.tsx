@@ -105,6 +105,20 @@ function UsersPage() {
       const effectiveMember = evalResult.status === "Expired" && m.status !== "Expired"
         ? { ...m, status: "Expired" as const }
         : m;
+
+      // If a member with the same email and role already exists, don't duplicate
+      if (effectiveMember.email) {
+        const existingByEmail = Array.from(map.values()).find(
+          (existing) =>
+            existing.role === effectiveMember.role &&
+            existing.email?.toLowerCase() === effectiveMember.email.toLowerCase(),
+        );
+        if (existingByEmail) {
+          // Keep active/newer entry or replace if current is more informative
+          return;
+        }
+      }
+
       map.set(`${effectiveMember.id}-${effectiveMember.role}`, effectiveMember);
     });
 

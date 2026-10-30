@@ -242,6 +242,14 @@ Deno.serve(async (request) => {
     const hospitalPhone = typeof hospitalConfig.phone === "string" ? hospitalConfig.phone : null;
     const hospitalAddress = typeof hospitalConfig.address === "string" ? hospitalConfig.address : null;
 
+    // Invalidate existing unused invite tokens for this email and clinic so re-inviting does not duplicate rows
+    await adminClient
+      .from("invite_tokens")
+      .update({ expires_at: new Date(Date.now() - 1000).toISOString() })
+      .eq("email", email.trim().toLowerCase())
+      .is("used_at", null)
+      .eq("hospital_id", effectiveHospitalId);
+
     const { error: insertError } = await adminClient.from("invite_tokens").insert({
       email,
       full_name: fullName,
