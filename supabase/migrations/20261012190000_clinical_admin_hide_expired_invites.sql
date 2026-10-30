@@ -93,6 +93,13 @@ AS $$
     null::text as employee_number
   from public.invite_tokens invite
   where invite.used_at is null
+  and not exists (
+    select 1 from public.invite_tokens newer
+    where lower(trim(newer.email)) = lower(trim(invite.email))
+      and (newer.hospital_id = invite.hospital_id or (invite.hospital_id is null and newer.hospital_id is null))
+      and newer.used_at is null
+      and newer.created_at > invite.created_at
+  )
   and (
     private.is_platform_admin()
     or (
