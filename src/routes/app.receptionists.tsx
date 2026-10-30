@@ -8,8 +8,9 @@ import { Label } from "@/components/ui/label";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useWorkspaceData, type Receptionist } from "@/lib/workspace-data";
-import { UserPlus, ShieldCheck, AlertTriangle, CheckCircle2, Check, Copy, Trash2 } from "lucide-react";
+import { UserPlus, ShieldCheck, AlertTriangle, CheckCircle2, Check, Copy, Trash2, Mail } from "lucide-react";
 import { toast } from "sonner";
+import { generateMailtoUrl } from "@/lib/email-service";
 
 import { useAuth } from "@/lib/auth";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -274,14 +275,41 @@ function ReceptionistsPage() {
 
           <DialogFooter className="gap-2 sm:gap-0 mt-4">
             {createdStaffInfo?.setupUrl && (
-              <Button
-                variant="outline"
-                type="button"
-                className="w-full sm:w-auto"
-                onClick={() => window.open(createdStaffInfo.setupUrl, "_blank")}
-              >
-                Open Setup Link in New Tab
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  type="button"
+                  className="w-full sm:w-auto"
+                  onClick={() => window.open(createdStaffInfo.setupUrl, "_blank")}
+                >
+                  Open Setup Link in New Tab
+                </Button>
+                <Button
+                  variant="outline"
+                  type="button"
+                  className="w-full sm:w-auto gap-1.5"
+                  onClick={() => {
+                    const clinic = clinics.find((c) => c.id === hospitalId) || clinics.find((c) => c.id === user?.clinicId) || clinics[0];
+                    const mailto = generateMailtoUrl({
+                      recipientEmail: createdStaffInfo.staffEmail,
+                      recipientName: createdStaffInfo.staffName,
+                      roleTitle: createdStaffInfo.roleTitle || "Receptionist",
+                      clinicName: clinic?.name || "ClinicFlow Partner Clinic",
+                      clinicId: clinic?.id,
+                      clinicAddress: clinic?.address,
+                      clinicCity: clinic?.city,
+                      clinicPhone: clinic?.phone,
+                      clinicEmail: clinic?.email,
+                      setupUrl: createdStaffInfo.setupUrl || "",
+                    });
+                    window.location.href = mailto;
+                    toast.success(`Opening email client to send invitation to ${createdStaffInfo.staffEmail}`);
+                  }}
+                >
+                  <Mail className="h-4 w-4" />
+                  Send Invite to User's Email
+                </Button>
+              </>
             )}
             <Button onClick={() => { setCreatedStaffInfo(null); }} className="w-full sm:w-auto">
               Close

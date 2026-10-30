@@ -179,23 +179,28 @@ export function generateInvitationEmailText(params: InvitationEmailParams): stri
     clinicAddress,
     clinicCity,
     clinicPhone,
+    clinicEmail,
     setupUrl,
+    roleTitle,
     expiresInHours = 24,
   } = params;
 
+  const roleText = roleTitle || "Staff Member";
   const lines = [
     `Hello ${recipientName},`,
     ``,
-    `You have been invited to manage the following clinic as the Clinical Admin:`,
+    `You have been invited to join ${clinicName} on ClinicFlow as ${roleText}.`,
     ``,
-    `Clinic Name: ${clinicName}`,
+    `Clinic Details:`,
+    `- Clinic Name: ${clinicName}`,
   ];
 
-  if (clinicId) lines.push(`Clinic ID: ${clinicId}`);
-  if (clinicAddress) lines.push(`Address: ${clinicAddress}`);
-  if (clinicCity) lines.push(`City: ${clinicCity}`);
-  if (clinicPhone) lines.push(`Contact Number: ${clinicPhone}`);
-  lines.push(`Clinical Admin Email: ${recipientEmail}`);
+  if (clinicId) lines.push(`- Clinic ID: ${clinicId}`);
+  if (clinicAddress) lines.push(`- Address: ${clinicAddress}`);
+  if (clinicCity) lines.push(`- City: ${clinicCity}`);
+  if (clinicPhone) lines.push(`- Contact Number: ${clinicPhone}`);
+  if (clinicEmail) lines.push(`- Clinic Email: ${clinicEmail}`);
+  lines.push(`- Your Registered Email: ${recipientEmail}`);
 
   lines.push(
     ``,
@@ -206,16 +211,19 @@ export function generateInvitationEmailText(params: InvitationEmailParams): stri
     ``,
     `This invitation link is valid for ${expiresInHours} hours.`,
     ``,
-    `Please use the email address to which this invitation was sent (${recipientEmail}) and the password you create through the link to log in.`,
+    `Please use your email address (${recipientEmail}) and the password you create to log in.`,
     ``,
-    `— ClinicFlow Healthcare Operations Platform`
+    `— ${clinicName} & ClinicFlow Healthcare Operations Platform`
   );
 
   return lines.join("\n");
 }
 
 export function generateEmailSubject(params: Pick<InvitationEmailParams, "clinicName" | "roleTitle">): string {
-  return `You're invited to manage ${params.clinicName} on ClinicFlow`;
+  if (params.roleTitle) {
+    return `Invitation to join ${params.clinicName} as ${params.roleTitle} - ClinicFlow`;
+  }
+  return `You're invited to join ${params.clinicName} on ClinicFlow`;
 }
 
 export function generateMailtoUrl(params: InvitationEmailParams): string {
