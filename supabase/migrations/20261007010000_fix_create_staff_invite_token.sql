@@ -1,4 +1,4 @@
-﻿create or replace function public.create_staff_invite_token(
+create or replace function public.create_staff_invite_token(
   p_email text,
   p_full_name text,
   p_phone text default '',
@@ -70,6 +70,13 @@ begin
     jsonb_build_object('line', configuration->>'address')
   into v_hospital_name, v_hospital_email, v_hospital_phone, v_hospital_address
   from public.hospitals where id = p_hospital_id;
+
+  -- Invalidate any existing unused invite tokens for this email and clinic
+  update public.invite_tokens
+  set expires_at = now() - interval '1 second'
+  where lower(email) = trim(lower(p_email))
+    and used_at is null
+    and (hospital_id = p_hospital_id or (p_hospital_id is null and hospital_id is null));
 
   insert into public.invite_tokens (
     email, full_name, phone, role_code, hospital_id, facility_id,

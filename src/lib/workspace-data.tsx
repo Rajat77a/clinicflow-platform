@@ -2270,7 +2270,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         : state.auditLogs.filter(entry => !entry.clinicId || allowedClinicIds.has(entry.clinicId) || entry.clinicId === clinicId),
       staffMembers: user && hasPermission(user.role, "people.manage")
         ? (() => {
-            const list = clinicScope(state.staffMembers).filter((m) => {
+            const rawFiltered = clinicScope(state.staffMembers).filter((m) => {
               if (m.deletedAt || m.status === "Inactive") return false;
               if (m.clinicId && state.clinics.some((c) => (c.id === m.clinicId || c.shortId === m.clinicId) && Boolean(c.deletedAt))) {
                 return false;
@@ -2289,6 +2289,18 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
                 return { ...m, status: "Expired" as const };
               }
               return m;
+            });
+
+            const seenEmailRoles = new Set<string>();
+            const list: StaffMember[] = [];
+            
+            rawFiltered.forEach((m) => {
+              const emailKey = m.email ? `${m.email.toLowerCase()}-${m.role}` : "";
+              if (emailKey) {
+                if (seenEmailRoles.has(emailKey)) return;
+                seenEmailRoles.add(emailKey);
+              }
+              list.push(m);
             });
 
             const currentKeys = new Set(list.map((m) => `${m.id}-${m.role}`));
