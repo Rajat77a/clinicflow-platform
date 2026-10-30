@@ -12,7 +12,7 @@ import { useWorkspaceData } from "@/lib/workspace-data";
 import { useAuth } from "@/lib/auth";
 import { toast } from "sonner";
 import { ShieldCheck, AlertTriangle, CheckCircle2, Check, Copy, Mail } from "lucide-react";
-import { generateMailtoUrl } from "@/lib/email-service";
+import { generateMailtoUrl, generateGmailComposeUrl } from "@/lib/email-service";
 
 export const Route = createFileRoute("/app/doctors/new")({ component: NewDoctor });
 
@@ -170,16 +170,16 @@ function NewDoctor() {
 
       {/* Staff Created / Setup Link Dialog */}
       <Dialog open={Boolean(createdStaffInfo)} onOpenChange={(open) => { if (!open) { setCreatedStaffInfo(null); navigate({ to: "/app/doctors" }); } }}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-xl sm:max-w-xl w-[95vw]">
           <DialogHeader>
             <DialogTitle className={`flex items-center gap-2 ${createdStaffInfo?.emailError ? "text-amber-600" : "text-emerald-600"}`}>
               {createdStaffInfo?.emailError ? (
                 <>
-                  <AlertTriangle className="h-5 w-5 text-amber-600" /> Doctor Invited (Email Delivery Action Required)
+                  <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0" /> <span>Doctor Invited (Email Delivery Action Required)</span>
                 </>
               ) : (
                 <>
-                  <ShieldCheck className="h-5 w-5" /> Doctor Invited &amp; Invitation Delivered
+                  <ShieldCheck className="h-5 w-5 shrink-0" /> <span>Doctor Invited &amp; Invitation Delivered</span>
                 </>
               )}
             </DialogTitle>
@@ -189,18 +189,18 @@ function NewDoctor() {
               </p>
               {createdStaffInfo?.emailError ? (
                 <div className="rounded-xl border border-destructive/40 bg-destructive/10 p-3 text-destructive">
-                  <div className="flex items-center gap-2 font-medium text-xs">
-                    <AlertTriangle className="h-4 w-4 shrink-0" />
-                    <span>Email service alert: <strong>{createdStaffInfo.emailError}</strong></span>
+                  <div className="flex items-start gap-2 font-medium text-xs">
+                    <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+                    <span className="break-words">Email service alert: <strong>{createdStaffInfo.emailError}</strong></span>
                   </div>
-                  <p className="mt-1 text-[11px] text-muted-foreground">
+                  <p className="mt-1 text-[11px] text-muted-foreground leading-relaxed">
                     The automated email could not be delivered. Ensure RESEND_API_KEY and a verified EMAIL_FROM are configured in server settings. In the meantime, you can manually copy and share the setup link below.
                   </p>
                 </div>
               ) : (
                 <div className="rounded-xl border border-emerald-500/30 bg-emerald-50/50 p-3 text-emerald-950 dark:bg-emerald-950/20 dark:text-emerald-200">
                   <div className="flex items-center gap-2 font-medium text-xs">
-                    <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-600 shrink-0" />
                     <span>Invitation email sent successfully to: <strong>{createdStaffInfo?.staffEmail}</strong></span>
                   </div>
                   <p className="mt-1 text-[11px] text-muted-foreground">
@@ -238,13 +238,13 @@ function NewDoctor() {
             </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0 mt-4">
+          <DialogFooter className="flex-col sm:flex-row sm:items-center sm:justify-end gap-2 pt-2">
             {createdStaffInfo?.setupUrl && (
               <>
                 <Button
                   variant="outline"
                   type="button"
-                  className="w-full sm:w-auto"
+                  className="w-full sm:w-auto text-xs sm:text-sm"
                   onClick={() => window.open(createdStaffInfo.setupUrl, "_blank")}
                 >
                   Open Setup Link in New Tab
@@ -252,10 +252,10 @@ function NewDoctor() {
                 <Button
                   variant="outline"
                   type="button"
-                  className="w-full sm:w-auto gap-1.5"
+                  className="w-full sm:w-auto text-xs sm:text-sm gap-1.5"
                   onClick={() => {
                     const clinic = clinics.find((c) => c.id === hospitalId) || clinics.find((c) => c.id === user?.clinicId) || clinics[0];
-                    const mailto = generateMailtoUrl({
+                    const gmailUrl = generateGmailComposeUrl({
                       recipientEmail: createdStaffInfo.staffEmail,
                       recipientName: createdStaffInfo.staffName,
                       roleTitle: createdStaffInfo.roleTitle || "Doctor",
@@ -267,8 +267,8 @@ function NewDoctor() {
                       clinicEmail: clinic?.email,
                       setupUrl: createdStaffInfo.setupUrl || "",
                     });
-                    window.location.href = mailto;
-                    toast.success(`Opening email client to send invitation to ${createdStaffInfo.staffEmail}`);
+                    window.open(gmailUrl, "_blank");
+                    toast.success(`Opening Gmail compose for ${createdStaffInfo.staffEmail}`);
                   }}
                 >
                   <Mail className="h-4 w-4" />
@@ -276,7 +276,7 @@ function NewDoctor() {
                 </Button>
               </>
             )}
-            <Button onClick={() => { setCreatedStaffInfo(null); navigate({ to: "/app/doctors" }); }} className="w-full sm:w-auto">
+            <Button onClick={() => { setCreatedStaffInfo(null); navigate({ to: "/app/doctors" }); }} className="w-full sm:w-auto text-xs sm:text-sm">
               Go to Doctors List
             </Button>
           </DialogFooter>
