@@ -260,6 +260,8 @@ export type Clinic = {
   emailSent?: boolean;
   emailId?: string;
   emailError?: string;
+  shift?: string;
+  specialty?: string;
 };
 export type Patient = {
   id: string;
@@ -655,6 +657,7 @@ export interface SuperAdminInput {
   email: string;
   phone: string;
   tempPassword: string;
+  hospitalId?: string;
 }
 
 export interface ClinicInput {
@@ -1163,6 +1166,37 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         command.actor,
         `Created facility ${command.value.id}`,
       );
+    case "clinic.accessChanged": {
+      const nextAccess = command.active ? "Allowed" : "Suspended";
+      const nextStatus = command.active ? "Active" : "Inactive";
+      return appendAudit(
+        {
+          ...state,
+          clinics: state.clinics.map((c) =>
+            c.id === command.clinicId
+              ? { ...c, access: nextAccess, status: command.active ? (c.status === "Suspended" ? "Active" : c.status) : "Suspended" }
+              : c
+          ),
+          staffMembers: state.staffMembers.map((m) =>
+            m.clinicId === command.clinicId
+              ? { ...m, status: nextStatus }
+              : m
+          ),
+          doctors: state.doctors.map((d) =>
+            d.clinicId === command.clinicId
+              ? { ...d, status: nextStatus }
+              : d
+          ),
+          receptionists: state.receptionists.map((r) =>
+            r.clinicId === command.clinicId
+              ? { ...r, status: nextStatus }
+              : r
+          ),
+        },
+        command.actor,
+        `${command.active ? "Restored" : "Suspended/Deleted"} clinic ${command.clinicId} and cascaded to all associated users`,
+      );
+    }
     case "clinic.soft_deleted": {
       deactivateClinicAccounts(command.id);
       const now = new Date().toISOString();
@@ -2209,6 +2243,10 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       ? clinicPrescriptions.filter(prescription => prescription.doctor === user.name)
       : clinicPrescriptions;
 
+    const validClinicIds = new Set(state.clinics.map((c) => c.id));
+    const clinicAssigned = <T extends { clinicId: string | null }>(items: T[]) =>
+      items.filter((item) => Boolean(item.clinicId && validClinicIds.has(item.clinicId)));
+
     return {
       isLoading,
       error,
@@ -2218,7 +2256,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       binClinics: state.clinics.filter((c) => isWithinRetentionPeriod(c.deletedAt, 60)),
       patients,
       allPatients: activeClinicPatients,
-      doctors: clinicScope(state.doctors).filter((d) => {
+      doctors: clinicScope(clinicAssigned(state.doctors)).filter((d) => {
         if (d.status === "Inactive") return false;
         const matchingStaff = state.staffMembers.find((m) => m.id === d.id || (d.email && m.email && m.email.toLowerCase() === d.email.toLowerCase()));
         if (matchingStaff) {
@@ -2232,7 +2270,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         }
         return true;
       }),
-      receptionists: clinicScope(state.receptionists).filter((r) => {
+      receptionists: clinicScope(clinicAssigned(state.receptionists)).filter((r) => {
         if (r.status === "Inactive") return false;
         const matchingStaff = state.staffMembers.find((m) => m.id === r.id || (r.email && m.email && m.email.toLowerCase() === r.email.toLowerCase()));
         if (matchingStaff) {
@@ -2270,7 +2308,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         : state.auditLogs.filter(entry => !entry.clinicId || allowedClinicIds.has(entry.clinicId) || entry.clinicId === clinicId),
       staffMembers: user && hasPermission(user.role, "people.manage")
         ? (() => {
-            const rawFiltered = clinicScope(state.staffMembers).filter((m) => {
+            const rawFiltered = clinicScope(clinicAssigned(state.staffMembers)).filter((m) => {
               if (m.deletedAt || m.status === "Inactive") return false;
               if (m.clinicId && state.clinics.some((c) => (c.id === m.clinicId || c.shortId === m.clinicId) && Boolean(c.deletedAt))) {
                 return false;
@@ -2306,7 +2344,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
             const currentKeys = new Set(list.map((m) => `${m.id}-${m.role}`));
             const currentEmailRoles = new Set(list.map((m) => m.email ? `${m.email.toLowerCase()}-${m.role}` : ""));
 
-            clinicScope(state.receptionists).forEach((r) => {
+            clinicScope(clinicAssigned(state.receptionists)).forEach((r) => {
               if (r.status === "Inactive") return;
               const matchingStaff = state.staffMembers.find((m) => m.id === r.id || (r.email && m.email && m.email.toLowerCase() === r.email.toLowerCase()));
               if (matchingStaff && (matchingStaff.deletedAt || matchingStaff.status === "Inactive")) return;
@@ -2332,7 +2370,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
               }
             });
 
-            clinicScope(state.doctors).forEach((d) => {
+            clinicScope(clinicAssigned(state.doctors)).forEach((d) => {
               if (d.status === "Inactive") return;
               const matchingStaff = state.staffMembers.find((m) => m.id === d.id || (d.email && m.email && m.email.toLowerCase() === d.email.toLowerCase()));
               if (matchingStaff && (matchingStaff.deletedAt || matchingStaff.status === "Inactive")) return;
@@ -2840,10 +2878,13 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         }
       },
       setClinicAccess: async (id, active) => {
-        requireUser(user, "platform.clinics.manage");
-        if (!repository) throw new Error("Clinic access changes require Supabase");
-        await repository.setClinicAccess(id, active);
-        await refresh();
+        const actor = requireUser(user, "platform.clinics.manage");
+        if (repository) {
+          await repository.setClinicAccess(id, active);
+          await refresh();
+          return;
+        }
+        dispatch({ type: "clinic.accessChanged", clinicId: id, active, actor });
       },
       extendSubscription: async (id, days, proofRef) => {
         requireUser(user, "platform.subscriptions.manage");
@@ -2916,14 +2957,15 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           if (actor.role !== "super_admin") {
             throw new Error("Only a super admin can add a super admin");
           }
+          const targetHospitalId = input.hospitalId || actor.clinicId || state.clinics[0]?.id;
           if (repository) {
-            const res = await repository.inviteSuperAdmin(input);
+            const res = await repository.inviteSuperAdmin({ ...input, hospitalId: targetHospitalId });
             await refresh();
             return res;
           }
           const membership: StaffMember = {
             id: createId("SA"),
-            clinicId: null,
+            clinicId: targetHospitalId,
             name: input.name,
             email: input.email,
             phone: input.phone,
