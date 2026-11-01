@@ -166,8 +166,43 @@ function NewBill() {
     const medLines: Line[] = rx.medicines.map((m) => ({
       id: crypto.randomUUID(), category: "Medicine", name: m.name, qty: 1, unit: m.unitPrice ?? 0,
     }));
-    setLines((current) => [...current, ...medLines]);
-    toast.success(`Imported ${medLines.length} medicines from ${rx.id}`);
+
+    // Find the doctor from the prescription or patient
+    const prescribingDoctor = doctors.find(
+      (d) =>
+        (rx.doctor && (d.name === rx.doctor || d.name?.toLowerCase() === rx.doctor?.toLowerCase())) ||
+        (patient?.raw?.doctor && (d.name === patient.raw.doctor || d.name?.toLowerCase() === patient.raw.doctor?.toLowerCase()))
+    );
+
+    const fee = prescribingDoctor?.consultationFee != null && prescribingDoctor.consultationFee > 0
+      ? prescribingDoctor.consultationFee
+      : 0;
+
+    const doctorDisplayName = prescribingDoctor?.name || rx.doctor || patient?.raw?.doctor || "Doctor";
+
+    setLines((current) => {
+      const consultationIndex = current.findIndex((line) => line.category === "Consultation");
+      const consultationLine: Line = {
+        id: consultationIndex >= 0 ? current[consultationIndex].id : crypto.randomUUID(),
+        category: "Consultation",
+        name: `${doctorDisplayName} consultation`,
+        qty: 1,
+        unit: fee,
+      };
+
+      if (consultationIndex >= 0) {
+        // If a consultation line already exists, update its fee and name with the imported doctor's consultation fee, and append medicines
+        return current
+          .map((line, idx) => (idx === consultationIndex ? consultationLine : line))
+          .concat(medLines);
+      } else {
+        // If no consultation line exists, prepend the doctor's consultation fee line and append medicines
+        return [consultationLine, ...current, ...medLines];
+      }
+    });
+
+    const feeMsg = fee > 0 ? ` and Dr. ${doctorDisplayName}'s consultation fee (₹${fee})` : "";
+    toast.success(`Imported ${medLines.length} medicines${feeMsg} from ${rx.id}`);
   };
 
   const onSubmit = async (e: React.FormEvent) => {
