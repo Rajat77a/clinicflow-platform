@@ -41,9 +41,30 @@ export interface FollowUpItem {
   rawPrescription?: Prescription;
 }
 
+export const STORAGE_KEY_FOLLOWUPS_STATUS = "cf_followups_status_overrides";
+
+function loadFollowupOverrides(): Record<string, { status: string; date?: string }> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_FOLLOWUPS_STATUS);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveFollowupOverrides(overrides: Record<string, { status: string; date?: string }>) {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEY_FOLLOWUPS_STATUS, JSON.stringify(overrides));
+  } catch {
+    // ignore
+  }
+}
+
 function FollowUpsPage() {
   const { user } = useAuth();
-  const { appointments, prescriptions } = useWorkspaceData();
+  const { appointments, prescriptions, updateAppointment } = useWorkspaceData();
 
   // Selected date state (defaults to today)
   const todayKey = localDateKey();
@@ -56,8 +77,10 @@ function FollowUpsPage() {
     return { year: now.getFullYear(), month: now.getMonth() };
   });
 
-  // Track completed/rescheduled overrides locally so actions feel instant
-  const [statusOverrides, setStatusOverrides] = useState<Record<string, { status: string; date?: string }>>({});
+  // Track completed/rescheduled overrides locally and persist across reloads
+  const [statusOverrides, setStatusOverrides] = useState<Record<string, { status: string; date?: string }>>(
+    () => loadFollowupOverrides()
+  );
   const [rescheduling, setRescheduling] = useState<FollowUpItem | null>(null);
   const [newDate, setNewDate] = useState("");
 
@@ -216,11 +239,27 @@ function FollowUpsPage() {
     setSelectedDate(todayKey);
   };
 
-  const markComplete = (item: FollowUpItem) => {
-    setStatusOverrides((prev) => ({
-      ...prev,
-      [item.id]: { status: "Completed", date: item.date },
-    }));
+  const markComplete = async (item: FollowUpItem) => {
+    setStatusOverrides((prev) => {
+      const next = {
+        ...prev,
+        [item.id]: { status: "Completed", date: item.date },
+      };
+      saveFollowupOverrides(next);
+      return next;
+    });
+
+    if (item.source === "appointment" && item.rawAppointment) {
+      try {
+        await updateAppointment({
+          ...item.rawAppointment,
+          status: "Completed",
+        });
+      } catch (err) {
+        console.warn("Could not sync appointment completion to backend:", err);
+      }
+    }
+
     toast.success(`Follow-up for ${item.patientName} marked as completed`);
   };
 
@@ -229,15 +268,31 @@ function FollowUpsPage() {
     setNewDate(item.date);
   };
 
-  const confirmReschedule = () => {
+  const confirmReschedule = async () => {
     if (!rescheduling || !newDate) {
       toast.error("Please pick a new date");
       return;
     }
-    setStatusOverrides((prev) => ({
-      ...prev,
-      [rescheduling.id]: { status: "Rescheduled", date: newDate },
-    }));
+    setStatusOverrides((prev) => {
+      const next = {
+        ...prev,
+        [rescheduling.id]: { status: "Rescheduled", date: newDate },
+      };
+      saveFollowupOverrides(next);
+      return next;
+    });
+
+    if (rescheduling.source === "appointment" && rescheduling.rawAppointment) {
+      try {
+        await updateAppointment({
+          ...rescheduling.rawAppointment,
+          date: newDate,
+        });
+      } catch (err) {
+        console.warn("Could not sync appointment reschedule to backend:", err);
+      }
+    }
+
     toast.success(`Follow-up rescheduled to ${newDate}`);
     setSelectedDate(newDate);
     const [y, m] = newDate.split("-").map(Number);
