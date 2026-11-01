@@ -43,7 +43,7 @@ export interface FollowUpItem {
 
 export const STORAGE_KEY_FOLLOWUPS_STATUS = "cf_followups_status_overrides";
 
-function loadFollowupOverrides(): Record<string, { status: string; date?: string }> {
+export function loadFollowupOverrides(): Record<string, { status: string; date?: string }> {
   if (typeof window === "undefined") return {};
   try {
     const raw = localStorage.getItem(STORAGE_KEY_FOLLOWUPS_STATUS);
@@ -53,7 +53,7 @@ function loadFollowupOverrides(): Record<string, { status: string; date?: string
   }
 }
 
-function saveFollowupOverrides(overrides: Record<string, { status: string; date?: string }>) {
+export function saveFollowupOverrides(overrides: Record<string, { status: string; date?: string }>) {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY_FOLLOWUPS_STATUS, JSON.stringify(overrides));
