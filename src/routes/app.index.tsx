@@ -41,6 +41,7 @@ import {
   type Appointment,
   type Bill,
 } from "@/lib/workspace-data";
+import { loadFollowupOverrides } from "@/routes/app.followups";
 
 export const Route = createFileRoute("/app/")({
   component: Dashboard,
@@ -442,10 +443,14 @@ function DoctorDashboard() {
   const prescriptionsThisWeek = prescriptions.filter(
     prescription => prescription.date >= weekStart && prescription.date <= todayDate,
   ).length;
-  const followUpsDue = prescriptions.filter(
-    prescription => prescription.followUp
-      && prescription.followUp <= todayDate,
-  ).length;
+  const overrides = loadFollowupOverrides();
+  const followUpsDue = prescriptions.filter(prescription => {
+    if (!prescription.followUp) return false;
+    const override = overrides[`rx-${prescription.id}`];
+    const status = override?.status ?? (prescription.followUp < todayDate ? "Due" : "Scheduled");
+    const date = override?.date ?? prescription.followUp;
+    return date <= todayDate && status !== "Completed";
+  }).length;
 
   return (
     <>
