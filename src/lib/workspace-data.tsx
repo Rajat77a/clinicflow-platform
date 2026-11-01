@@ -1652,7 +1652,36 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       );
     }
     case "staff.soft_deleted": {
-      const member = state.staffMembers.find((m) => m.id === command.userId);
+      let member = state.staffMembers.find((m) => m.id === command.userId);
+      if (!member) {
+        const doc = state.doctors.find((d) => d.id === command.userId);
+        if (doc) {
+          member = {
+            id: doc.id,
+            clinicId: doc.clinicId,
+            name: doc.name,
+            email: doc.email,
+            phone: doc.phone,
+            role: "doctor",
+            status: "Inactive",
+            specialty: doc.specialty,
+          };
+        } else {
+          const rec = state.receptionists.find((r) => r.id === command.userId);
+          if (rec) {
+            member = {
+              id: rec.id,
+              clinicId: rec.clinicId,
+              name: rec.name,
+              email: rec.email,
+              phone: rec.phone,
+              role: "receptionist",
+              status: "Inactive",
+              shift: rec.shift,
+            };
+          }
+        }
+      }
       if (member?.email) deactivateUserAccount(member.email);
       const now = new Date().toISOString();
       const clinic = member?.clinicId ? state.clinics.find((c) => c.id === member.clinicId) : null;
@@ -1679,10 +1708,9 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       };
       saveSoftDeletedStaffToStorage(storedSoft);
 
-      return appendAudit(
-        {
-          ...state,
-          staffMembers: state.staffMembers.map((m) =>
+      const hasMember = state.staffMembers.some((m) => m.id === command.userId);
+      const nextStaffMembers = hasMember
+        ? state.staffMembers.map((m) =>
             m.id === command.userId
               ? {
                   ...m,
@@ -1693,7 +1721,13 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
                   previousClinicName: prevClinicName,
                 }
               : m
-          ),
+          )
+        : (updatedMember ? [...state.staffMembers, updatedMember] : state.staffMembers);
+
+      return appendAudit(
+        {
+          ...state,
+          staffMembers: nextStaffMembers,
           doctors: state.doctors.map((d) =>
             d.id === command.userId ? { ...d, status: "Inactive" } : d
           ),
@@ -3276,7 +3310,36 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       },
       softDeleteStaff: async (userId: string) => {
         const actor = requireUser(user, "people.manage");
-        const target = state.staffMembers.find((member) => member.id === userId);
+        let target = state.staffMembers.find((member) => member.id === userId);
+        if (!target) {
+          const doc = state.doctors.find((d) => d.id === userId);
+          if (doc) {
+            target = {
+              id: doc.id,
+              clinicId: doc.clinicId,
+              name: doc.name,
+              email: doc.email,
+              phone: doc.phone,
+              role: "doctor",
+              status: (doc.status as any) || "Active",
+              specialty: doc.specialty,
+            };
+          } else {
+            const rec = state.receptionists.find((r) => r.id === userId);
+            if (rec) {
+              target = {
+                id: rec.id,
+                clinicId: rec.clinicId,
+                name: rec.name,
+                email: rec.email,
+                phone: rec.phone,
+                role: "receptionist",
+                status: (rec.status as any) || "Active",
+                shift: rec.shift,
+              };
+            }
+          }
+        }
         if (!target) throw new Error("Staff member was not found");
         if (target.id === actor.userId) throw new Error("You cannot delete your own account");
         if (
@@ -3304,7 +3367,36 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       },
       restoreStaff: async (userId: string) => {
         const actor = requireUser(user, "people.manage");
-        const target = state.staffMembers.find((member) => member.id === userId);
+        let target = state.staffMembers.find((member) => member.id === userId);
+        if (!target) {
+          const doc = state.doctors.find((d) => d.id === userId);
+          if (doc) {
+            target = {
+              id: doc.id,
+              clinicId: doc.clinicId,
+              name: doc.name,
+              email: doc.email,
+              phone: doc.phone,
+              role: "doctor",
+              status: "Inactive",
+              specialty: doc.specialty,
+            };
+          } else {
+            const rec = state.receptionists.find((r) => r.id === userId);
+            if (rec) {
+              target = {
+                id: rec.id,
+                clinicId: rec.clinicId,
+                name: rec.name,
+                email: rec.email,
+                phone: rec.phone,
+                role: "receptionist",
+                status: "Inactive",
+                shift: rec.shift,
+              };
+            }
+          }
+        }
         if (!target) throw new Error("Staff member was not found");
         if (
           actor.role !== "super_admin" &&
