@@ -570,6 +570,13 @@ function UsersPage() {
     if (user?.role === "clinic_admin") {
       return member.role !== "super_admin" && (member.clinicId === user.clinicId || !member.clinicId);
     }
+    // Doctors and receptionists can edit their own profile
+    if (
+      (user?.userId && member.id === user.userId) ||
+      (user?.email && member.email && user.email.toLowerCase() === member.email.toLowerCase())
+    ) {
+      return true;
+    }
     return false;
   }, [user]);
 
