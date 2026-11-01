@@ -9,7 +9,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/lib/auth";
-import { useWorkspaceData } from "@/lib/workspace-data";
+import { useWorkspaceData, getStoredStaffDetails } from "@/lib/workspace-data";
 import { MIN_PASSWORD_LENGTH, passwordPolicyError } from "@/lib/password-policy";
 const SUBSCRIPTION_PRICE = 499;
 import { toast } from "sonner";
@@ -357,9 +357,17 @@ function ClinicSettings() {
   // Form states for Doctor & Receptionist with localStorage persistence
   const getStoredDoctor = () => {
     try {
-      if (typeof window !== "undefined" && user?.userId) {
-        const raw = localStorage.getItem(`cf_profile_doctor_${user.userId}`);
-        if (raw) return JSON.parse(raw);
+      if (typeof window !== "undefined") {
+        if (user?.userId) {
+          const raw = localStorage.getItem(`cf_profile_doctor_${user.userId}`);
+          if (raw) return JSON.parse(raw);
+        }
+        if (user?.email) {
+          const rawEmail = localStorage.getItem(`cf_profile_doctor_${user.email.toLowerCase()}`);
+          if (rawEmail) return JSON.parse(rawEmail);
+        }
+        const globalStored = getStoredStaffDetails(user?.userId, user?.email);
+        if (globalStored) return globalStored;
       }
     } catch {
       // ignore
@@ -369,9 +377,17 @@ function ClinicSettings() {
 
   const getStoredReceptionist = () => {
     try {
-      if (typeof window !== "undefined" && user?.userId) {
-        const raw = localStorage.getItem(`cf_profile_receptionist_${user.userId}`);
-        if (raw) return JSON.parse(raw);
+      if (typeof window !== "undefined") {
+        if (user?.userId) {
+          const raw = localStorage.getItem(`cf_profile_receptionist_${user.userId}`);
+          if (raw) return JSON.parse(raw);
+        }
+        if (user?.email) {
+          const rawEmail = localStorage.getItem(`cf_profile_receptionist_${user.email.toLowerCase()}`);
+          if (rawEmail) return JSON.parse(rawEmail);
+        }
+        const globalStored = getStoredStaffDetails(user?.userId, user?.email);
+        if (globalStored) return globalStored;
       }
     } catch {
       // ignore
@@ -409,22 +425,22 @@ function ClinicSettings() {
       const doc = doctorProfile;
       const dAny = doc as any;
       const cached = getStoredDoctor();
-      setDocName((prev) => (prev ? prev : (cached?.name || doc?.name || user?.name || "")));
-      setDocSpecialty((prev) => (prev ? prev : (cached?.specialty || dAny?.specialty || "")));
-      setDocGender((prev) => (prev ? prev : (cached?.gender || dAny?.gender || "")));
-      setDocQualification((prev) => (prev ? prev : (cached?.qualification || dAny?.qualification || "")));
-      setDocRegNo((prev) => (prev ? prev : (cached?.medicalRegistrationNumber || dAny?.medicalRegistrationNumber || "")));
-      setDocExperienceYears((prev) => (prev ? prev : (cached?.experienceYears || dAny?.experienceYears || 0)));
-      setDocPhone((prev) => (prev ? prev : (cached?.phone || dAny?.phone || "")));
-      setDocConsultationFee((prev) => (prev ? prev : (cached?.consultationFee || dAny?.consultationFee || 0)));
-      setDocWorkingHours((prev) => (prev ? prev : (cached?.workingHours || dAny?.workingHours || "")));
-      setDocNotes((prev) => (prev ? prev : (cached?.notes || dAny?.notes || "")));
+      setDocName((prev) => (prev ? prev : (doc?.name || cached?.name || user?.name || "")));
+      setDocSpecialty((prev) => (prev ? prev : (dAny?.specialty || cached?.specialty || "")));
+      setDocGender((prev) => (prev ? prev : (dAny?.gender || cached?.gender || "")));
+      setDocQualification((prev) => (prev ? prev : (dAny?.qualification || cached?.qualification || "")));
+      setDocRegNo((prev) => (prev ? prev : (dAny?.medicalRegistrationNumber || cached?.medicalRegistrationNumber || "")));
+      setDocExperienceYears((prev) => (prev ? prev : (dAny?.experienceYears ?? cached?.experienceYears ?? 0)));
+      setDocPhone((prev) => (prev ? prev : (dAny?.phone || cached?.phone || user?.phone || "")));
+      setDocConsultationFee((prev) => (prev ? prev : (dAny?.consultationFee ?? cached?.consultationFee ?? 0)));
+      setDocWorkingHours((prev) => (prev ? prev : (dAny?.workingHours || cached?.workingHours || "")));
+      setDocNotes((prev) => (prev ? prev : (dAny?.notes || cached?.notes || "")));
     } else if (user?.role === "receptionist") {
       const rec = receptionistProfile;
       const cached = getStoredReceptionist();
-      setRecName((prev) => (prev ? prev : (cached?.name || rec?.name || user?.name || "")));
-      setRecPhone((prev) => (prev ? prev : (cached?.phone || rec?.phone || "")));
-      setRecShift((prev) => (prev ? prev : (cached?.shift || (rec as any)?.shift || "Morning (9–5)")));
+      setRecName((prev) => (prev ? prev : (rec?.name || cached?.name || user?.name || "")));
+      setRecPhone((prev) => (prev ? prev : (rec?.phone || cached?.phone || user?.phone || "")));
+      setRecShift((prev) => (prev ? prev : ((rec as any)?.shift || cached?.shift || "Morning (9–5)")));
     } else {
       setGenericName((prev) => (prev ? prev : (user?.name || "")));
       setGenericPhone((prev) => (prev ? prev : "+46 70 884 1100"));
@@ -455,8 +471,13 @@ function ClinicSettings() {
           notes: docNotes.trim() || undefined,
         };
 
-        if (typeof window !== "undefined" && user?.userId) {
-          localStorage.setItem(`cf_profile_doctor_${user.userId}`, JSON.stringify(payload));
+        if (typeof window !== "undefined") {
+          if (user?.userId) {
+            localStorage.setItem(`cf_profile_doctor_${user.userId}`, JSON.stringify(payload));
+          }
+          if (user?.email) {
+            localStorage.setItem(`cf_profile_doctor_${user.email.toLowerCase()}`, JSON.stringify(payload));
+          }
         }
 
         await updateStaff(payload);
@@ -477,8 +498,13 @@ function ClinicSettings() {
           shift: recShift.trim() || undefined,
         };
 
-        if (typeof window !== "undefined" && user?.userId) {
-          localStorage.setItem(`cf_profile_receptionist_${user.userId}`, JSON.stringify(payload));
+        if (typeof window !== "undefined") {
+          if (user?.userId) {
+            localStorage.setItem(`cf_profile_receptionist_${user.userId}`, JSON.stringify(payload));
+          }
+          if (user?.email) {
+            localStorage.setItem(`cf_profile_receptionist_${user.email.toLowerCase()}`, JSON.stringify(payload));
+          }
         }
 
         await updateStaff(payload);
