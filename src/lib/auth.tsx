@@ -29,6 +29,7 @@ interface AuthCtx {
   updatePassword: (password: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   completePasswordSetup: () => void;
+  updateCurrentUserProfile: (patch: Partial<AuthUser>) => void;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
@@ -554,6 +555,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           updateRegisteredPassword(user.email, newPassword);
         },
         completePasswordSetup: () => setPasswordSetupRequired(false),
+        updateCurrentUserProfile: (patch: Partial<AuthUser>) => {
+          setUser((prev) => {
+            if (!prev) return prev;
+            const updated = { ...prev, ...patch };
+            if (typeof window !== "undefined") {
+              try {
+                localStorage.setItem("cf_user", JSON.stringify(updated));
+              } catch {
+                // ignore
+              }
+            }
+            return updated;
+          });
+        },
       }}
     >
       {children}

@@ -1037,6 +1037,11 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         shift,
         status,
       } = command.value;
+
+      const oldDoctor = state.doctors.find((d) => d.id === id);
+      const oldDoctorName = oldDoctor?.name;
+      const newDoctorName = name && oldDoctorName && oldDoctorName !== name ? name : null;
+
       return appendAudit(
         {
           ...state,
@@ -1076,6 +1081,27 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
               ...(status ? { status } : {}),
             };
           }),
+          appointments: newDoctorName
+            ? state.appointments.map((a) =>
+                a.doctorId === id || (oldDoctorName && a.doctor === oldDoctorName)
+                  ? { ...a, doctor: newDoctorName }
+                  : a
+              )
+            : state.appointments,
+          patients: newDoctorName
+            ? state.patients.map((p) =>
+                oldDoctorName && p.doctor === oldDoctorName
+                  ? { ...p, doctor: newDoctorName }
+                  : p
+              )
+            : state.patients,
+          prescriptions: newDoctorName
+            ? state.prescriptions.map((pr) =>
+                oldDoctorName && pr.doctor === oldDoctorName
+                  ? { ...pr, doctor: newDoctorName }
+                  : pr
+              )
+            : state.prescriptions,
         },
         command.actor,
         `Updated staff details for user ${id}`,
