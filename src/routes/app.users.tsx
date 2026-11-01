@@ -98,7 +98,9 @@ function UsersPage() {
     const map = new Map<string, StaffMember>();
     
     // Add active / invited / expired staff members
+    const validClinicsSet = new Set(clinics.map(c => c.id).concat(clinics.map(c => c.shortId).filter((id): id is string => Boolean(id))));
     staffMembers.forEach(m => {
+      if (!m.clinicId || (!validClinicsSet.has(m.clinicId) && !m.previousClinicName)) return;
       const evalResult = evaluateStaffInviteStatus(m);
       if (evalResult.shouldAutoDelete) return;
       if (isClinicalAdmin && (evalResult.isExpired || evalResult.status === "Expired" || m.status === "Expired")) return;
@@ -124,6 +126,7 @@ function UsersPage() {
 
     // Ensure receptionists are represented in allUsers
     receptionists.forEach((r) => {
+      if (!r.clinicId || !validClinicsSet.has(r.clinicId)) return;
       const key = `${r.id}-receptionist`;
       const emailMatch = r.email
         ? Array.from(map.values()).some(
@@ -153,6 +156,7 @@ function UsersPage() {
 
     // Ensure doctors are represented in allUsers
     doctors.forEach((d) => {
+      if (!d.clinicId || !validClinicsSet.has(d.clinicId)) return;
       const key = `${d.id}-doctor`;
       const emailMatch = d.email
         ? Array.from(map.values()).some(
@@ -262,7 +266,7 @@ function UsersPage() {
   const [resendingId, setResendingId] = useState<string | null>(null);
   const [isSending, setIsSending] = useState(false);
 
-  const [superAdminForm, setSuperAdminForm] = useState({ name: "", email: "", phone: "" });
+  const [superAdminForm, setSuperAdminForm] = useState({ name: "", email: "", phone: "", hospitalId: clinics[0]?.id || "" });
   const [clinicAdminForm, setClinicAdminForm] = useState({ name: "", email: "", phone: "", hospitalId: "" });
   const [inviteStaffForm, setInviteStaffForm] = useState<{
     role: Role;
@@ -334,11 +338,12 @@ function UsersPage() {
         name: superAdminForm.name.trim(),
         email: superAdminForm.email.trim(),
         phone: superAdminForm.phone.trim(),
+        hospitalId: superAdminForm.hospitalId || clinics[0]?.id,
         tempPassword,
       });
       toast.success(`Super Admin added · invitation sent to ${superAdminForm.email.trim()}`);
       setSuperAdminDialogOpen(false);
-      setSuperAdminForm({ name: "", email: "", phone: "" });
+      setSuperAdminForm({ name: "", email: "", phone: "", hospitalId: clinics[0]?.id || "" });
       
       if (res) {
         setCreatedStaffInfo({
@@ -459,6 +464,7 @@ function UsersPage() {
             name: inviteStaffForm.name.trim(),
             email: inviteStaffForm.email.trim(),
             phone: inviteStaffForm.phone.trim(),
+            hospitalId: inviteStaffForm.hospitalId || clinics[0]?.id,
             tempPassword: generateTempPassword(),
           });
           roleTitle = "Super Admin";
