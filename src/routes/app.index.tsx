@@ -444,13 +444,21 @@ function DoctorDashboard() {
     prescription => prescription.date >= weekStart && prescription.date <= todayDate,
   ).length;
   const overrides = loadFollowupOverrides();
-  const followUpsDue = prescriptions.filter(prescription => {
+  const prescriptionFollowUps = prescriptions.filter(prescription => {
     if (!prescription.followUp) return false;
     const override = overrides[`rx-${prescription.id}`];
     const status = override?.status ?? (prescription.followUp < todayDate ? "Due" : "Scheduled");
     const date = override?.date ?? prescription.followUp;
     return date <= todayDate && status !== "Completed";
   }).length;
+  const appointmentFollowUps = appointments.filter(appointment => {
+    if (!appointment.date) return false;
+    const override = overrides[`appt-${appointment.id}`];
+    const status = override?.status ?? appointment.status;
+    const date = override?.date ?? appointment.date;
+    return date <= todayDate && status !== "Completed" && status !== "Cancelled";
+  }).length;
+  const followUpsDue = prescriptionFollowUps + appointmentFollowUps;
 
   return (
     <>
