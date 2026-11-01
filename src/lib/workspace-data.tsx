@@ -470,6 +470,12 @@ export function saveStaffDetails(identifier: string, details: StoredStaffDetails
     if (secondaryIdentifier) {
       map[secondaryIdentifier.toLowerCase()] = merged;
     }
+    if (merged.name) {
+      map[merged.name] = merged;
+      map[merged.name.toLowerCase()] = merged;
+      const clean = merged.name.replace(/^Dr\.?\s+/i, "").trim().toLowerCase();
+      if (clean) map[clean] = merged;
+    }
     localStorage.setItem(STORAGE_KEY_STAFF_DETAILS, JSON.stringify(map));
   } catch {
     // ignore
@@ -480,7 +486,35 @@ export function getStoredStaffDetails(identifier?: string, secondaryIdentifier?:
   if (!identifier && !secondaryIdentifier) return null;
   const map = loadStaffDetailsMap();
   if (identifier && map[identifier]) return map[identifier];
+  if (identifier && map[identifier.toLowerCase()]) return map[identifier.toLowerCase()];
   if (secondaryIdentifier && map[secondaryIdentifier.toLowerCase()]) return map[secondaryIdentifier.toLowerCase()];
+  
+  const cleanId = (identifier || "").replace(/^Dr\.?\s+/i, "").trim().toLowerCase();
+  if (cleanId && map[cleanId]) return map[cleanId];
+
+  for (const item of Object.values(map)) {
+    if (item?.name) {
+      const cleanItem = item.name.replace(/^Dr\.?\s+/i, "").trim().toLowerCase();
+      if (cleanId && cleanItem === cleanId) return item;
+    }
+  }
+
+  // Also check individual cf_profile_doctor_* items in localStorage
+  if (typeof window !== "undefined") {
+    try {
+      if (identifier) {
+        const direct = localStorage.getItem(`cf_profile_doctor_${identifier}`);
+        if (direct) return JSON.parse(direct);
+      }
+      if (secondaryIdentifier) {
+        const directSec = localStorage.getItem(`cf_profile_doctor_${secondaryIdentifier.toLowerCase()}`);
+        if (directSec) return JSON.parse(directSec);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   return null;
 }
 
@@ -1020,7 +1054,12 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
 
       const storedDetailsMap = loadStaffDetailsMap();
       const enrichedDoctors = (command.value.doctors || []).map((d) => {
-        const stored = storedDetailsMap[d.id] || (d.email ? storedDetailsMap[d.email.toLowerCase()] : null);
+        const dCleanName = (d.name || "").replace(/^Dr\.?\s+/i, "").trim().toLowerCase();
+        const stored = storedDetailsMap[d.id]
+          || (d.email ? storedDetailsMap[d.email.toLowerCase()] : null)
+          || (d.name ? storedDetailsMap[d.name] || storedDetailsMap[d.name.toLowerCase()] : null)
+          || (dCleanName ? storedDetailsMap[dCleanName] : null)
+          || getStoredStaffDetails(d.id, d.email || d.name);
         if (!stored) return d;
         return {
           ...d,

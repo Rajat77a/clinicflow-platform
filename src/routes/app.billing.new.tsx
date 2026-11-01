@@ -51,6 +51,45 @@ function NewBill() {
     }
     return null;
   });
+  const resolveDoctorFee = (docName?: string): { doctorName: string; fee: number } => {
+    if (!docName) return { doctorName: "Doctor", fee: 0 };
+    const cleanDocName = docName.replace(/^Dr\.?\s+/i, "").trim().toLowerCase();
+    const foundDoc = doctors.find((d) => {
+      const dNameClean = (d.name || "").replace(/^Dr\.?\s+/i, "").trim().toLowerCase();
+      return d.name === docName || d.name?.toLowerCase() === docName.toLowerCase() || (cleanDocName && dNameClean === cleanDocName);
+    });
+
+    if (foundDoc?.consultationFee != null && Number(foundDoc.consultationFee) > 0) {
+      return { doctorName: foundDoc.name, fee: Number(foundDoc.consultationFee) };
+    }
+
+    const stored = getStoredStaffDetails(foundDoc?.id || cleanDocName, foundDoc?.email || docName);
+    if (stored?.consultationFee != null && Number(stored.consultationFee) > 0) {
+      return { doctorName: stored.name || foundDoc?.name || docName, fee: Number(stored.consultationFee) };
+    }
+
+    if (typeof window !== "undefined") {
+      try {
+        const rawMap = localStorage.getItem("cf_staff_profile_details");
+        if (rawMap) {
+          const map = JSON.parse(rawMap);
+          for (const val of Object.values(map) as any[]) {
+            const valNameClean = (val?.name || "").replace(/^Dr\.?\s+/i, "").trim().toLowerCase();
+            if (cleanDocName && (valNameClean === cleanDocName || val?.name?.toLowerCase() === docName.toLowerCase())) {
+              if (val?.consultationFee != null && Number(val.consultationFee) > 0) {
+                return { doctorName: val.name || docName, fee: Number(val.consultationFee) };
+              }
+            }
+          }
+        }
+      } catch {
+        // ignore
+      }
+    }
+
+    return { doctorName: foundDoc?.name || docName, fee: 0 };
+  };
+
   const getInitialLines = (currentPatient: PatientOption | null): Line[] => {
     if (!currentPatient) {
       return [
@@ -63,17 +102,12 @@ function NewBill() {
         },
       ];
     }
-    const assignedDoctor = doctors.find(
-      (doctor) => doctor.name === currentPatient.raw.doctor && doctor.status === "Active",
-    );
-    const fee = assignedDoctor?.consultationFee != null && assignedDoctor.consultationFee > 0
-      ? assignedDoctor.consultationFee
-      : 0;
+    const { doctorName, fee } = resolveDoctorFee(currentPatient.raw.doctor);
     return [
       {
         id: crypto.randomUUID(),
         category: "Consultation",
-        name: assignedDoctor?.name ? `${assignedDoctor.name} consultation` : "Doctor consultation",
+        name: doctorName ? `${doctorName} consultation` : "Doctor consultation",
         qty: 1,
         unit: fee,
       },
@@ -100,9 +134,10 @@ function NewBill() {
     const assignedDoctor = doctors.find(
       (doctor) => doctor.name === nextPatient.raw.doctor && doctor.status === "Active",
     );
-    const consultationFee = assignedDoctor?.consultationFee != null && assignedDoctor.consultationFee > 0
-      ? assignedDoctor.consultationFee
-      : 0;
+    const { doctorName, fee } = resolveDoctorFee(nextPatient.raw.doctor);
+    const consultationFee = fee > 0
+      ? fee
+      : (assignedDoctor?.consultationFee != null && assignedDoctor.consultationFee > 0 ? assignedDoctor.consultationFee : 0);
 
     setLines((current) => {
       const consultationIndex = current.findIndex((line) => line.category === "Consultation");
@@ -111,11 +146,11 @@ function NewBill() {
           ? current[consultationIndex].id
           : crypto.randomUUID(),
         category: "Consultation",
-        name: assignedDoctor?.name ? `${assignedDoctor.name} consultation` : "Doctor consultation",
+        name: doctorName ? `${doctorName} consultation` : "Doctor consultation",
         qty: 1,
         unit: consultationFee,
       };
-      if (assignedDoctor?.consultationFee == null) {
+      if (assignedDoctor?.consultationFee == null && consultationFee === 0) {
         // If consultation fee was not entered, keep unit at 0 (displayed as blank)
       }
       if (consultationIndex < 0) return [consultation, ...current];
@@ -167,50 +202,9 @@ function NewBill() {
       id: crypto.randomUUID(), category: "Medicine", name: m.name, qty: 1, unit: m.unitPrice ?? 0,
     }));
 
-    // Find the doctor from the prescription or patient
-    const cleanDocName = (rx.doctor || patient?.raw?.doctor || "").replace(/^Dr\.?\s+/i, "").trim().toLowerCase();
-    const prescribingDoctor = doctors.find((d) => {
-      const dNameClean = (d.name || "").replace(/^Dr\.?\s+/i, "").trim().toLowerCase();
-      if (rx.doctor && (d.name === rx.doctor || d.name?.toLowerCase() === rx.doctor?.toLowerCase() || (cleanDocName && dNameClean === cleanDocName))) {
-        return true;
-      }
-      if (patient?.raw?.doctor && (d.name === patient.raw.doctor || d.name?.toLowerCase() === patient.raw.doctor?.toLowerCase() || (cleanDocName && dNameClean === cleanDocName))) {
-        return true;
-      }
-      return false;
-    });
-
-    // Lookup fee from doctor profile, stored staff details, or active doctor record
-    let fee = 0;
-    if (prescribingDoctor?.consultationFee != null && prescribingDoctor.consultationFee > 0) {
-      fee = prescribingDoctor.consultationFee;
-    } else {
-      // Check stored staff details cache by id, name, or clean name
-      const stored = getStoredStaffDetails(prescribingDoctor?.id, prescribingDoctor?.email);
-      if (stored?.consultationFee != null && stored.consultationFee > 0) {
-        fee = Number(stored.consultationFee);
-      } else if (typeof window !== "undefined") {
-        try {
-          const rawMap = localStorage.getItem("cf_staff_profile_details");
-          if (rawMap) {
-            const map = JSON.parse(rawMap);
-            for (const val of Object.values(map) as any[]) {
-              const valNameClean = (val?.name || "").replace(/^Dr\.?\s+/i, "").trim().toLowerCase();
-              if (cleanDocName && (valNameClean === cleanDocName || val?.name?.toLowerCase() === rx.doctor?.toLowerCase())) {
-                if (val?.consultationFee != null && Number(val.consultationFee) > 0) {
-                  fee = Number(val.consultationFee);
-                  break;
-                }
-              }
-            }
-          }
-        } catch {
-          // ignore
-        }
-      }
-    }
-
-    const doctorDisplayName = prescribingDoctor?.name || rx.doctor || patient?.raw?.doctor || "Doctor";
+    const docTarget = rx.doctor || patient?.raw?.doctor || "";
+    const { doctorName, fee } = resolveDoctorFee(docTarget);
+    const doctorDisplayName = doctorName || docTarget || "Doctor";
 
     setLines((current) => {
       const consultationIndex = current.findIndex((line) => line.category === "Consultation");
@@ -223,7 +217,7 @@ function NewBill() {
       };
 
       if (consultationIndex >= 0) {
-        // Update existing consultation line with the fee and name, and append medicine lines
+        // Update existing consultation line with the doctor fee and name, and append medicine lines
         return current
           .map((line, idx) => (idx === consultationIndex ? consultationLine : line))
           .concat(medLines);
