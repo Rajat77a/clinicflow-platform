@@ -339,7 +339,7 @@ function PlatformSettings() {
 
 /* ----------------- Clinic Admin / Doctor / Receptionist ----------------- */
 function ClinicSettings() {
-  const { user } = useAuth();
+  const { user, updateCurrentUserProfile } = useAuth();
   const { doctors, receptionists, staffMembers, updateStaff } = useWorkspaceData();
   const canEditClinic = user?.role === "clinic_admin";
 
@@ -425,6 +425,9 @@ function ClinicSettings() {
           workingHours: docWorkingHours.trim() || undefined,
           notes: docNotes.trim() || undefined,
         });
+        if (updateCurrentUserProfile) {
+          updateCurrentUserProfile({ name: docName.trim() });
+        }
         toast.success("Doctor details updated successfully");
       } else if (user?.role === "receptionist") {
         if (!recName.trim()) {
@@ -438,6 +441,9 @@ function ClinicSettings() {
           phone: recPhone.trim() || undefined,
           shift: recShift.trim() || undefined,
         });
+        if (updateCurrentUserProfile) {
+          updateCurrentUserProfile({ name: recName.trim() });
+        }
         toast.success("Receptionist details updated successfully");
       } else {
         toast.success("Saved");
