@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState, type FormEvent } from "react";
+import { useState, useEffect, type FormEvent } from "react";
 import { PageHeader } from "@/components/layout/page-header";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -7,7 +7,9 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuth } from "@/lib/auth";
+import { useWorkspaceData } from "@/lib/workspace-data";
 import { MIN_PASSWORD_LENGTH, passwordPolicyError } from "@/lib/password-policy";
 const SUBSCRIPTION_PRICE = 499;
 import { toast } from "sonner";
@@ -338,7 +340,115 @@ function PlatformSettings() {
 /* ----------------- Clinic Admin / Doctor / Receptionist ----------------- */
 function ClinicSettings() {
   const { user } = useAuth();
+  const { doctors, receptionists, staffMembers, updateStaff } = useWorkspaceData();
   const canEditClinic = user?.role === "clinic_admin";
+
+  // Identify matching record for Doctor or Receptionist
+  const doctorProfile = user?.role === "doctor"
+    ? doctors.find((d) => d.id === user.userId || (d.email && user.email && d.email.toLowerCase() === user.email.toLowerCase()))
+      || staffMembers.find((m) => m.role === "doctor" && (m.id === user.userId || (m.email && user.email && m.email.toLowerCase() === user.email.toLowerCase())))
+    : null;
+
+  const receptionistProfile = user?.role === "receptionist"
+    ? receptionists.find((r) => r.id === user.userId || (r.email && user.email && r.email.toLowerCase() === user.email.toLowerCase()))
+      || staffMembers.find((m) => m.role === "receptionist" && (m.id === user.userId || (m.email && user.email && m.email.toLowerCase() === user.email.toLowerCase())))
+    : null;
+
+  // Form states for Doctor
+  const [docName, setDocName] = useState("");
+  const [docSpecialty, setDocSpecialty] = useState("");
+  const [docGender, setDocGender] = useState<"female" | "male" | "other" | "">("");
+  const [docQualification, setDocQualification] = useState("");
+  const [docRegNo, setDocRegNo] = useState("");
+  const [docExperienceYears, setDocExperienceYears] = useState(0);
+  const [docPhone, setDocPhone] = useState("");
+  const [docConsultationFee, setDocConsultationFee] = useState(0);
+  const [docWorkingHours, setDocWorkingHours] = useState("");
+  const [docNotes, setDocNotes] = useState("");
+
+  // Form states for Receptionist
+  const [recName, setRecName] = useState("");
+  const [recPhone, setRecPhone] = useState("");
+  const [recShift, setRecShift] = useState("");
+
+  // Generic / Admin user state
+  const [genericName, setGenericName] = useState("");
+  const [genericPhone, setGenericPhone] = useState("");
+
+  const [savingAccount, setSavingAccount] = useState(false);
+
+  useEffect(() => {
+    if (user?.role === "doctor") {
+      const doc = doctorProfile;
+      setDocName(doc?.name || user?.name || "");
+      const dAny = doc as any;
+      setDocSpecialty(dAny?.specialty || "");
+      setDocGender(dAny?.gender || "");
+      setDocQualification(dAny?.qualification || "");
+      setDocRegNo(dAny?.medicalRegistrationNumber || "");
+      setDocExperienceYears(dAny?.experienceYears || 0);
+      setDocPhone(dAny?.phone || "");
+      setDocConsultationFee(dAny?.consultationFee || 0);
+      setDocWorkingHours(dAny?.workingHours || "");
+      setDocNotes(dAny?.notes || "");
+    } else if (user?.role === "receptionist") {
+      const rec = receptionistProfile;
+      setRecName(rec?.name || user?.name || "");
+      setRecPhone(rec?.phone || "");
+      setRecShift((rec as any)?.shift || "Morning (9–5)");
+    } else {
+      setGenericName(user?.name || "");
+      setGenericPhone("+46 70 884 1100");
+    }
+  }, [user, doctorProfile, receptionistProfile]);
+
+  const handleSaveAccount = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSavingAccount(true);
+    try {
+      if (user?.role === "doctor") {
+        if (!docName.trim()) {
+          toast.error("Doctor name is required");
+          return;
+        }
+        const targetId = doctorProfile?.id || user.userId;
+        await updateStaff({
+          id: targetId,
+          name: docName.trim(),
+          phone: docPhone.trim() || undefined,
+          specialty: docSpecialty.trim() || undefined,
+          gender: docGender || undefined,
+          qualification: docQualification.trim() || undefined,
+          medicalRegistrationNumber: docRegNo.trim() || undefined,
+          experienceYears: Number(docExperienceYears) || 0,
+          consultationFee: Number(docConsultationFee) || 0,
+          workingHours: docWorkingHours.trim() || undefined,
+          notes: docNotes.trim() || undefined,
+        });
+        toast.success("Doctor details updated successfully");
+      } else if (user?.role === "receptionist") {
+        if (!recName.trim()) {
+          toast.error("Receptionist name is required");
+          return;
+        }
+        const targetId = receptionistProfile?.id || user.userId;
+        await updateStaff({
+          id: targetId,
+          name: recName.trim(),
+          phone: recPhone.trim() || undefined,
+          shift: recShift.trim() || undefined,
+        });
+        toast.success("Receptionist details updated successfully");
+      } else {
+        toast.success("Saved");
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update profile details");
+    } finally {
+      setSavingAccount(false);
+    }
+  };
+
   return (
     <>
       <PageHeader title="Settings" description="Manage your clinic profile and preferences." />
@@ -390,13 +500,198 @@ function ClinicSettings() {
         )}
 
         <TabsContent value="account" className="mt-4 rounded-2xl border bg-card p-6 shadow-soft space-y-4 lg:max-w-2xl">
-          <h3 className="font-display text-base font-semibold">My account</h3>
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5 col-span-2"><Label>Full name</Label><Input className="h-11 rounded-xl" defaultValue={user?.name} /></div>
-            <div className="space-y-1.5"><Label>Email</Label><Input className="h-11 rounded-xl" defaultValue={user?.email} /></div>
-            <div className="space-y-1.5"><Label>Phone</Label><Input className="h-11 rounded-xl" defaultValue="+46 70 884 1100" /></div>
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-display text-base font-semibold">My account</h3>
+              <p className="text-xs text-muted-foreground">
+                {user?.role === "doctor"
+                  ? "Manage your practitioner profile, qualifications and consultation details."
+                  : user?.role === "receptionist"
+                  ? "Manage your staff profile and shift details."
+                  : "Manage your personal profile details."}
+              </p>
+            </div>
           </div>
-          <Button onClick={() => toast.success("Saved")}>Save changes</Button>
+
+          <form onSubmit={handleSaveAccount} className="space-y-4">
+            {user?.role === "doctor" ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5 col-span-2">
+                  <Label>Full name *</Label>
+                  <Input
+                    className="h-11 rounded-xl"
+                    value={docName}
+                    onChange={(e) => setDocName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Specialty *</Label>
+                  <Input
+                    className="h-11 rounded-xl"
+                    value={docSpecialty}
+                    onChange={(e) => setDocSpecialty(e.target.value)}
+                    placeholder="e.g. Cardiology"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Gender</Label>
+                  <Select value={docGender} onValueChange={(val: any) => setDocGender(val)}>
+                    <SelectTrigger className="h-11 rounded-xl">
+                      <SelectValue placeholder="Select gender" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="female">Female</SelectItem>
+                      <SelectItem value="male">Male</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Qualification</Label>
+                  <Input
+                    className="h-11 rounded-xl"
+                    value={docQualification}
+                    onChange={(e) => setDocQualification(e.target.value)}
+                    placeholder="e.g. MBBS, MD"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Medical Registration Number</Label>
+                  <Input
+                    className="h-11 rounded-xl"
+                    value={docRegNo}
+                    onChange={(e) => setDocRegNo(e.target.value)}
+                    placeholder="e.g. REG-12345"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Experience (Years)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    className="h-11 rounded-xl"
+                    value={docExperienceYears}
+                    onChange={(e) => setDocExperienceYears(Number(e.target.value))}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Phone number</Label>
+                  <Input
+                    className="h-11 rounded-xl"
+                    value={docPhone}
+                    onChange={(e) => setDocPhone(e.target.value)}
+                    placeholder="+91 98765 43210"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Consultation Fee (₹)</Label>
+                  <Input
+                    type="number"
+                    min="0"
+                    className="h-11 rounded-xl"
+                    value={docConsultationFee}
+                    onChange={(e) => setDocConsultationFee(Number(e.target.value))}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Working Hours</Label>
+                  <Input
+                    className="h-11 rounded-xl"
+                    value={docWorkingHours}
+                    onChange={(e) => setDocWorkingHours(e.target.value)}
+                    placeholder="e.g. 9:00 AM - 5:00 PM"
+                  />
+                </div>
+                <div className="space-y-1.5 col-span-2">
+                  <Label>Email</Label>
+                  <Input className="h-11 rounded-xl bg-muted/50" value={user?.email || ""} disabled />
+                  <p className="text-[11px] text-muted-foreground">Email is tied to your login account and cannot be changed here.</p>
+                </div>
+                <div className="space-y-1.5 col-span-2">
+                  <Label>Notes</Label>
+                  <Textarea
+                    rows={3}
+                    className="rounded-xl"
+                    value={docNotes}
+                    onChange={(e) => setDocNotes(e.target.value)}
+                    placeholder="Additional practitioner bio or clinic notes..."
+                  />
+                </div>
+              </div>
+            ) : user?.role === "receptionist" ? (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5 col-span-2">
+                  <Label>Full name *</Label>
+                  <Input
+                    className="h-11 rounded-xl"
+                    value={recName}
+                    onChange={(e) => setRecName(e.target.value)}
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Phone number *</Label>
+                  <Input
+                    className="h-11 rounded-xl"
+                    value={recPhone}
+                    onChange={(e) => setRecPhone(e.target.value)}
+                    placeholder="+91 98765 43210"
+                    required
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Shift</Label>
+                  <Select value={recShift} onValueChange={setRecShift}>
+                    <SelectTrigger className="h-11 rounded-xl">
+                      <SelectValue placeholder="Select shift" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Morning (9–5)">Morning (9–5)</SelectItem>
+                      <SelectItem value="Morning (9 AM - 5 PM)">Morning (9 AM - 5 PM)</SelectItem>
+                      <SelectItem value="Evening (1–9)">Evening (1–9)</SelectItem>
+                      <SelectItem value="Evening (1 PM - 9 PM)">Evening (1 PM - 9 PM)</SelectItem>
+                      <SelectItem value="Night (9 PM - 5 AM)">Night (9 PM - 5 AM)</SelectItem>
+                      <SelectItem value="Full Day">Full Day</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5 col-span-2">
+                  <Label>Email</Label>
+                  <Input className="h-11 rounded-xl bg-muted/50" value={user?.email || ""} disabled />
+                  <p className="text-[11px] text-muted-foreground">Email is tied to your login account and cannot be changed here.</p>
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5 col-span-2">
+                  <Label>Full name</Label>
+                  <Input
+                    className="h-11 rounded-xl"
+                    value={genericName}
+                    onChange={(e) => setGenericName(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Email</Label>
+                  <Input className="h-11 rounded-xl" defaultValue={user?.email} disabled />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Phone</Label>
+                  <Input
+                    className="h-11 rounded-xl"
+                    value={genericPhone}
+                    onChange={(e) => setGenericPhone(e.target.value)}
+                  />
+                </div>
+              </div>
+            )}
+
+            <Button type="submit" disabled={savingAccount} className="rounded-xl font-medium">
+              {savingAccount ? "Saving changes..." : "Save changes"}
+            </Button>
+          </form>
         </TabsContent>
 
         <TabsContent value="notifications" className="mt-4 rounded-2xl border bg-card p-6 shadow-soft space-y-4">

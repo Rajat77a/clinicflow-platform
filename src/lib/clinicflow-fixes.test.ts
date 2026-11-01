@@ -149,3 +149,23 @@ test("patients list offers My Patients (treated at least once) and All Patients 
   assert.match(workspaceSource, /isPatientTreated\(p,\s*clinicAppointments,\s*clinicPrescriptions,\s*user\)/);
   assert.match(workspaceSource, /scope === "my"/);
 });
+
+test("doctors and receptionists can edit their own details via updateStaff and account settings", async () => {
+  const settingsSource = await readFile(new URL("../routes/app.settings.tsx", import.meta.url), "utf8");
+  assert.match(settingsSource, /handleSaveAccount/);
+  assert.match(settingsSource, /docSpecialty/);
+  assert.match(settingsSource, /docQualification/);
+  assert.match(settingsSource, /docRegNo/);
+  assert.match(settingsSource, /docExperienceYears/);
+  assert.match(settingsSource, /docConsultationFee/);
+  assert.match(settingsSource, /docWorkingHours/);
+  assert.match(settingsSource, /docNotes/);
+  assert.match(settingsSource, /recShift/);
+
+  const currentWorkspaceSource = await readFile(new URL("./workspace-data.tsx", import.meta.url), "utf8");
+  assert.match(currentWorkspaceSource, /isSelf/);
+  assert.match(currentWorkspaceSource, /user\.userId === input\.id/);
+
+  const usersSource = await readFile(new URL("../routes/app.users.tsx", import.meta.url), "utf8");
+  assert.match(usersSource, /member\.id === user\.userId/);
+});

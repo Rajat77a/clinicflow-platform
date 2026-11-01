@@ -3024,15 +3024,24 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "staff.deactivated", userId, actor });
       },
       updateStaff: async (input) => {
-        const actor = requireUser(user, "people.manage");
         const target = state.staffMembers.find((m) => m.id === input.id);
-        if (
-          actor.role !== "super_admin" &&
-          target?.clinicId &&
-          actor.clinicId &&
-          target.clinicId !== actor.clinicId
-        ) {
-          throw new Error("You can only manage users within your clinic");
+        const isSelf = Boolean(
+          (user?.userId && user.userId === input.id) ||
+          (user?.email && target?.email && user.email.toLowerCase() === target.email.toLowerCase())
+        );
+        let actor: User;
+        if (isSelf && user) {
+          actor = user;
+        } else {
+          actor = requireUser(user, "people.manage");
+          if (
+            actor.role !== "super_admin" &&
+            target?.clinicId &&
+            actor.clinicId &&
+            target.clinicId !== actor.clinicId
+          ) {
+            throw new Error("You can only manage users within your clinic");
+          }
         }
         dispatch({ type: "staff.updated", value: input, actor });
         if (repository?.updateStaff) {
