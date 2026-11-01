@@ -82,8 +82,36 @@ function NewBill() {
             }
           }
         }
+
+        // Check any doctor profile in localStorage (e.g. cf_profile_doctor_<id/email>)
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && (key.startsWith("cf_profile_doctor_") || key.startsWith("cf_profile_"))) {
+            try {
+              const item = JSON.parse(localStorage.getItem(key) || "{}");
+              const itemNameClean = (item?.name || "").replace(/^Dr\.?\s+/i, "").trim().toLowerCase();
+              if (
+                item?.consultationFee != null &&
+                Number(item.consultationFee) > 0 &&
+                (itemNameClean === cleanDocName || item?.name?.toLowerCase() === docName.toLowerCase())
+              ) {
+                return { doctorName: item.name || foundDoc?.name || docName, fee: Number(item.consultationFee) };
+              }
+            } catch {
+              // ignore parse errors
+            }
+          }
+        }
       } catch {
         // ignore
+      }
+    }
+
+    // Fallback: If only 1 doctor has a set consultation fee in doctors or storage, or active user is the doctor
+    if (user?.role === "doctor" && (user?.name?.toLowerCase() === docName.toLowerCase() || (user?.name || "").replace(/^Dr\.?\s+/i, "").trim().toLowerCase() === cleanDocName)) {
+      const userCached = getStoredStaffDetails(user.userId, user.email);
+      if (userCached?.consultationFee != null && Number(userCached.consultationFee) > 0) {
+        return { doctorName: userCached.name || user.name || docName, fee: Number(userCached.consultationFee) };
       }
     }
 
