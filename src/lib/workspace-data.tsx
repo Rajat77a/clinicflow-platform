@@ -433,6 +433,57 @@ export type StaffMember = {
   emailError?: string;
 };
 
+
+export const STORAGE_KEY_STAFF_DETAILS = "cf_staff_profile_details";
+
+export interface StoredStaffDetails {
+  name?: string;
+  phone?: string;
+  specialty?: string;
+  gender?: "female" | "male" | "other" | "";
+  qualification?: string;
+  medicalRegistrationNumber?: string;
+  experienceYears?: number;
+  consultationFee?: number;
+  workingHours?: string;
+  notes?: string;
+  shift?: string;
+}
+
+export function loadStaffDetailsMap(): Record<string, StoredStaffDetails> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_STAFF_DETAILS);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveStaffDetails(identifier: string, details: StoredStaffDetails, secondaryIdentifier?: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const map = loadStaffDetailsMap();
+    const existing = map[identifier] || (secondaryIdentifier ? map[secondaryIdentifier.toLowerCase()] : {}) || {};
+    const merged = { ...existing, ...details };
+    map[identifier] = merged;
+    if (secondaryIdentifier) {
+      map[secondaryIdentifier.toLowerCase()] = merged;
+    }
+    localStorage.setItem(STORAGE_KEY_STAFF_DETAILS, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
+export function getStoredStaffDetails(identifier?: string, secondaryIdentifier?: string): StoredStaffDetails | null {
+  if (!identifier && !secondaryIdentifier) return null;
+  const map = loadStaffDetailsMap();
+  if (identifier && map[identifier]) return map[identifier];
+  if (secondaryIdentifier && map[secondaryIdentifier.toLowerCase()]) return map[secondaryIdentifier.toLowerCase()];
+  return null;
+}
+
 export const STORAGE_KEY_INVITED_AT = "cf_staff_invited_at";
 
 export function loadInvitedAtMap(): Record<string, string> {
@@ -967,9 +1018,41 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
           return p;
         });
 
+      const storedDetailsMap = loadStaffDetailsMap();
+      const enrichedDoctors = (command.value.doctors || []).map((d) => {
+        const stored = storedDetailsMap[d.id] || (d.email ? storedDetailsMap[d.email.toLowerCase()] : null);
+        if (!stored) return d;
+        return {
+          ...d,
+          name: stored.name || d.name,
+          phone: stored.phone || d.phone,
+          specialty: stored.specialty || d.specialty,
+          gender: stored.gender !== undefined ? stored.gender : d.gender,
+          qualification: stored.qualification !== undefined ? stored.qualification : d.qualification,
+          medicalRegistrationNumber: stored.medicalRegistrationNumber !== undefined ? stored.medicalRegistrationNumber : d.medicalRegistrationNumber,
+          experienceYears: stored.experienceYears !== undefined ? stored.experienceYears : d.experienceYears,
+          consultationFee: stored.consultationFee !== undefined ? stored.consultationFee : d.consultationFee,
+          workingHours: stored.workingHours !== undefined ? stored.workingHours : d.workingHours,
+          notes: stored.notes !== undefined ? stored.notes : d.notes,
+        };
+      });
+
+      const enrichedReceptionists = (command.value.receptionists || []).map((r) => {
+        const stored = storedDetailsMap[r.id] || (r.email ? storedDetailsMap[r.email.toLowerCase()] : null);
+        if (!stored) return r;
+        return {
+          ...r,
+          name: stored.name || r.name,
+          phone: stored.phone || r.phone,
+          shift: stored.shift || r.shift,
+        };
+      });
+
       return {
         ...command.value,
         clinics: updatedClinics,
+        doctors: enrichedDoctors,
+        receptionists: enrichedReceptionists,
         staffMembers: updatedStaffMembers,
         patients: updatedPatients,
         permanentlyDeletedIds: permDeleted,
@@ -1037,6 +1120,25 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         shift,
         status,
       } = command.value;
+
+      const targetMember = state.staffMembers.find((m) => m.id === id);
+      saveStaffDetails(
+        id,
+        {
+          ...(name ? { name } : {}),
+          ...(phone !== undefined ? { phone } : {}),
+          ...(specialty ? { specialty } : {}),
+          ...(gender !== undefined ? { gender } : {}),
+          ...(qualification !== undefined ? { qualification } : {}),
+          ...(medicalRegistrationNumber !== undefined ? { medicalRegistrationNumber } : {}),
+          ...(experienceYears !== undefined ? { experienceYears } : {}),
+          ...(consultationFee !== undefined ? { consultationFee } : {}),
+          ...(workingHours !== undefined ? { workingHours } : {}),
+          ...(notes !== undefined ? { notes } : {}),
+          ...(shift !== undefined ? { shift } : {}),
+        },
+        targetMember?.email
+      );
 
       const oldDoctor = state.doctors.find((d) => d.id === id);
       const oldDoctorName = oldDoctor?.name;
@@ -2922,8 +3024,42 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           const actor = requireUser(user, "people.manage");
           const targetHospitalId = input.hospitalId || actor.clinicId || state.clinics[0]?.id;
           if (!targetHospitalId) throw new Error("A clinic workspace is required");
+          saveStaffDetails(
+            input.email.trim().toLowerCase(),
+            {
+              name: input.name,
+              phone: input.phone,
+              specialty: input.specialty,
+              gender: input.gender,
+              qualification: input.qualification,
+              medicalRegistrationNumber: input.medicalRegistrationNumber,
+              experienceYears: input.experienceYears,
+              consultationFee: input.consultationFee,
+              workingHours: input.workingHours,
+              notes: input.notes,
+            },
+            input.email.trim().toLowerCase()
+          );
           if (repository) {
             const res = await repository.createDoctor({ ...input, hospitalId: targetHospitalId });
+            if (res.data?.id) {
+              saveStaffDetails(
+                res.data.id,
+                {
+                  name: input.name,
+                  phone: input.phone,
+                  specialty: input.specialty,
+                  gender: input.gender,
+                  qualification: input.qualification,
+                  medicalRegistrationNumber: input.medicalRegistrationNumber,
+                  experienceYears: input.experienceYears,
+                  consultationFee: input.consultationFee,
+                  workingHours: input.workingHours,
+                  notes: input.notes,
+                },
+                input.email.trim().toLowerCase()
+              );
+            }
             await refresh();
             return res;
           }
@@ -2954,8 +3090,28 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           const actor = requireUser(user, "people.manage");
           const targetHospitalId = input.hospitalId || actor.clinicId || state.clinics[0]?.id;
           if (!targetHospitalId) throw new Error("A clinic workspace is required");
+          saveStaffDetails(
+            input.email.trim().toLowerCase(),
+            {
+              name: input.name,
+              phone: input.phone,
+              shift: input.shift,
+            },
+            input.email.trim().toLowerCase()
+          );
           if (repository) {
             const res = await repository.createReceptionist({ ...input, hospitalId: targetHospitalId });
+            if (res.data?.id) {
+              saveStaffDetails(
+                res.data.id,
+                {
+                  name: input.name,
+                  phone: input.phone,
+                  shift: input.shift,
+                },
+                input.email.trim().toLowerCase()
+              );
+            }
             await refresh();
             return res;
           }
