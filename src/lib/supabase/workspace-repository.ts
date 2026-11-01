@@ -1466,6 +1466,13 @@ export class SupabaseWorkspaceRepository implements WorkspaceRepository {
     const membershipPayload: Record<string, unknown> = { updated_at: now };
     if (input.specialty !== undefined) membershipPayload.specialty = input.specialty;
     if (input.shift !== undefined) membershipPayload.shift = input.shift;
+    if (input.gender !== undefined) membershipPayload.gender = input.gender || null;
+    if (input.qualification !== undefined) membershipPayload.qualification = input.qualification;
+    if (input.medicalRegistrationNumber !== undefined) membershipPayload.medical_registration_number = input.medicalRegistrationNumber;
+    if (input.experienceYears !== undefined) membershipPayload.experience_years = input.experienceYears;
+    if (input.consultationFee !== undefined) membershipPayload.consultation_fee = input.consultationFee;
+    if (input.workingHours !== undefined) membershipPayload.working_hours = input.workingHours;
+    if (input.notes !== undefined) membershipPayload.administrative_notes = input.notes;
     if (input.status) {
       membershipPayload.status = input.status;
       membershipPayload.active = input.status === "Active" || input.status === "Invited";

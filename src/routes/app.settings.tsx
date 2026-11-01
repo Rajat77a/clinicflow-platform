@@ -354,22 +354,49 @@ function ClinicSettings() {
       || staffMembers.find((m) => m.role === "receptionist" && (m.id === user.userId || (m.email && user.email && m.email.toLowerCase() === user.email.toLowerCase())))
     : null;
 
-  // Form states for Doctor
-  const [docName, setDocName] = useState("");
-  const [docSpecialty, setDocSpecialty] = useState("");
-  const [docGender, setDocGender] = useState<"female" | "male" | "other" | "">("");
-  const [docQualification, setDocQualification] = useState("");
-  const [docRegNo, setDocRegNo] = useState("");
-  const [docExperienceYears, setDocExperienceYears] = useState(0);
-  const [docPhone, setDocPhone] = useState("");
-  const [docConsultationFee, setDocConsultationFee] = useState(0);
-  const [docWorkingHours, setDocWorkingHours] = useState("");
-  const [docNotes, setDocNotes] = useState("");
+  // Form states for Doctor & Receptionist with localStorage persistence
+  const getStoredDoctor = () => {
+    try {
+      if (typeof window !== "undefined" && user?.userId) {
+        const raw = localStorage.getItem(`cf_profile_doctor_${user.userId}`);
+        if (raw) return JSON.parse(raw);
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  };
+
+  const getStoredReceptionist = () => {
+    try {
+      if (typeof window !== "undefined" && user?.userId) {
+        const raw = localStorage.getItem(`cf_profile_receptionist_${user.userId}`);
+        if (raw) return JSON.parse(raw);
+      }
+    } catch {
+      // ignore
+    }
+    return null;
+  };
+
+  const storedDoc = getStoredDoctor();
+  const storedRec = getStoredReceptionist();
+
+  const [docName, setDocName] = useState(storedDoc?.name || "");
+  const [docSpecialty, setDocSpecialty] = useState(storedDoc?.specialty || "");
+  const [docGender, setDocGender] = useState<"female" | "male" | "other" | "">(storedDoc?.gender || "");
+  const [docQualification, setDocQualification] = useState(storedDoc?.qualification || "");
+  const [docRegNo, setDocRegNo] = useState(storedDoc?.medicalRegistrationNumber || "");
+  const [docExperienceYears, setDocExperienceYears] = useState(storedDoc?.experienceYears || 0);
+  const [docPhone, setDocPhone] = useState(storedDoc?.phone || "");
+  const [docConsultationFee, setDocConsultationFee] = useState(storedDoc?.consultationFee || 0);
+  const [docWorkingHours, setDocWorkingHours] = useState(storedDoc?.workingHours || "");
+  const [docNotes, setDocNotes] = useState(storedDoc?.notes || "");
 
   // Form states for Receptionist
-  const [recName, setRecName] = useState("");
-  const [recPhone, setRecPhone] = useState("");
-  const [recShift, setRecShift] = useState("");
+  const [recName, setRecName] = useState(storedRec?.name || "");
+  const [recPhone, setRecPhone] = useState(storedRec?.phone || "");
+  const [recShift, setRecShift] = useState(storedRec?.shift || "");
 
   // Generic / Admin user state
   const [genericName, setGenericName] = useState("");
@@ -380,25 +407,27 @@ function ClinicSettings() {
   useEffect(() => {
     if (user?.role === "doctor") {
       const doc = doctorProfile;
-      setDocName(doc?.name || user?.name || "");
       const dAny = doc as any;
-      setDocSpecialty(dAny?.specialty || "");
-      setDocGender(dAny?.gender || "");
-      setDocQualification(dAny?.qualification || "");
-      setDocRegNo(dAny?.medicalRegistrationNumber || "");
-      setDocExperienceYears(dAny?.experienceYears || 0);
-      setDocPhone(dAny?.phone || "");
-      setDocConsultationFee(dAny?.consultationFee || 0);
-      setDocWorkingHours(dAny?.workingHours || "");
-      setDocNotes(dAny?.notes || "");
+      const cached = getStoredDoctor();
+      setDocName((prev) => (prev ? prev : (cached?.name || doc?.name || user?.name || "")));
+      setDocSpecialty((prev) => (prev ? prev : (cached?.specialty || dAny?.specialty || "")));
+      setDocGender((prev) => (prev ? prev : (cached?.gender || dAny?.gender || "")));
+      setDocQualification((prev) => (prev ? prev : (cached?.qualification || dAny?.qualification || "")));
+      setDocRegNo((prev) => (prev ? prev : (cached?.medicalRegistrationNumber || dAny?.medicalRegistrationNumber || "")));
+      setDocExperienceYears((prev) => (prev ? prev : (cached?.experienceYears || dAny?.experienceYears || 0)));
+      setDocPhone((prev) => (prev ? prev : (cached?.phone || dAny?.phone || "")));
+      setDocConsultationFee((prev) => (prev ? prev : (cached?.consultationFee || dAny?.consultationFee || 0)));
+      setDocWorkingHours((prev) => (prev ? prev : (cached?.workingHours || dAny?.workingHours || "")));
+      setDocNotes((prev) => (prev ? prev : (cached?.notes || dAny?.notes || "")));
     } else if (user?.role === "receptionist") {
       const rec = receptionistProfile;
-      setRecName(rec?.name || user?.name || "");
-      setRecPhone(rec?.phone || "");
-      setRecShift((rec as any)?.shift || "Morning (9–5)");
+      const cached = getStoredReceptionist();
+      setRecName((prev) => (prev ? prev : (cached?.name || rec?.name || user?.name || "")));
+      setRecPhone((prev) => (prev ? prev : (cached?.phone || rec?.phone || "")));
+      setRecShift((prev) => (prev ? prev : (cached?.shift || (rec as any)?.shift || "Morning (9–5)")));
     } else {
-      setGenericName(user?.name || "");
-      setGenericPhone("+46 70 884 1100");
+      setGenericName((prev) => (prev ? prev : (user?.name || "")));
+      setGenericPhone((prev) => (prev ? prev : "+46 70 884 1100"));
     }
   }, [user, doctorProfile, receptionistProfile]);
 
@@ -412,7 +441,7 @@ function ClinicSettings() {
           return;
         }
         const targetId = doctorProfile?.id || user.userId;
-        await updateStaff({
+        const payload = {
           id: targetId,
           name: docName.trim(),
           phone: docPhone.trim() || undefined,
@@ -424,7 +453,13 @@ function ClinicSettings() {
           consultationFee: Number(docConsultationFee) || 0,
           workingHours: docWorkingHours.trim() || undefined,
           notes: docNotes.trim() || undefined,
-        });
+        };
+
+        if (typeof window !== "undefined" && user?.userId) {
+          localStorage.setItem(`cf_profile_doctor_${user.userId}`, JSON.stringify(payload));
+        }
+
+        await updateStaff(payload);
         if (updateCurrentUserProfile) {
           updateCurrentUserProfile({ name: docName.trim() });
         }
@@ -435,12 +470,18 @@ function ClinicSettings() {
           return;
         }
         const targetId = receptionistProfile?.id || user.userId;
-        await updateStaff({
+        const payload = {
           id: targetId,
           name: recName.trim(),
           phone: recPhone.trim() || undefined,
           shift: recShift.trim() || undefined,
-        });
+        };
+
+        if (typeof window !== "undefined" && user?.userId) {
+          localStorage.setItem(`cf_profile_receptionist_${user.userId}`, JSON.stringify(payload));
+        }
+
+        await updateStaff(payload);
         if (updateCurrentUserProfile) {
           updateCurrentUserProfile({ name: recName.trim() });
         }

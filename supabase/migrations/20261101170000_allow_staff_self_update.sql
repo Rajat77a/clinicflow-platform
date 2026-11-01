@@ -12,3 +12,4 @@ with check (
   or private.is_platform_admin()
   or (hospital_id = private.current_hospital_id() and private.has_permission('people.manage'))
 );
+
