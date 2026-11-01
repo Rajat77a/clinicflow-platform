@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { EntityPicker, toPatientOptions, type PatientOption } from "@/components/forms/entity-picker";
 import { useAuth } from "@/lib/auth";
-import { useWorkspaceData, type Prescription } from "@/lib/workspace-data";
+import { useWorkspaceData, getStoredStaffDetails, type Prescription } from "@/lib/workspace-data";
 import { sendWhatsApp, formatBillWhatsAppMessage } from "@/lib/whatsapp";
 import { printDocument } from "@/lib/exporters";
 import { formatPatientId } from "@/lib/prescription-fields";
@@ -168,15 +168,47 @@ function NewBill() {
     }));
 
     // Find the doctor from the prescription or patient
-    const prescribingDoctor = doctors.find(
-      (d) =>
-        (rx.doctor && (d.name === rx.doctor || d.name?.toLowerCase() === rx.doctor?.toLowerCase())) ||
-        (patient?.raw?.doctor && (d.name === patient.raw.doctor || d.name?.toLowerCase() === patient.raw.doctor?.toLowerCase()))
-    );
+    const cleanDocName = (rx.doctor || patient?.raw?.doctor || "").replace(/^Dr\.?\s+/i, "").trim().toLowerCase();
+    const prescribingDoctor = doctors.find((d) => {
+      const dNameClean = (d.name || "").replace(/^Dr\.?\s+/i, "").trim().toLowerCase();
+      if (rx.doctor && (d.name === rx.doctor || d.name?.toLowerCase() === rx.doctor?.toLowerCase() || (cleanDocName && dNameClean === cleanDocName))) {
+        return true;
+      }
+      if (patient?.raw?.doctor && (d.name === patient.raw.doctor || d.name?.toLowerCase() === patient.raw.doctor?.toLowerCase() || (cleanDocName && dNameClean === cleanDocName))) {
+        return true;
+      }
+      return false;
+    });
 
-    const fee = prescribingDoctor?.consultationFee != null && prescribingDoctor.consultationFee > 0
-      ? prescribingDoctor.consultationFee
-      : 0;
+    // Lookup fee from doctor profile, stored staff details, or active doctor record
+    let fee = 0;
+    if (prescribingDoctor?.consultationFee != null && prescribingDoctor.consultationFee > 0) {
+      fee = prescribingDoctor.consultationFee;
+    } else {
+      // Check stored staff details cache by id, name, or clean name
+      const stored = getStoredStaffDetails(prescribingDoctor?.id, prescribingDoctor?.email);
+      if (stored?.consultationFee != null && stored.consultationFee > 0) {
+        fee = Number(stored.consultationFee);
+      } else if (typeof window !== "undefined") {
+        try {
+          const rawMap = localStorage.getItem("cf_staff_profile_details");
+          if (rawMap) {
+            const map = JSON.parse(rawMap);
+            for (const val of Object.values(map) as any[]) {
+              const valNameClean = (val?.name || "").replace(/^Dr\.?\s+/i, "").trim().toLowerCase();
+              if (cleanDocName && (valNameClean === cleanDocName || val?.name?.toLowerCase() === rx.doctor?.toLowerCase())) {
+                if (val?.consultationFee != null && Number(val.consultationFee) > 0) {
+                  fee = Number(val.consultationFee);
+                  break;
+                }
+              }
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+    }
 
     const doctorDisplayName = prescribingDoctor?.name || rx.doctor || patient?.raw?.doctor || "Doctor";
 
@@ -191,12 +223,12 @@ function NewBill() {
       };
 
       if (consultationIndex >= 0) {
-        // If a consultation line already exists, update its fee and name with the imported doctor's consultation fee, and append medicines
+        // Update existing consultation line with the fee and name, and append medicine lines
         return current
           .map((line, idx) => (idx === consultationIndex ? consultationLine : line))
           .concat(medLines);
       } else {
-        // If no consultation line exists, prepend the doctor's consultation fee line and append medicines
+        // Prepend consultation line and append medicine lines
         return [consultationLine, ...current, ...medLines];
       }
     });
