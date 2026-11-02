@@ -513,7 +513,21 @@ function ClinicSettings() {
         }
         toast.success("Receptionist details updated successfully");
       } else {
-        toast.success("Saved");
+        if (!genericName.trim()) {
+          toast.error("Name is required");
+          return;
+        }
+        const targetId = user?.userId;
+        const payload = {
+          id: targetId,
+          name: genericName.trim(),
+          phone: genericPhone.trim() || undefined,
+        };
+        await updateStaff(payload);
+        if (updateCurrentUserProfile) {
+          updateCurrentUserProfile({ name: genericName.trim() });
+        }
+        toast.success("Account details updated successfully");
       }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to update profile details");
