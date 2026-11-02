@@ -224,11 +224,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    const name =
+    let name =
       profile?.display_name ||
       authUser.user_metadata?.full_name ||
       authUser.email ||
       "Hospital user";
+
+    if (typeof window !== "undefined") {
+      try {
+        const storedDoctor = localStorage.getItem(`cf_profile_doctor_${authUser.id}`)
+          || (authUser.email ? localStorage.getItem(`cf_profile_doctor_${authUser.email.toLowerCase()}`) : null);
+        const storedReceptionist = localStorage.getItem(`cf_profile_receptionist_${authUser.id}`)
+          || (authUser.email ? localStorage.getItem(`cf_profile_receptionist_${authUser.email.toLowerCase()}`) : null);
+        const detailsMapRaw = localStorage.getItem("cf_staff_details");
+        let detailsName = "";
+        if (detailsMapRaw) {
+          const map = JSON.parse(detailsMapRaw);
+          const found = map[authUser.id] || (authUser.email ? map[authUser.email.toLowerCase()] : null);
+          if (found?.name) detailsName = found.name;
+        }
+
+        if (storedDoctor) {
+          const parsed = JSON.parse(storedDoctor);
+          if (parsed?.name) name = parsed.name;
+        } else if (storedReceptionist) {
+          const parsed = JSON.parse(storedReceptionist);
+          if (parsed?.name) name = parsed.name;
+        } else if (detailsName) {
+          name = detailsName;
+        }
+      } catch {
+        // ignore
+      }
+    }
 
     const authenticatedUser: AuthUser = {
       userId: authUser.id,

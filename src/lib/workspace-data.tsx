@@ -499,16 +499,20 @@ export function getStoredStaffDetails(identifier?: string, secondaryIdentifier?:
     }
   }
 
-  // Also check individual cf_profile_doctor_* items in localStorage
+  // Also check individual cf_profile_doctor_* and cf_profile_receptionist_* items in localStorage
   if (typeof window !== "undefined") {
     try {
       if (identifier) {
-        const direct = localStorage.getItem(`cf_profile_doctor_${identifier}`);
-        if (direct) return JSON.parse(direct);
+        const directDoc = localStorage.getItem(`cf_profile_doctor_${identifier}`);
+        if (directDoc) return JSON.parse(directDoc);
+        const directRec = localStorage.getItem(`cf_profile_receptionist_${identifier}`);
+        if (directRec) return JSON.parse(directRec);
       }
       if (secondaryIdentifier) {
-        const directSec = localStorage.getItem(`cf_profile_doctor_${secondaryIdentifier.toLowerCase()}`);
-        if (directSec) return JSON.parse(directSec);
+        const directDocSec = localStorage.getItem(`cf_profile_doctor_${secondaryIdentifier.toLowerCase()}`);
+        if (directDocSec) return JSON.parse(directDocSec);
+        const directRecSec = localStorage.getItem(`cf_profile_receptionist_${secondaryIdentifier.toLowerCase()}`);
+        if (directRecSec) return JSON.parse(directRecSec);
       }
     } catch {
       // ignore

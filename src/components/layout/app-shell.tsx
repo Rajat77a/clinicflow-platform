@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   Activity,
@@ -304,11 +304,29 @@ function GlobalSearch() {
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { user, logout, isDemoMode } = useAuth();
-  const { syncStatus } = useWorkspaceData();
+  const { user, logout, isDemoMode, updateCurrentUserProfile } = useAuth();
+  const { syncStatus, staffMembers, doctors, receptionists } = useWorkspaceData();
   const navigate = useNavigate();
   const [dark, setDark] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  
+  // Resolve most up-to-date staff name for current user
+  const matchingStaff = useMemo(() => {
+    if (!user) return null;
+    const list = user.role === "doctor" ? doctors : user.role === "receptionist" ? receptionists : staffMembers;
+    return (
+      list.find((m) => m.id === user.userId || (m.email && user.email && m.email.toLowerCase() === user.email.toLowerCase())) ||
+      staffMembers.find((m) => m.id === user.userId || (m.email && user.email && m.email.toLowerCase() === user.email.toLowerCase()))
+    );
+  }, [user, doctors, receptionists, staffMembers]);
+
+  const effectiveDisplayName = matchingStaff?.name || user?.name || "";
+
+  useEffect(() => {
+    if (matchingStaff?.name && user?.name && matchingStaff.name !== user.name && updateCurrentUserProfile) {
+      updateCurrentUserProfile({ name: matchingStaff.name });
+    }
+  }, [matchingStaff?.name, user?.name, updateCurrentUserProfile]);
   
   // -- ROLE SWITCHER LOGIC --
   const [availableRoles, setAvailableRoles] = useState<{role_code: string, hospital_id: string, hospital_name?: string}[]>([]);
@@ -456,14 +474,14 @@ export function AppShell({ children }: { children: ReactNode }) {
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-10 gap-2 rounded-xl px-2">
                   <div className="grid h-7 w-7 place-items-center rounded-full bg-gradient-to-br from-primary to-info text-primary-foreground text-xs font-semibold">
-                    {user.name
+                    {effectiveDisplayName
                       .split(" ")
                       .map((n) => n[0])
                       .slice(0, 2)
                       .join("")}
                   </div>
                   <div className="hidden sm:block text-left leading-tight">
-                    <div className="text-sm font-semibold">{user.name.split(" ")[0]}</div>
+                    <div className="text-sm font-semibold">{effectiveDisplayName.split(" ")[0]}</div>
                     <div className="text-[10px] text-muted-foreground">
                       {ROLE_LABELS[user.role]}
                     </div>
@@ -473,7 +491,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
                 <DropdownMenuLabel>
-                  <div className="font-semibold">{user.name}</div>
+                  <div className="font-semibold">{effectiveDisplayName}</div>
                   <div className="text-xs font-normal text-muted-foreground">{user.email}</div>
                 </DropdownMenuLabel>
                 {availableRoles.length > 1 && (
@@ -514,7 +532,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div>
               <div className="text-sm text-muted-foreground">Welcome back,</div>
-              <div className="font-display text-lg font-bold tracking-tight">{user.name}</div>
+              <div className="font-display text-lg font-bold tracking-tight">{effectiveDisplayName}</div>
             </div>
             <div className="flex flex-wrap items-center justify-end gap-x-4 gap-y-1 text-xs text-muted-foreground">
               <ConnectionStatus status={syncStatus} />
