@@ -929,7 +929,8 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
           const clinicDeletedAt = currentMember.clinicId ? softDeletedMap.get(currentMember.clinicId) || updatedClinics.find((c) => c.id === currentMember.clinicId)?.deletedAt : undefined;
 
           // Check if user was directly soft-deleted
-          const softStaffInfo = storedSoftStaff[currentMember.id];
+          const softStaffInfo = storedSoftStaff[currentMember.id]
+            || (currentMember.email ? storedSoftStaff[currentMember.email.toLowerCase()] : undefined);
 
           if (isClinicDeleted) {
             return {
@@ -961,7 +962,9 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       const staffMemberEmailRoles = new Set(updatedStaffMembers.map(m => m.email ? `${m.email.toLowerCase()}-${m.role}` : ""));
 
       (command.value.receptionists || []).forEach((r) => {
-        if (r.status === "Inactive" || storedSoftStaff[r.id] || storedPermStaff.has(r.id)) return;
+        const isSoft = storedSoftStaff[r.id] || (r.email ? storedSoftStaff[r.email.toLowerCase()] : undefined);
+        const isPerm = storedPermStaff.has(r.id) || (r.email ? storedPermStaff.has(r.email.toLowerCase()) : false);
+        if (r.status === "Inactive" || isSoft || isPerm) return;
         const matchingStaff = updatedStaffMembers.find((m) => m.id === r.id || (r.email && m.email && m.email.toLowerCase() === r.email.toLowerCase()));
         if (matchingStaff && (matchingStaff.deletedAt || matchingStaff.status === "Inactive")) return;
         const key = `${r.id}-receptionist`;
@@ -990,7 +993,9 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
 
       // Ensure all doctors are represented in updatedStaffMembers
       (command.value.doctors || []).forEach((d) => {
-        if (d.status === "Inactive" || storedSoftStaff[d.id] || storedPermStaff.has(d.id)) return;
+        const isSoft = storedSoftStaff[d.id] || (d.email ? storedSoftStaff[d.email.toLowerCase()] : undefined);
+        const isPerm = storedPermStaff.has(d.id) || (d.email ? storedPermStaff.has(d.email.toLowerCase()) : false);
+        if (d.status === "Inactive" || isSoft || isPerm) return;
         const matchingStaff = updatedStaffMembers.find((m) => m.id === d.id || (d.email && m.email && m.email.toLowerCase() === d.email.toLowerCase()));
         if (matchingStaff && (matchingStaff.deletedAt || matchingStaff.status === "Inactive")) return;
         const key = `${d.id}-doctor`;
@@ -1019,9 +1024,28 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
 
       // Ensure any soft-deleted staff members from storage are preserved in updatedStaffMembers
       const existingStaffIds = new Set(updatedStaffMembers.map((m) => m.id));
+      const existingStaffEmails = new Set(updatedStaffMembers.map((m) => m.email ? m.email.toLowerCase() : ""));
       for (const [id, soft] of Object.entries(storedSoftStaff)) {
         if (!existingStaffIds.has(id) && !storedPermStaff.has(id)) {
           if (soft.member) {
+            const memberEmail = soft.member.email ? soft.member.email.toLowerCase() : "";
+            if (memberEmail && existingStaffEmails.has(memberEmail)) {
+              // If an active copy exists with the same email, mark it inactive
+              const existingIdx = updatedStaffMembers.findIndex(
+                (m) => m.email && m.email.toLowerCase() === memberEmail
+              );
+              if (existingIdx !== -1) {
+                updatedStaffMembers[existingIdx] = {
+                  ...updatedStaffMembers[existingIdx],
+                  status: "Inactive",
+                  deletedAt: soft.member.deletedAt || soft.deletedAt,
+                  deletedBy: soft.member.deletedBy || soft.deletedBy || "Super Admin",
+                  previousClinicId: soft.member.previousClinicId || soft.previousClinicId || soft.member.clinicId || updatedStaffMembers[existingIdx].clinicId,
+                  previousClinicName: soft.member.previousClinicName || soft.previousClinicName || (soft.member.clinicId ? clinicNameMap.get(soft.member.clinicId) : null),
+                };
+              }
+              continue;
+            }
             updatedStaffMembers.push({
               ...soft.member,
               status: "Inactive",
@@ -1031,6 +1055,7 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
               previousClinicName: soft.member.previousClinicName || soft.previousClinicName || (soft.member.clinicId ? clinicNameMap.get(soft.member.clinicId) : null),
             });
             existingStaffIds.add(id);
+            if (memberEmail) existingStaffEmails.add(memberEmail);
           }
         }
       }
@@ -1699,25 +1724,32 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
           }
         : undefined;
 
-      storedSoft[command.userId] = {
+      const softRecord = {
         deletedAt: now,
         deletedBy: command.actor.name,
         previousClinicId: member?.clinicId || member?.previousClinicId || null,
         previousClinicName: prevClinicName,
         member: updatedMember,
       };
+      storedSoft[command.userId] = softRecord;
+      if (member?.id && member.id !== command.userId) {
+        storedSoft[member.id] = softRecord;
+      }
+      if (member?.email) {
+        storedSoft[member.email.toLowerCase()] = softRecord;
+      }
       saveSoftDeletedStaffToStorage(storedSoft);
 
-      const hasMember = state.staffMembers.some((m) => m.id === command.userId);
+      const hasMember = state.staffMembers.some((m) => m.id === command.userId || (member?.email && m.email && m.email.toLowerCase() === member.email.toLowerCase()));
       const nextStaffMembers = hasMember
         ? state.staffMembers.map((m) =>
-            m.id === command.userId
+            m.id === command.userId || (member?.email && m.email && m.email.toLowerCase() === member.email.toLowerCase())
               ? {
                   ...m,
                   status: "Inactive",
                   deletedAt: now,
                   deletedBy: command.actor.name,
-                  previousClinicId: m.clinicId || m.previousClinicId,
+                  previousClinicId: m.clinicId || m.previousClinicId || member?.clinicId || member?.previousClinicId || null,
                   previousClinicName: prevClinicName,
                 }
               : m
@@ -1729,10 +1761,14 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
           ...state,
           staffMembers: nextStaffMembers,
           doctors: state.doctors.map((d) =>
-            d.id === command.userId ? { ...d, status: "Inactive" } : d
+            d.id === command.userId || (member?.email && d.email && d.email.toLowerCase() === member.email.toLowerCase())
+              ? { ...d, status: "Inactive" }
+              : d
           ),
           receptionists: state.receptionists.map((r) =>
-            r.id === command.userId ? { ...r, status: "Inactive" } : r
+            r.id === command.userId || (member?.email && r.email && r.email.toLowerCase() === member.email.toLowerCase())
+              ? { ...r, status: "Inactive" }
+              : r
           ),
         },
         command.actor,
@@ -1740,18 +1776,22 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       );
     }
     case "staff.restored": {
-      const member = state.staffMembers.find((m) => m.id === command.userId);
+      const member = state.staffMembers.find((m) => m.id === command.userId)
+        || state.doctors.find((d) => d.id === command.userId)
+        || state.receptionists.find((r) => r.id === command.userId);
       if (member?.email) reactivateUserAccount(member.email);
 
       const storedSoft = loadSoftDeletedStaffFromStorage();
       delete storedSoft[command.userId];
+      if (member?.id) delete storedSoft[member.id];
+      if (member?.email) delete storedSoft[member.email.toLowerCase()];
       saveSoftDeletedStaffToStorage(storedSoft);
 
       return appendAudit(
         {
           ...state,
           staffMembers: state.staffMembers.map((m) =>
-            m.id === command.userId
+            m.id === command.userId || (member?.email && m.email && m.email.toLowerCase() === member.email.toLowerCase())
               ? {
                   ...m,
                   status: m.tempPassword ? "Invited" : "Active",
@@ -1761,10 +1801,10 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
               : m
           ),
           doctors: state.doctors.map((d) =>
-            d.id === command.userId ? { ...d, status: "Active" } : d
+            d.id === command.userId || (member?.email && d.email && d.email.toLowerCase() === member.email.toLowerCase()) ? { ...d, status: "Active" } : d
           ),
           receptionists: state.receptionists.map((r) =>
-            r.id === command.userId ? { ...r, status: "Active" } : r
+            r.id === command.userId || (member?.email && r.email && r.email.toLowerCase() === member.email.toLowerCase()) ? { ...r, status: "Active" } : r
           ),
         },
         command.actor,
@@ -1772,23 +1812,29 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       );
     }
     case "staff.permanently_deleted": {
-      const member = state.staffMembers.find((m) => m.id === command.userId);
+      const member = state.staffMembers.find((m) => m.id === command.userId)
+        || state.doctors.find((d) => d.id === command.userId)
+        || state.receptionists.find((r) => r.id === command.userId);
       if (member?.email) deleteUserAccount(member.email);
 
       const storedSoft = loadSoftDeletedStaffFromStorage();
       delete storedSoft[command.userId];
+      if (member?.id) delete storedSoft[member.id];
+      if (member?.email) delete storedSoft[member.email.toLowerCase()];
       saveSoftDeletedStaffToStorage(storedSoft);
 
       const storedPerm = new Set(loadPermDeletedStaffFromStorage());
       storedPerm.add(command.userId);
+      if (member?.id) storedPerm.add(member.id);
+      if (member?.email) storedPerm.add(member.email.toLowerCase());
       savePermDeletedStaffToStorage(Array.from(storedPerm));
 
       return appendAudit(
         {
           ...state,
-          staffMembers: state.staffMembers.filter((m) => m.id !== command.userId),
-          doctors: state.doctors.filter((d) => d.id !== command.userId),
-          receptionists: state.receptionists.filter((r) => r.id !== command.userId),
+          staffMembers: state.staffMembers.filter((m) => m.id !== command.userId && (!member?.email || !m.email || m.email.toLowerCase() !== member.email.toLowerCase())),
+          doctors: state.doctors.filter((d) => d.id !== command.userId && (!member?.email || !d.email || d.email.toLowerCase() !== member.email.toLowerCase())),
+          receptionists: state.receptionists.filter((r) => r.id !== command.userId && (!member?.email || !r.email || r.email.toLowerCase() !== member.email.toLowerCase())),
         },
         command.actor,
         `Permanently deleted staff user ${command.userId}`,
