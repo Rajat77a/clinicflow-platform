@@ -1078,6 +1078,16 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         });
 
       const storedDetailsMap = loadStaffDetailsMap();
+      const updatedStaffMembersEnriched = updatedStaffMembers.map((m) => {
+        const stored = storedDetailsMap[m.id]
+          || (m.email ? storedDetailsMap[m.email.toLowerCase()] : null)
+          || getStoredStaffDetails(m.id, m.email);
+        if (stored?.name && stored.name !== m.name) {
+          return { ...m, name: stored.name, phone: stored.phone || m.phone };
+        }
+        return m;
+      });
+
       const enrichedDoctors = (command.value.doctors || []).map((d) => {
         const dCleanName = (d.name || "").replace(/^Dr\.?\s+/i, "").trim().toLowerCase();
         const stored = storedDetailsMap[d.id]
@@ -1102,7 +1112,9 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       });
 
       const enrichedReceptionists = (command.value.receptionists || []).map((r) => {
-        const stored = storedDetailsMap[r.id] || (r.email ? storedDetailsMap[r.email.toLowerCase()] : null);
+        const stored = storedDetailsMap[r.id]
+          || (r.email ? storedDetailsMap[r.email.toLowerCase()] : null)
+          || getStoredStaffDetails(r.id, r.email);
         if (!stored) return r;
         return {
           ...r,
@@ -1112,13 +1124,63 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         };
       });
 
+      // Synchronize doctor name changes across appointments, prescriptions, and patients
+      const doctorIdToNameMap = new Map<string, string>();
+      const doctorOldNameToNewMap = new Map<string, string>();
+      enrichedDoctors.forEach((d) => {
+        doctorIdToNameMap.set(d.id, d.name);
+        if (d.email) doctorIdToNameMap.set(d.email.toLowerCase(), d.name);
+        const origDoctor = (command.value.doctors || []).find((od) => od.id === d.id);
+        if (origDoctor && origDoctor.name && origDoctor.name !== d.name) {
+          doctorOldNameToNewMap.set(origDoctor.name, d.name);
+          const cleanOld = origDoctor.name.replace(/^Dr\.?\s+/i, "").trim();
+          if (cleanOld) doctorOldNameToNewMap.set(cleanOld, d.name);
+        }
+      });
+
+      const syncedAppointments = (command.value.appointments || []).map((a) => {
+        const newName = (a.doctorId ? doctorIdToNameMap.get(a.doctorId) : null) || doctorOldNameToNewMap.get(a.doctor);
+        if (newName && newName !== a.doctor) {
+          return { ...a, doctor: newName };
+        }
+        return a;
+      });
+
+      const syncedPrescriptions = (command.value.prescriptions || []).map((pr) => {
+        const newName = (pr.doctorId ? doctorIdToNameMap.get(pr.doctorId) : null) || doctorOldNameToNewMap.get(pr.doctor);
+        if (newName && newName !== pr.doctor) {
+          return { ...pr, doctor: newName };
+        }
+        return pr;
+      });
+
+      const syncedPatients = updatedPatients.map((p) => {
+        const newName = (p.doctorId ? doctorIdToNameMap.get(p.doctorId) : null) || (p.doctor ? doctorOldNameToNewMap.get(p.doctor) : null);
+        if (newName && newName !== p.doctor) {
+          return { ...p, doctor: newName };
+        }
+        return p;
+      });
+
+      const syncedClinics = updatedClinics.map((c) => {
+        const matchingAdmin = updatedStaffMembersEnriched.find(
+          (m) => m.clinicId === c.id && m.role === "clinic_admin"
+        );
+        if (matchingAdmin?.name && matchingAdmin.name !== c.adminName) {
+          return { ...c, adminName: matchingAdmin.name };
+        }
+        return c;
+      });
+
       return {
         ...command.value,
-        clinics: updatedClinics,
+        clinics: syncedClinics,
         doctors: enrichedDoctors,
         receptionists: enrichedReceptionists,
-        staffMembers: updatedStaffMembers,
-        patients: updatedPatients,
+        staffMembers: updatedStaffMembersEnriched,
+        patients: syncedPatients,
+        appointments: syncedAppointments,
+        prescriptions: syncedPrescriptions,
         permanentlyDeletedIds: permDeleted,
       };
     }
@@ -1205,14 +1267,18 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       );
 
       const oldDoctor = state.doctors.find((d) => d.id === id);
-      const oldDoctorName = oldDoctor?.name;
+      const oldDoctorName = oldDoctor?.name || targetMember?.name;
+      const cleanOldDoctorName = oldDoctorName ? oldDoctorName.replace(/^Dr\.?\s+/i, "").trim() : null;
       const newDoctorName = name && oldDoctorName && oldDoctorName !== name ? name : null;
+
+      const isClinicAdmin = targetMember?.role === "clinic_admin";
+      const newAdminName = name && isClinicAdmin ? name : null;
 
       return appendAudit(
         {
           ...state,
           staffMembers: state.staffMembers.map((m) => {
-            if (m.id !== id) return m;
+            if (m.id !== id && (!targetMember?.email || !m.email || m.email.toLowerCase() !== targetMember.email.toLowerCase())) return m;
             return {
               ...m,
               ...(name ? { name } : {}),
@@ -1221,7 +1287,7 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
             };
           }),
           doctors: state.doctors.map((d) => {
-            if (d.id !== id) return d;
+            if (d.id !== id && (!targetMember?.email || !d.email || d.email.toLowerCase() !== targetMember.email.toLowerCase())) return d;
             return {
               ...d,
               ...(name ? { name } : {}),
@@ -1238,7 +1304,7 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
             };
           }),
           receptionists: state.receptionists.map((r) => {
-            if (r.id !== id) return r;
+            if (r.id !== id && (!targetMember?.email || !r.email || r.email.toLowerCase() !== targetMember.email.toLowerCase())) return r;
             return {
               ...r,
               ...(name ? { name } : {}),
@@ -1247,23 +1313,28 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
               ...(status ? { status } : {}),
             };
           }),
+          clinics: newAdminName && targetMember?.clinicId
+            ? state.clinics.map((c) =>
+                c.id === targetMember.clinicId ? { ...c, adminName: newAdminName } : c
+              )
+            : state.clinics,
           appointments: newDoctorName
             ? state.appointments.map((a) =>
-                a.doctorId === id || (oldDoctorName && a.doctor === oldDoctorName)
+                a.doctorId === id || (oldDoctorName && a.doctor === oldDoctorName) || (cleanOldDoctorName && a.doctor === cleanOldDoctorName)
                   ? { ...a, doctor: newDoctorName }
                   : a
               )
             : state.appointments,
           patients: newDoctorName
             ? state.patients.map((p) =>
-                oldDoctorName && p.doctor === oldDoctorName
+                p.doctorId === id || (oldDoctorName && p.doctor === oldDoctorName) || (cleanOldDoctorName && p.doctor === cleanOldDoctorName)
                   ? { ...p, doctor: newDoctorName }
                   : p
               )
             : state.patients,
           prescriptions: newDoctorName
             ? state.prescriptions.map((pr) =>
-                oldDoctorName && pr.doctor === oldDoctorName
+                pr.doctorId === id || (oldDoctorName && pr.doctor === oldDoctorName) || (cleanOldDoctorName && pr.doctor === cleanOldDoctorName)
                   ? { ...pr, doctor: newDoctorName }
                   : pr
               )
