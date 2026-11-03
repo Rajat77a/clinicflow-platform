@@ -347,12 +347,22 @@ export function formatLabReportId(labId?: string | null, clinicHint?: string | n
 export function formatAuditAction(action: string, clinicHint?: string | null): string {
   if (!action) return "";
 
-  // 1. Replace "clinic <uuid/id>"
-  let formatted = action.replace(/\bclinic\s+([0-9a-fA-F-]{8,36}|CL-[0-9a-fA-F-]+)\b/gi, (_match, rawId) => {
+  // 1. Replace "hospital <uuid/id>" or "clinic <uuid/id>"
+  let formatted = action.replace(/\b(?:hospital|clinic)\s+([0-9a-fA-F-]{8,36}|CL-[0-9a-fA-F-]+)\b/gi, (_match, rawId) => {
     return `clinic ${formatClinicCode(rawId || clinicHint)}`;
   });
 
-  // 2. Replace "patient <name> (<id>)" or "patient <id>"
+  // 2. Replace "hospital_subscription <uuid/id>" or "subscription <uuid/id>"
+  formatted = formatted.replace(/\b(?:hospital_subscription|subscription)\s+([0-9a-fA-F-]{8,36}|SUB-[0-9a-fA-F-]+)\b/gi, (_match, rawId) => {
+    return `subscription ${formatClinicEntityId("SUB", rawId, clinicHint)}`;
+  });
+
+  // 3. Replace "staff_memberships <uuid/id>" or "staff_membership <uuid/id>"
+  formatted = formatted.replace(/\bstaff_memberships?\s+([0-9a-fA-F-]{8,36}|ST-[0-9a-fA-F-]+)\b/gi, (_match, rawId) => {
+    return `staff member ${formatClinicEntityId("ST", rawId, clinicHint)}`;
+  });
+
+  // 4. Replace "patient <name> (<id>)" or "patient <id>"
   formatted = formatted.replace(/\bpatient\s+([^()]+?)\s+\(([0-9a-fA-F-]{8,36}|PT-[0-9a-fA-F-]+)\)/gi, (_match, name, rawId) => {
     return `patient ${name.trim()} (${formatPatientId(rawId, undefined, clinicHint)})`;
   });
@@ -360,34 +370,39 @@ export function formatAuditAction(action: string, clinicHint?: string | null): s
     return `patient ${formatPatientId(rawId, undefined, clinicHint)}`;
   });
 
-  // 3. Replace "doctor <id>"
+  // 5. Replace "doctor <id>"
   formatted = formatted.replace(/\bdoctor\s+([0-9a-fA-F-]{8,36}|DR-[0-9a-fA-F-]+)\b/gi, (_match, rawId) => {
     return `doctor ${formatDoctorId(rawId, clinicHint)}`;
   });
 
-  // 4. Replace "receptionist <id>"
+  // 6. Replace "receptionist <id>"
   formatted = formatted.replace(/\breceptionist\s+([0-9a-fA-F-]{8,36}|RC-[0-9a-fA-F-]+)\b/gi, (_match, rawId) => {
     return `receptionist ${formatClinicEntityId("RC", rawId, clinicHint)}`;
   });
 
-  // 5. Replace "appointment <id>"
+  // 7. Replace "appointment <id>"
   formatted = formatted.replace(/\bappointment\s+([0-9a-fA-F-]{8,36}|AP-[0-9a-fA-F-]+)\b/gi, (_match, rawId) => {
     return `appointment ${formatAppointmentId(rawId, clinicHint)}`;
   });
 
-  // 6. Replace "prescription <id>"
+  // 8. Replace "prescription <id>"
   formatted = formatted.replace(/\bprescription\s+([0-9a-fA-F-]{8,36}|RX-[0-9a-fA-F-]+)\b/gi, (_match, rawId) => {
     return `prescription ${formatPrescriptionId(rawId, clinicHint)}`;
   });
 
-  // 7. Replace "invoice <id>" or "bill <id>"
+  // 9. Replace "invoice <id>" or "bill <id>"
   formatted = formatted.replace(/\b(?:invoice|bill)\s+([0-9a-fA-F-]{8,36}|INV-[0-9a-fA-F-]+)\b/gi, (_match, rawId) => {
     return `invoice ${formatInvoiceId(rawId, clinicHint)}`;
   });
 
-  // 8. Replace "staff member <id>" or "user <id>"
+  // 10. Replace "staff member <id>" or "user <id>"
   formatted = formatted.replace(/\b(?:staff member|user)\s+([0-9a-fA-F-]{8,36}|ST-[0-9a-fA-F-]+)\b/gi, (_match, rawId) => {
     return `staff member ${formatClinicEntityId("ST", rawId, clinicHint)}`;
+  });
+
+  // 11. Generic fallback: Any remaining raw UUID (8-4-4-4-12 hex or similar long ID) in audit action
+  formatted = formatted.replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi, (rawUuid) => {
+    return formatClinicCode(rawUuid || clinicHint);
   });
 
   return formatted;
