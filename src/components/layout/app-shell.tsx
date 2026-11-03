@@ -36,6 +36,7 @@ import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useAuth, ROLE_LABELS, type Role } from "@/lib/auth";
 import { canAccessPath } from "@/lib/access-control";
 import { useWorkspaceData, getStoredStaffDetails } from "@/lib/workspace-data";
+import { formatDoctorId, formatInvoiceId, formatPatientId, resolveClinicCode } from "@/lib/prescription-fields";
 import { SidebarNav } from "./sidebar-nav";
 
 function ClinicMark({ initials }: { initials: string }) {
@@ -139,7 +140,7 @@ function GlobalSearch() {
         id: doctor.id,
         kind: "doctor",
         name: doctor.name,
-        detail: `${doctor.specialty} · ${doctor.id}`,
+        detail: `${doctor.specialty} · ${formatDoctorId(doctor.id, resolveClinicCode(doctor.clinicId, clinics, user?.clinicId))}`,
       }));
     const appointmentResults: SearchResult[] = (canSearchAppointments ? appointments : [])
       .filter((appointment) =>
@@ -165,7 +166,7 @@ function GlobalSearch() {
         patientId: bill.patientId,
         kind: "invoice",
         name: bill.patient,
-        detail: `${bill.id} - ${bill.status}`,
+        detail: `${formatInvoiceId(bill.id, resolveClinicCode(bill.clinicId, clinics, user?.clinicId))} - ${bill.status}`,
       }));
     const workspaceResults = [...doctorResults, ...appointmentResults, ...invoiceResults];
     setSearching(true);
@@ -177,7 +178,7 @@ function GlobalSearch() {
             id: patient.id,
             kind: "patient",
             name: patient.name,
-            detail: `${patient.medicalRecordNumber ?? patient.id} · ${patient.phone}`,
+            detail: `${formatPatientId(patient.id, patient.medicalRecordNumber, resolveClinicCode(patient.clinicId, clinics, user?.clinicId))} · ${patient.phone}`,
           }));
           setResults([...patientResults, ...workspaceResults].slice(0, 10));
         })

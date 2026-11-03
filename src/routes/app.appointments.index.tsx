@@ -179,7 +179,7 @@ function AppointmentsPage() {
 
       <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent className="max-w-md">
-          <DialogHeader><DialogTitle>Edit appointment {editing?.id}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>Edit appointment {editing ? formatAppointmentId(editing.id, resolveClinicCode(editing.clinicId, clinics, user?.clinicId)) : ""}</DialogTitle></DialogHeader>
           {draft && (
             <div className="space-y-3">
               <div className="text-sm">
