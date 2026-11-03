@@ -35,7 +35,7 @@ import {
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useAuth, ROLE_LABELS, type Role } from "@/lib/auth";
 import { canAccessPath } from "@/lib/access-control";
-import { useWorkspaceData } from "@/lib/workspace-data";
+import { useWorkspaceData, getStoredStaffDetails } from "@/lib/workspace-data";
 import { SidebarNav } from "./sidebar-nav";
 
 function ClinicMark({ initials }: { initials: string }) {
@@ -310,23 +310,32 @@ export function AppShell({ children }: { children: ReactNode }) {
   const [dark, setDark] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   
-  // Resolve most up-to-date staff name for current user
+  // Resolve most up-to-date staff name for current user across all roles and storage
   const matchingStaff = useMemo(() => {
     if (!user) return null;
     const list = user.role === "doctor" ? doctors : user.role === "receptionist" ? receptionists : staffMembers;
-    return (
+    const directMatch = (
       list.find((m) => m.id === user.userId || (m.email && user.email && m.email.toLowerCase() === user.email.toLowerCase())) ||
-      staffMembers.find((m) => m.id === user.userId || (m.email && user.email && m.email.toLowerCase() === user.email.toLowerCase()))
+      staffMembers.find((m) => m.id === user.userId || (m.email && user.email && m.email.toLowerCase() === user.email.toLowerCase())) ||
+      doctors.find((d) => d.id === user.userId || (d.email && user.email && d.email.toLowerCase() === user.email.toLowerCase())) ||
+      receptionists.find((r) => r.id === user.userId || (r.email && user.email && r.email.toLowerCase() === user.email.toLowerCase()))
     );
+    return directMatch;
   }, [user, doctors, receptionists, staffMembers]);
 
-  const effectiveDisplayName = matchingStaff?.name || user?.name || "";
+  const storedOverrideName = useMemo(() => {
+    if (!user) return "";
+    const stored = getStoredStaffDetails(user.userId, user.email);
+    return stored?.name || "";
+  }, [user, matchingStaff]);
+
+  const effectiveDisplayName = storedOverrideName || matchingStaff?.name || user?.name || "";
 
   useEffect(() => {
-    if (matchingStaff?.name && user?.name && matchingStaff.name !== user.name && updateCurrentUserProfile) {
-      updateCurrentUserProfile({ name: matchingStaff.name });
+    if (effectiveDisplayName && user?.name && effectiveDisplayName !== user.name && updateCurrentUserProfile) {
+      updateCurrentUserProfile({ name: effectiveDisplayName });
     }
-  }, [matchingStaff?.name, user?.name, updateCurrentUserProfile]);
+  }, [effectiveDisplayName, user?.name, updateCurrentUserProfile]);
   
   // -- ROLE SWITCHER LOGIC --
   const [availableRoles, setAvailableRoles] = useState<{role_code: string, hospital_id: string, hospital_name?: string}[]>([]);
