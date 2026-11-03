@@ -12,7 +12,7 @@ import { useWorkspaceData, getStoredStaffDetails, type Prescription } from "@/li
 import { sendWhatsApp, formatBillWhatsAppMessage } from "@/lib/whatsapp";
 import { printDocument } from "@/lib/exporters";
 import { formatPatientId, formatBillCopyText, formatPrescriptionId, formatInvoiceId, resolveClinicCode } from "@/lib/prescription-fields";
-import { Plus, Trash2, Send, Printer, Pill, Copy } from "lucide-react";
+import { Plus, Trash2, Send, Printer, Pill, Copy, Receipt } from "lucide-react";
 import { toast } from "sonner";
 
 type NewBillSearch = {
@@ -461,55 +461,94 @@ function NewBill() {
         </div>
 
         <aside className="space-y-4 xl:sticky xl:top-24 h-fit">
-          <section className="rounded-2xl border bg-card p-6 shadow-soft">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{user?.clinic}</div>
-            <h3 className="mt-2 font-display text-lg font-bold">Invoice preview</h3>
-            <div className="mt-2 text-xs text-muted-foreground">{patient?.primary ?? "—"} · {patient?.tertiary ?? ""}</div>
-
-            <div className="mt-4 space-y-4">
-              {Object.entries(bySection).map(([sec, items]) => {
-                const secTotal = (items as Line[]).reduce((s, l) => s + l.qty * l.unit, 0);
-                return (
-                  <div key={sec}>
-                    <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{sec}</div>
-                    <div className="mt-1 space-y-1">
-                      {(items as Line[]).map(l => (
-                        <div key={l.id} className="flex justify-between text-sm">
-                          <span className="truncate pr-2">{l.name || "—"} <span className="text-muted-foreground">× {l.qty}</span></span>
-                          <span className="tabular-nums">₹{(l.qty * l.unit).toFixed(2)}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-1 flex justify-between text-xs text-muted-foreground border-t pt-1">
-                      <span>Section subtotal</span><span className="tabular-nums">₹{secTotal.toFixed(2)}</span>
-                    </div>
-                  </div>
-                );
-              })}
+          <section className="rounded-2xl border bg-card p-6 shadow-soft space-y-4">
+            {/* Header branding */}
+            <div className="flex items-center gap-3 border-b pb-4">
+              <div className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-primary to-info text-primary-foreground shadow-xs shrink-0">
+                <Receipt className="h-5 w-5" strokeWidth={2.2} />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground truncate">{user?.clinic ?? "ClinicFlow"}</div>
+                <h3 className="font-display text-base font-bold text-foreground leading-tight">Invoice Preview</h3>
+              </div>
             </div>
 
-            <dl className="mt-4 space-y-1 border-t pt-3 text-sm">
-              <div className="flex justify-between"><dt>Subtotal</dt><dd className="tabular-nums">₹{subtotal.toFixed(2)}</dd></div>
-              <div className="flex justify-between text-muted-foreground"><dt>Discount</dt><dd className="tabular-nums">- ₹{discount.toFixed(2)}</dd></div>
-              <div className="flex justify-between text-muted-foreground"><dt>Tax</dt><dd className="tabular-nums">{tax}%</dd></div>
-              <div className="flex justify-between font-display text-base font-bold pt-2 border-t"><dt>Total</dt><dd className="tabular-nums">₹{total.toFixed(2)}</dd></div>
+            {/* Patient & Clinic Metadata card */}
+            <div className="grid grid-cols-2 gap-3 rounded-xl border bg-muted/20 p-3 text-xs">
+              <div>
+                <div className="font-medium text-muted-foreground">Patient</div>
+                <div className="font-semibold text-sm text-foreground truncate mt-0.5">{patient?.primary ?? "—"}</div>
+                {patient && (
+                  <div className="font-mono text-[11px] font-semibold text-primary mt-0.5">
+                    {formatPatientId(patient.id, patient.raw?.medicalRecordNumber, patient.raw?.clinicId || user?.clinicId)}
+                  </div>
+                )}
+              </div>
+              <div>
+                <div className="font-medium text-muted-foreground">Phone / Contact</div>
+                <div className="font-medium text-foreground truncate mt-0.5">{patient?.tertiary ?? "—"}</div>
+                <div className="text-[11px] text-muted-foreground mt-0.5">Date: {new Date().toLocaleDateString()}</div>
+              </div>
+            </div>
+
+            {/* Structured Itemized Breakdown */}
+            <div className="space-y-3">
+              <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Line Items Breakdown</div>
+              {lines.length === 0 ? (
+                <div className="rounded-xl border border-dashed p-4 text-center text-xs text-muted-foreground italic">
+                  No items added yet. Click categories above or add lines.
+                </div>
+              ) : (
+                <div className="rounded-xl border divide-y overflow-hidden bg-card">
+                  {Object.entries(bySection).map(([sec, items]) => {
+                    const secTotal = (items as Line[]).reduce((s, l) => s + l.qty * l.unit, 0);
+                    return (
+                      <div key={sec} className="p-3 space-y-2">
+                        <div className="flex items-center justify-between text-[11px] font-bold uppercase tracking-wide text-primary">
+                          <span>{sec}</span>
+                          <span className="tabular-nums font-semibold">₹{secTotal.toFixed(2)}</span>
+                        </div>
+                        <div className="space-y-1.5">
+                          {(items as Line[]).map(l => (
+                            <div key={l.id} className="flex items-center justify-between gap-2 text-xs">
+                              <div className="min-w-0 flex-1 truncate text-foreground font-medium">
+                                {l.name || "—"} <span className="text-muted-foreground font-normal">× {l.qty}</span>
+                              </div>
+                              <div className="shrink-0 tabular-nums font-semibold text-foreground">₹{(l.qty * l.unit).toFixed(2)}</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Calculations & Summary Card */}
+            <dl className="space-y-1.5 rounded-xl border bg-muted/20 p-3.5 text-xs">
+              <div className="flex justify-between text-muted-foreground"><dt>Subtotal</dt><dd className="tabular-nums font-medium text-foreground">₹{subtotal.toFixed(2)}</dd></div>
+              <div className="flex justify-between text-muted-foreground"><dt>Discount</dt><dd className="tabular-nums font-medium text-destructive">- ₹{discount.toFixed(2)}</dd></div>
+              <div className="flex justify-between text-muted-foreground"><dt>Tax ({tax}%)</dt><dd className="tabular-nums font-medium text-foreground">₹{taxAmount.toFixed(2)}</dd></div>
+              <div className="flex justify-between items-baseline font-display text-base font-bold pt-2 border-t text-foreground"><dt>Total Amount</dt><dd className="tabular-nums text-primary text-lg">₹{total.toFixed(2)}</dd></div>
             </dl>
 
-            <div className="mt-4 flex gap-2">
-              <Button type="button" size="sm" variant="outline" className="flex-1" onClick={printBill} title="Open printer page">
-                <Printer className="mr-1 h-3.5 w-3.5" />Print
+            {/* Quick Actions */}
+            <div className="flex gap-2 pt-1">
+              <Button type="button" size="sm" variant="outline" className="flex-1 h-9" onClick={printBill} title="Open printer page">
+                <Printer className="mr-1.5 h-3.5 w-3.5" />Print
               </Button>
-              <Button type="button" size="sm" variant="outline" className="flex-1" onClick={copyBill} title="Copy bill details">
-                <Copy className="mr-1 h-3.5 w-3.5" />Copy
+              <Button type="button" size="sm" variant="outline" className="flex-1 h-9" onClick={copyBill} title="Copy bill details">
+                <Copy className="mr-1.5 h-3.5 w-3.5" />Copy
               </Button>
-              <Button type="button" size="sm" className="flex-1" onClick={shareBill}>
-                <Send className="mr-1 h-3.5 w-3.5" />WhatsApp
+              <Button type="button" size="sm" className="flex-1 h-9" onClick={shareBill}>
+                <Send className="mr-1.5 h-3.5 w-3.5" />WhatsApp
               </Button>
             </div>
           </section>
           <div className="flex gap-2">
-            <Button type="button" variant="outline" className="flex-1" onClick={() => navigate({ to: "/app/billing" })}>Cancel</Button>
-            <Button type="submit" className="flex-1" disabled={isSaving}>
+            <Button type="button" variant="outline" className="flex-1 h-11" onClick={() => navigate({ to: "/app/billing" })}>Cancel</Button>
+            <Button type="submit" className="flex-1 h-11" disabled={isSaving}>
               {isSaving ? "Creating..." : "Create bill"}
             </Button>
           </div>
