@@ -488,9 +488,11 @@ function ClinicSettings() {
         if (typeof window !== "undefined") {
           if (user?.userId) {
             localStorage.setItem(`cf_profile_doctor_${user.userId}`, JSON.stringify(payload));
+            localStorage.setItem(`cf_profile_receptionist_${user.userId}`, JSON.stringify({ ...payload, name: docName.trim() }));
           }
           if (user?.email) {
             localStorage.setItem(`cf_profile_doctor_${user.email.toLowerCase()}`, JSON.stringify(payload));
+            localStorage.setItem(`cf_profile_receptionist_${user.email.toLowerCase()}`, JSON.stringify({ ...payload, name: docName.trim() }));
           }
         }
 
@@ -515,9 +517,11 @@ function ClinicSettings() {
         if (typeof window !== "undefined") {
           if (user?.userId) {
             localStorage.setItem(`cf_profile_receptionist_${user.userId}`, JSON.stringify(payload));
+            localStorage.setItem(`cf_profile_doctor_${user.userId}`, JSON.stringify({ ...payload, name: recName.trim() }));
           }
           if (user?.email) {
             localStorage.setItem(`cf_profile_receptionist_${user.email.toLowerCase()}`, JSON.stringify(payload));
+            localStorage.setItem(`cf_profile_doctor_${user.email.toLowerCase()}`, JSON.stringify({ ...payload, name: recName.trim() }));
           }
         }
 
@@ -537,6 +541,16 @@ function ClinicSettings() {
           name: genericName.trim(),
           phone: genericPhone.trim() || undefined,
         };
+        if (typeof window !== "undefined") {
+          if (user?.userId) {
+            localStorage.setItem(`cf_profile_doctor_${user.userId}`, JSON.stringify(payload));
+            localStorage.setItem(`cf_profile_receptionist_${user.userId}`, JSON.stringify(payload));
+          }
+          if (user?.email) {
+            localStorage.setItem(`cf_profile_doctor_${user.email.toLowerCase()}`, JSON.stringify(payload));
+            localStorage.setItem(`cf_profile_receptionist_${user.email.toLowerCase()}`, JSON.stringify(payload));
+          }
+        }
         await updateStaff(payload);
         if (updateCurrentUserProfile) {
           updateCurrentUserProfile({ name: genericName.trim() });
