@@ -537,7 +537,8 @@ function DoctorDashboard() {
 }
 
 function ReceptionistDashboard() {
-  const { appointments, patients, bills } = useWorkspaceData();
+  const { user } = useAuth();
+  const { appointments, patients, bills, clinics } = useWorkspaceData();
   const todayDate = localDateKey();
   const today = appointments
     .filter(appointment => appointment.date === todayDate)
