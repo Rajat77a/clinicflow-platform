@@ -128,7 +128,8 @@ function BillingPage() {
     setIsRecordingPayment(true);
     try {
       await updateBill({ ...viewing, status: "Paid", method: payMethod });
-      toast.success(`Invoice ${viewing.id} marked paid`);
+      const billCode = formatInvoiceId(viewing.id, resolveClinicCode(viewing.clinicId, clinics, user?.clinicId));
+      toast.success(`Invoice ${billCode} marked paid`);
       setViewing(null);
     } catch (cause) {
       toast.error(cause instanceof Error ? cause.message : "Unable to record the payment");

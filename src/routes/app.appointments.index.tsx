@@ -99,7 +99,8 @@ function AppointmentsPage() {
     setSaving(true);
     try {
       await updateAppointment(draft);
-      toast.success(`Appointment ${draft.id} updated`);
+      const aptCode = formatAppointmentId(draft.id, resolveClinicCode(draft.clinicId, clinics, user?.clinicId));
+      toast.success(`Appointment ${aptCode} updated`);
       setEditing(null);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to update appointment");
