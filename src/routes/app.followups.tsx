@@ -65,7 +65,7 @@ export function saveFollowupOverrides(overrides: Record<string, { status: string
 
 function FollowUpsPage() {
   const { user } = useAuth();
-  const { appointments, prescriptions, updateAppointment } = useWorkspaceData();
+  const { appointments, prescriptions, updateAppointment, clinics } = useWorkspaceData();
 
   // Selected date state (defaults to today)
   const todayKey = localDateKey();

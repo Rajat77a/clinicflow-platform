@@ -110,7 +110,7 @@ type SearchResult =
 function GlobalSearch() {
   const navigate = useNavigate();
   const { user } = useAuth();
-  const { appointments, bills, doctors, searchPatients } = useWorkspaceData();
+  const { appointments, bills, doctors, searchPatients, clinics } = useWorkspaceData();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [results, setResults] = useState<SearchResult[]>([]);
