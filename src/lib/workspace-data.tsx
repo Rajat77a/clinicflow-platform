@@ -1251,7 +1251,9 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         status,
       } = command.value;
 
-      const targetMember = state.staffMembers.find((m) => m.id === id);
+      const targetMember = state.staffMembers.find((m) => m.id === id)
+        || state.doctors.find((d) => d.id === id)
+        || state.receptionists.find((r) => r.id === id);
       saveStaffDetails(
         id,
         {
@@ -1269,6 +1271,54 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         },
         targetMember?.email
       );
+
+      // Keep individual cf_profile_doctor_* and cf_profile_receptionist_* in sync
+      if (typeof window !== "undefined") {
+        try {
+          const docKeyId = `cf_profile_doctor_${id}`;
+          const recKeyId = `cf_profile_receptionist_${id}`;
+          const existingDoc = localStorage.getItem(docKeyId);
+          if (existingDoc || specialty !== undefined || qualification !== undefined) {
+            const parsed = existingDoc ? JSON.parse(existingDoc) : {};
+            const updated = {
+              ...parsed,
+              id,
+              ...(name ? { name } : {}),
+              ...(phone !== undefined ? { phone } : {}),
+              ...(specialty !== undefined ? { specialty } : {}),
+              ...(gender !== undefined ? { gender } : {}),
+              ...(qualification !== undefined ? { qualification } : {}),
+              ...(medicalRegistrationNumber !== undefined ? { medicalRegistrationNumber } : {}),
+              ...(experienceYears !== undefined ? { experienceYears } : {}),
+              ...(consultationFee !== undefined ? { consultationFee } : {}),
+              ...(workingHours !== undefined ? { workingHours } : {}),
+              ...(notes !== undefined ? { notes } : {}),
+            };
+            localStorage.setItem(docKeyId, JSON.stringify(updated));
+            if (targetMember?.email) {
+              localStorage.setItem(`cf_profile_doctor_${targetMember.email.toLowerCase()}`, JSON.stringify(updated));
+            }
+          }
+
+          const existingRec = localStorage.getItem(recKeyId);
+          if (existingRec || shift !== undefined || (targetMember && (targetMember as any).role === "receptionist")) {
+            const parsed = existingRec ? JSON.parse(existingRec) : {};
+            const updated = {
+              ...parsed,
+              id,
+              ...(name ? { name } : {}),
+              ...(phone !== undefined ? { phone } : {}),
+              ...(shift !== undefined ? { shift } : {}),
+            };
+            localStorage.setItem(recKeyId, JSON.stringify(updated));
+            if (targetMember?.email) {
+              localStorage.setItem(`cf_profile_receptionist_${targetMember.email.toLowerCase()}`, JSON.stringify(updated));
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
 
       const oldDoctor = state.doctors.find((d) => d.id === id);
       const oldDoctorName = oldDoctor?.name || targetMember?.name;
