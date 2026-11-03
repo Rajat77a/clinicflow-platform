@@ -11,7 +11,7 @@ import { useAuth } from "@/lib/auth";
 import { useWorkspaceData, getStoredStaffDetails, type Prescription } from "@/lib/workspace-data";
 import { sendWhatsApp, formatBillWhatsAppMessage } from "@/lib/whatsapp";
 import { printDocument } from "@/lib/exporters";
-import { formatPatientId, formatBillCopyText } from "@/lib/prescription-fields";
+import { formatPatientId, formatBillCopyText, formatPrescriptionId, formatInvoiceId, resolveClinicCode } from "@/lib/prescription-fields";
 import { Plus, Trash2, Send, Printer, Pill, Copy } from "lucide-react";
 import { toast } from "sonner";
 
@@ -37,7 +37,7 @@ function NewBill() {
   const navigate = useNavigate();
   const search = Route.useSearch();
   const { user } = useAuth();
-  const { patients, doctors, prescriptions, searchPatients, getPatient, createBill, listPrescriptions } = useWorkspaceData();
+  const { patients, doctors, prescriptions, searchPatients, getPatient, createBill, listPrescriptions, clinics } = useWorkspaceData();
   const patientOptions = toPatientOptions(patients);
   const searchPatientOptions = useCallback(
     async (query: string) =>
@@ -256,7 +256,8 @@ function NewBill() {
     });
 
     const feeMsg = fee > 0 ? ` and Dr. ${doctorDisplayName}'s consultation fee (₹${fee})` : "";
-    toast.success(`Imported ${medLines.length} medicines${feeMsg} from ${rx.id}`);
+    const rxCode = formatPrescriptionId(rx.id, resolveClinicCode(rx.clinicId, clinics, user?.clinicId));
+    toast.success(`Imported ${medLines.length} medicines${feeMsg} from ${rxCode}`);
   };
 
   const onSubmit = async (e: React.FormEvent) => {
@@ -289,7 +290,8 @@ function NewBill() {
           unit,
         })),
       });
-      toast.success(`Bill ${bill.id} created`);
+      const billCode = formatInvoiceId(bill.id, resolveClinicCode(bill.clinicId, clinics, user?.clinicId));
+      toast.success(`Bill ${billCode} created`);
       navigate({ to: "/app/billing" });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to create the bill");

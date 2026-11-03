@@ -12,7 +12,7 @@ import { useWorkspaceData } from "@/lib/workspace-data";
 import { Activity, Plus, Trash2, Send, Printer, FlaskConical, Paperclip, Upload, X, Copy } from "lucide-react";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { printDocument } from "@/lib/exporters";
-import { formatPatientId, formatPrescriptionCopyText } from "@/lib/prescription-fields";
+import { formatPatientId, formatPrescriptionId, resolveClinicCode, formatPrescriptionCopyText } from "@/lib/prescription-fields";
 import { supabaseConfig } from "@/lib/supabase/config";
 import { toast } from "sonner";
 
@@ -204,7 +204,8 @@ function NewPrescription() {
           patientId: patient.id,
         })));
       }
-      toast.success(edit ? "Prescription updated" : `Prescription ${saved.id} saved`);
+      const rxCode = formatPrescriptionId(saved.id, resolveClinicCode(saved.clinicId, clinics, user?.clinicId));
+      toast.success(edit ? "Prescription updated" : `Prescription ${rxCode} saved`);
       navigate({ to: "/app/prescriptions" });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Unable to save the prescription");
