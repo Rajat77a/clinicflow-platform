@@ -249,7 +249,7 @@ function BillingPage() {
           }
         }}
       >
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl sm:max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader><DialogTitle>Invoice {viewing ? formatInvoiceId(viewing.id, resolveClinicCode(viewing.clinicId, clinics, user?.clinicId)) : ""}</DialogTitle></DialogHeader>
           {viewing && (
             <div className="space-y-4 text-sm">
@@ -371,7 +371,7 @@ function BillingPage() {
               )}
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex-wrap gap-2 sm:justify-end">
             {viewing && (
               <>
                 <Button

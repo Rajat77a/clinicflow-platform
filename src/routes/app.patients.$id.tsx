@@ -948,7 +948,7 @@ function PatientProfile() {
           }
         }}
       >
-        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-2xl sm:max-w-2xl max-h-[90vh] overflow-y-auto overflow-x-hidden">
           <DialogHeader><DialogTitle>Invoice {viewingBill ? formatInvoiceId(viewingBill.id, clinicCode) : ""}</DialogTitle></DialogHeader>
           {viewingBill && (
             <div className="space-y-4 text-sm">
@@ -1062,7 +1062,7 @@ function PatientProfile() {
                 </div>
             </div>
           )}
-          <DialogFooter>
+          <DialogFooter className="flex-wrap gap-2 sm:justify-end">
             {viewingBill && (
               <>
                 <Button variant="outline" onClick={() => printBill(viewingBill)}>
