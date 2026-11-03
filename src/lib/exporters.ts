@@ -150,4 +150,19 @@ export function printDocument(html: string, title = "ClinicFlow") {
   w.document.body.appendChild(w.document.importNode(safeContent, true));
   w.addEventListener("load", () => w.print(), { once: true });
   w.document.close();
+
+  // Directly trigger printer dialog across all modern browsers
+  try {
+    w.focus();
+    setTimeout(() => {
+      try {
+        w.focus();
+        w.print();
+      } catch {
+        // Window closed or blocked
+      }
+    }, 150);
+  } catch {
+    // Ignore
+  }
 }

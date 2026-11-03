@@ -9,10 +9,10 @@ import { EntityPicker, toPatientOptions, toDoctorOptions, type PatientOption, ty
 import { useAuth } from "@/lib/auth";
 import { type LabReport } from "@/lib/workspace-data";
 import { useWorkspaceData } from "@/lib/workspace-data";
-import { Activity, Plus, Trash2, Send, Printer, FlaskConical, Paperclip, Upload, X } from "lucide-react";
+import { Activity, Plus, Trash2, Send, Printer, FlaskConical, Paperclip, Upload, X, Copy } from "lucide-react";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { printDocument } from "@/lib/exporters";
-import { formatPatientId } from "@/lib/prescription-fields";
+import { formatPatientId, formatPrescriptionCopyText } from "@/lib/prescription-fields";
 import { supabaseConfig } from "@/lib/supabase/config";
 import { toast } from "sonner";
 
@@ -245,6 +245,32 @@ function NewPrescription() {
         </tbody>
       </table>
     `, `Prescription ${edit ?? ""}`);
+  };
+
+  const copyRx = () => {
+    const text = formatPrescriptionCopyText({
+      id: edit || "Draft",
+      patient: patient?.primary || "Patient",
+      doctor: doctor?.primary || user?.name || "Doctor",
+      date: new Date().toLocaleDateString(),
+      diagnosis,
+      followUp: followup,
+      medicines: meds,
+      clinicName: user?.clinic,
+      presentingComplaints,
+      pastIllnessHistory,
+      clinicalFindings,
+      treatmentNotes,
+      additionalNotes: notes,
+    });
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(
+        () => toast.success("Copied prescription details to clipboard"),
+        () => toast.error("Could not copy to clipboard"),
+      );
+    } else {
+      toast.info("Clipboard access unavailable");
+    }
   };
 
   const shareRx = async () => {
@@ -616,8 +642,11 @@ function NewPrescription() {
             </div>
             {followup && <div className="mt-3 text-sm"><span className="text-muted-foreground">Follow-up:</span> <span className="font-semibold">{followup}</span></div>}
             <div className="mt-6 flex gap-2">
-              <Button type="button" variant="outline" size="sm" className="flex-1" onClick={printRx}>
+              <Button type="button" variant="outline" size="sm" className="flex-1" onClick={printRx} title="Open printer page">
                 <Printer className="mr-1 h-3.5 w-3.5" />Print
+              </Button>
+              <Button type="button" variant="outline" size="sm" className="flex-1" onClick={copyRx} title="Copy prescription details">
+                <Copy className="mr-1 h-3.5 w-3.5" />Copy
               </Button>
               {supabaseConfig.demoMode && (
                 <Button type="button" size="sm" className="flex-1" onClick={shareRx}>

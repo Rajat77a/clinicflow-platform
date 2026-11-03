@@ -26,6 +26,9 @@ import {
   formatLabReportId,
   formatAppointmentId,
   resolveClinicCode,
+  formatPrescriptionCopyText,
+  formatBillCopyText,
+  formatBillPrintHtml,
 } from "@/lib/prescription-fields";
 import { useAuth } from "@/lib/auth";
 import { hasPermission } from "@/lib/access-control";
@@ -37,7 +40,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import {
   Phone, Mail, MapPin, MessageCircle, Calendar, FileText, Receipt,
   FolderOpen, FlaskConical, Download, Send, Printer, Edit, Eye,
-  Trash2, AlertTriangle, Pencil, Check, X, Upload, Plus, File, ArrowLeft,
+  Trash2, AlertTriangle, Pencil, Check, X, Upload, Plus, File, ArrowLeft, Copy,
 } from "lucide-react";
 import { toast } from "sonner";
 import { useRecordPage } from "@/lib/use-record-page";
@@ -354,6 +357,48 @@ function PatientProfile() {
     return patient.whatsappPhone?.trim() || "";
   };
 
+  const copyRx = (rx: Prescription) => {
+    const text = formatPrescriptionCopyText({
+      ...rx,
+      clinicName: user?.clinic,
+      clinicCode,
+    });
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(
+        () => toast.success(`Copied prescription ${formatPrescriptionId(rx.id, clinicCode)} details to clipboard`),
+        () => toast.error("Could not copy to clipboard"),
+      );
+    } else {
+      toast.info("Clipboard access unavailable");
+    }
+  };
+
+  const printBill = (b: Bill) => {
+    const html = formatBillPrintHtml({
+      ...b,
+      clinicName: user?.clinic,
+      clinicCode,
+      phone: patient.phone || patient.whatsappPhone,
+    });
+    printDocument(html, `Invoice ${formatInvoiceId(b.id, clinicCode)}`);
+  };
+
+  const copyBill = (b: Bill) => {
+    const text = formatBillCopyText({
+      ...b,
+      clinicName: user?.clinic,
+      clinicCode,
+    });
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(
+        () => toast.success(`Copied invoice ${formatInvoiceId(b.id, clinicCode)} details to clipboard`),
+        () => toast.error("Could not copy to clipboard"),
+      );
+    } else {
+      toast.info("Clipboard access unavailable");
+    }
+  };
+
   const shareRx = (rx: Prescription) => {
     const targetPhone = getPatientWhatsAppNumber();
     if (!targetPhone) {
@@ -575,6 +620,15 @@ function PatientProfile() {
                         >
                           <Printer className="h-3.5 w-3.5" />
                         </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => copyRx(r)}
+                          aria-label={`Copy ${r.id}`}
+                          title={`Copy ${r.id}`}
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
                         {canUseExternalSharing && (
                           <Button
                             size="sm"
@@ -690,6 +744,12 @@ function PatientProfile() {
                         <div className="flex justify-end gap-1">
                           <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); setViewingBill(b); }} aria-label={`View ${b.id}`} title={`View ${b.id}`}>
                             <Eye className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); printBill(b); }} aria-label={`Print ${b.id}`} title={`Print invoice`}>
+                            <Printer className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); copyBill(b); }} aria-label={`Copy ${b.id}`} title={`Copy invoice details`}>
+                            <Copy className="h-3.5 w-3.5" />
                           </Button>
                           {canUseExternalSharing && (
                             <Button size="sm" variant="ghost" onClick={(e) => { e.stopPropagation(); shareBill(b); }} aria-label={`Share ${b.id} on WhatsApp`} title="Send on WhatsApp">
@@ -1003,6 +1063,16 @@ function PatientProfile() {
             </div>
           )}
           <DialogFooter>
+            {viewingBill && (
+              <>
+                <Button variant="outline" onClick={() => printBill(viewingBill)}>
+                  <Printer className="mr-1.5 h-4 w-4" />Print
+                </Button>
+                <Button variant="outline" onClick={() => copyBill(viewingBill)}>
+                  <Copy className="mr-1.5 h-4 w-4" />Copy
+                </Button>
+              </>
+            )}
             {canUseExternalSharing && (
               <Button variant="outline" onClick={() => viewingBill && shareBill(viewingBill)}>
                 <Send className="mr-1.5 h-4 w-4" />Send on WhatsApp
@@ -1257,6 +1327,10 @@ function PatientProfile() {
                   <Button variant="outline" size="sm" onClick={() => printRx(viewingRx)}>
                     <Printer className="mr-1.5 h-3.5 w-3.5" />
                     Print
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => copyRx(viewingRx)}>
+                    <Copy className="mr-1.5 h-3.5 w-3.5" />
+                    Copy
                   </Button>
                   {canUseExternalSharing && (
                     <Button variant="default" size="sm" onClick={() => shareRx(viewingRx)}>

@@ -11,8 +11,8 @@ import { useAuth } from "@/lib/auth";
 import { useWorkspaceData, getStoredStaffDetails, type Prescription } from "@/lib/workspace-data";
 import { sendWhatsApp, formatBillWhatsAppMessage } from "@/lib/whatsapp";
 import { printDocument } from "@/lib/exporters";
-import { formatPatientId } from "@/lib/prescription-fields";
-import { Plus, Trash2, Send, Printer, Pill } from "lucide-react";
+import { formatPatientId, formatBillCopyText } from "@/lib/prescription-fields";
+import { Plus, Trash2, Send, Printer, Pill, Copy } from "lucide-react";
 import { toast } from "sonner";
 
 type NewBillSearch = {
@@ -323,6 +323,29 @@ function NewBill() {
 
   const printBill = () => printDocument(billHtml(), "Invoice");
 
+  const copyBill = () => {
+    const text = formatBillCopyText({
+      id: "Draft",
+      patient: patient?.primary || "Patient",
+      date: new Date().toLocaleDateString(),
+      clinicName: user?.clinic,
+      items: lines.map(l => ({ category: l.category, name: l.name || "Item", qty: l.qty, unit: l.unit })),
+      subtotal,
+      discount,
+      tax: taxAmount,
+      amount: total,
+      status: "Draft",
+    });
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(
+        () => toast.success("Copied bill details to clipboard"),
+        () => toast.error("Could not copy to clipboard"),
+      );
+    } else {
+      toast.info("Clipboard access unavailable");
+    }
+  };
+
   const shareBill = async () => {
     if (!patient) return;
     let targetPhone = patient.raw?.whatsappPhone?.trim() || "";
@@ -471,8 +494,11 @@ function NewBill() {
             </dl>
 
             <div className="mt-4 flex gap-2">
-              <Button type="button" size="sm" variant="outline" className="flex-1" onClick={printBill}>
-                <Printer className="mr-1 h-3.5 w-3.5" />Download
+              <Button type="button" size="sm" variant="outline" className="flex-1" onClick={printBill} title="Open printer page">
+                <Printer className="mr-1 h-3.5 w-3.5" />Print
+              </Button>
+              <Button type="button" size="sm" variant="outline" className="flex-1" onClick={copyBill} title="Copy bill details">
+                <Copy className="mr-1 h-3.5 w-3.5" />Copy
               </Button>
               <Button type="button" size="sm" className="flex-1" onClick={shareBill}>
                 <Send className="mr-1 h-3.5 w-3.5" />WhatsApp
