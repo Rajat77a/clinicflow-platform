@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useWorkspaceData, type Appointment, type Prescription } from "@/lib/workspace-data";
+import { formatPatientId, resolveClinicCode } from "@/lib/prescription-fields";
 import { useAuth } from "@/lib/auth";
 import { localDateKey } from "@/lib/calendar";
 import {
@@ -506,7 +507,7 @@ function FollowUpsPage() {
                       {item.patientName}
                     </Link>
                     <div className="text-[11px] text-muted-foreground font-mono">
-                      ID: {item.patientId}
+                      ID: {formatPatientId(item.patientId, undefined, resolveClinicCode(user?.clinicId, clinics))}
                     </div>
                   </div>
                   <Badge

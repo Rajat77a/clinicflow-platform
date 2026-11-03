@@ -1400,7 +1400,7 @@ function TrashBinPage() {
           {restorePatientTarget && (
             <div className="rounded-xl border bg-muted/40 p-3 text-xs space-y-1">
               <div className="font-semibold text-sm text-foreground">{restorePatientTarget.name}</div>
-              <div className="text-muted-foreground">ID: {restorePatientTarget.id}</div>
+              <div className="text-muted-foreground font-mono">ID: {formatPatientId(restorePatientTarget.id, restorePatientTarget.medicalRecordNumber, resolveClinicCode(restorePatientTarget.clinicId, [...clinics, ...binClinics]))}</div>
               {restorePatientTarget.phone && <div className="text-muted-foreground">Phone: {restorePatientTarget.phone}</div>}
               {restorePatientTarget.email && <div className="text-muted-foreground">Email: {restorePatientTarget.email}</div>}
             </div>
@@ -1430,7 +1430,7 @@ function TrashBinPage() {
               {deletePatientTarget && (
                 <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive space-y-1">
                   <div className="font-semibold text-sm">{deletePatientTarget.name}</div>
-                  <div>ID: {deletePatientTarget.id}</div>
+                  <div className="font-mono">ID: {formatPatientId(deletePatientTarget.id, deletePatientTarget.medicalRecordNumber, resolveClinicCode(deletePatientTarget.clinicId, [...clinics, ...binClinics]))}</div>
                   {deletePatientTarget.email && <div>{deletePatientTarget.email}</div>}
                   {deletePatientTarget.phone && <div>{deletePatientTarget.phone}</div>}
                 </div>

@@ -1458,7 +1458,7 @@ function UsersPage() {
                         <div className="flex items-center justify-between gap-2">
                           <div className="font-semibold text-sm text-foreground">{clinic.name}</div>
                           <Badge variant="outline" className="font-mono text-[10px] text-primary border-primary/30 shrink-0">
-                            ID: {clinic.shortId || clinic.id}
+                            ID: {resolveClinicCode(clinic.shortId || clinic.id, clinics)}
                           </Badge>
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1 text-xs text-muted-foreground">

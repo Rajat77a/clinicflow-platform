@@ -10,7 +10,7 @@ import { supabaseConfig } from "@/lib/supabase/config";
 import { getLocalInviteToken, markLocalInviteTokenUsed } from "@/lib/email-service";
 import { MIN_PASSWORD_LENGTH, passwordPolicyError } from "@/lib/password-policy";
 import { saveRegisteredAccount } from "@/lib/account-store";
-import type { Role } from "@/lib/auth";
+import { formatClinicCode } from "@/lib/prescription-fields";
 
 export const Route = createFileRoute("/setup")({
   validateSearch: (search: Record<string, unknown>) => ({
@@ -499,7 +499,7 @@ function SetupPage() {
                 {tokenInfo.hospital_id && (
                   <div>
                     <span className="font-medium text-muted-foreground">Clinic ID: </span>
-                    <span className="font-mono text-primary font-medium">{tokenInfo.hospital_id}</span>
+                    <span className="font-mono text-primary font-medium">{formatClinicCode(tokenInfo.hospital_id)}</span>
                   </div>
                 )}
               </div>
@@ -562,7 +562,7 @@ function SetupPage() {
                       {tokenInfo.hospital_id && (
                         <div>
                           <span className="font-medium text-foreground">Clinic ID: </span>
-                          <span className="font-mono text-[11px] text-primary">{tokenInfo.hospital_id}</span>
+                          <span className="font-mono text-[11px] text-primary">{formatClinicCode(tokenInfo.hospital_id)}</span>
                         </div>
                       )}
                       {tokenInfo.clinic_city && (

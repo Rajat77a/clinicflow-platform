@@ -41,6 +41,7 @@ import {
   type Appointment,
   type Bill,
 } from "@/lib/workspace-data";
+import { formatPatientId, formatAuditAction, resolveClinicCode } from "@/lib/prescription-fields";
 import { loadFollowupOverrides } from "@/routes/app.followups";
 
 export const Route = createFileRoute("/app/")({
@@ -194,7 +195,7 @@ function SuperAdminDashboard() {
             {auditLogs.slice(0, 8).map(entry => (
               <div key={entry.id} className="grid gap-1 px-5 py-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4">
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold">{entry.action}</div>
+                  <div className="truncate text-sm font-semibold">{formatAuditAction(entry.action, resolveClinicCode(entry.clinicId, clinics))}</div>
                   <div className="truncate text-xs text-muted-foreground">{entry.user}</div>
                 </div>
                 <div className="text-xs text-muted-foreground">{entry.date} {entry.time}</div>
@@ -611,7 +612,7 @@ function ReceptionistDashboard() {
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="truncate text-sm font-semibold">{patient.name}</div>
-                    <div className="truncate text-xs text-muted-foreground">{patient.id} - {patient.phone}</div>
+                    <div className="truncate text-xs text-muted-foreground">{formatPatientId(patient.id, patient.medicalRecordNumber, resolveClinicCode(patient.clinicId, clinics, user?.clinicId))} - {patient.phone}</div>
                   </div>
                 </li>
               ))}
