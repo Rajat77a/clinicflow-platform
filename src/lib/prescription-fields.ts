@@ -393,4 +393,183 @@ export function formatAuditAction(action: string, clinicHint?: string | null): s
   return formatted;
 }
 
+/**
+ * Generate formatted plain text copy of a bill/invoice suitable for clipboard and messaging.
+ */
+export function formatBillCopyText(bill: {
+  id: string;
+  patient: string;
+  date: string;
+  clinicId?: string;
+  clinicName?: string;
+  items?: { category: string; name: string; qty: number; unit: number }[];
+  subtotal?: number;
+  discount?: number;
+  tax?: number;
+  amount: number;
+  notes?: string;
+  status?: string;
+  clinicCode?: string;
+}): string {
+  const invoiceId = formatInvoiceId(bill.id, bill.clinicCode);
+  const clinic = bill.clinicName || "ClinicFlow";
+  const lines: string[] = [
+    `=== ${clinic} ===`,
+    `INVOICE: ${invoiceId}`,
+    `Patient: ${bill.patient}`,
+    `Date: ${bill.date}`,
+    bill.status ? `Status: ${bill.status}` : "",
+    "",
+    "ITEMS:",
+  ].filter(Boolean);
+
+  if (bill.items && bill.items.length > 0) {
+    bill.items.forEach((item) => {
+      const lineTotal = (item.qty * item.unit).toFixed(2);
+      lines.push(`- ${item.name} (${item.category}): ${item.qty} × ₹${item.unit.toFixed(2)} = ₹${lineTotal}`);
+    });
+  } else {
+    lines.push(`- General Consultation / Services: ₹${bill.amount.toFixed(2)}`);
+  }
+
+  lines.push("");
+  if (bill.subtotal != null && bill.subtotal !== bill.amount) {
+    lines.push(`Subtotal: ₹${bill.subtotal.toFixed(2)}`);
+  }
+  if (bill.discount && bill.discount > 0) {
+    lines.push(`Discount: -₹${bill.discount.toFixed(2)}`);
+  }
+  if (bill.tax && bill.tax > 0) {
+    lines.push(`Tax: ₹${bill.tax.toFixed(2)}`);
+  }
+  lines.push(`TOTAL: ₹${bill.amount.toFixed(2)}`);
+
+  if (bill.notes?.trim()) {
+    lines.push("");
+    lines.push(`Notes: ${bill.notes.trim()}`);
+  }
+
+  return lines.join("\n");
+}
+
+/**
+ * Generate HTML formatted invoice for direct printing.
+ */
+export function formatBillPrintHtml(bill: {
+  id: string;
+  patient: string;
+  patientId?: string;
+  date: string;
+  clinicId?: string;
+  clinicName?: string;
+  items?: { category: string; name: string; qty: number; unit: number }[];
+  subtotal?: number;
+  discount?: number;
+  tax?: number;
+  amount: number;
+  notes?: string;
+  status?: string;
+  clinicCode?: string;
+  phone?: string;
+}): string {
+  const invoiceId = formatInvoiceId(bill.id, bill.clinicCode);
+  const patientIdDisplay = bill.patientId ? ` (${formatPatientId(bill.patientId, undefined, bill.clinicCode)})` : "";
+  const subtotalVal = bill.subtotal ?? bill.amount;
+  const discountVal = bill.discount ?? 0;
+  const taxVal = bill.tax ?? 0;
+
+  // Group items by category
+  const bySection: Record<string, { category: string; name: string; qty: number; unit: number }[]> = {};
+  if (bill.items && bill.items.length > 0) {
+    bill.items.forEach((item) => {
+      const cat = item.category || "Items";
+      (bySection[cat] = bySection[cat] || []).push(item);
+    });
+  } else {
+    bySection["Services"] = [{ category: "Services", name: "Medical Consultation & Care", qty: 1, unit: bill.amount }];
+  }
+
+  return `
+    <h2>${bill.clinicName ?? "ClinicFlow"}</h2>
+    <div class="muted">Invoice ${invoiceId} · ${bill.date}${bill.status ? ` · Status: ${bill.status}` : ""}</div>
+    <div class="card">
+      <div class="row"><b>Patient</b><span>${bill.patient}${patientIdDisplay}</span></div>
+      ${bill.phone ? `<div class="row"><b>Phone</b><span>${bill.phone}</span></div>` : ""}
+      <div class="row"><b>Date</b><span>${bill.date}</span></div>
+      ${bill.status ? `<div class="row"><b>Status</b><span>${bill.status}</span></div>` : ""}
+    </div>
+    ${Object.entries(bySection).map(([sec, items]) => `
+      <h3>${sec}</h3>
+      <table><thead><tr><th>Item</th><th style="text-align:right">Qty</th><th style="text-align:right">Unit</th><th style="text-align:right">Total</th></tr></thead>
+        <tbody>${items.map(l => `<tr><td>${l.name || "—"}</td><td style="text-align:right">${l.qty}</td><td style="text-align:right">₹${l.unit.toFixed(2)}</td><td style="text-align:right">₹${(l.qty * l.unit).toFixed(2)}</td></tr>`).join("")}</tbody></table>
+    `).join("")}
+    <div class="card">
+      <div class="row"><span>Subtotal</span><span>₹${subtotalVal.toFixed(2)}</span></div>
+      ${discountVal > 0 ? `<div class="row"><span>Discount</span><span>- ₹${discountVal.toFixed(2)}</span></div>` : ""}
+      ${taxVal > 0 ? `<div class="row"><span>Tax</span><span>₹${taxVal.toFixed(2)}</span></div>` : ""}
+      <div class="row total"><span>Total</span><span>₹${bill.amount.toFixed(2)}</span></div>
+    </div>
+    ${bill.notes?.trim() ? `<div class="card"><div class="label">Notes / Remarks</div><div class="val">${bill.notes.trim()}</div></div>` : ""}
+  `;
+}
+
+/**
+ * Generate formatted plain text copy of a prescription suitable for clipboard.
+ */
+export function formatPrescriptionCopyText(rx: {
+  id: string;
+  patient: string;
+  doctor: string;
+  date: string;
+  diagnosis?: string;
+  followUp?: string;
+  medicines: { name: string; dosage: string; frequency: string; duration: string }[];
+  clinicName?: string;
+  clinicCode?: string;
+  notes?: string;
+  presentingComplaints?: string;
+  pastIllnessHistory?: string;
+  clinicalFindings?: string;
+  treatmentNotes?: string;
+  additionalNotes?: string;
+  primaryIllness?: string;
+}): string {
+  const rxId = formatPrescriptionId(rx.id, rx.clinicCode);
+  const clinic = rx.clinicName || "ClinicFlow";
+  const details = resolvePrescriptionDetails(rx as any);
+
+  const lines: string[] = [
+    `=== ${clinic} ===`,
+    `PRESCRIPTION: ${rxId}`,
+    `Patient: ${rx.patient}`,
+    `Doctor: ${rx.doctor}`,
+    `Date: ${rx.date}`,
+  ];
+
+  const primary = details.primaryIllness || rx.primaryIllness || (rx.diagnosis && rx.diagnosis !== "Not recorded" ? rx.diagnosis : "");
+  if (primary) lines.push(`Diagnosis: ${primary}`);
+  if (details.presentingComplaints) lines.push(`Presenting Complaints: ${details.presentingComplaints}`);
+  if (details.pastIllnessHistory) lines.push(`History of Past Illness: ${details.pastIllnessHistory}`);
+  if (details.clinicalFindings) lines.push(`Clinical Findings: ${details.clinicalFindings}`);
+  if (details.treatmentNotes) lines.push(`Treatment Notes: ${details.treatmentNotes}`);
+  if (details.additionalNotes) lines.push(`Additional Notes: ${details.additionalNotes}`);
+
+  lines.push("");
+  lines.push("PRESCRIBED MEDICINES (Rx):");
+  if (rx.medicines && rx.medicines.length > 0) {
+    rx.medicines.forEach((m, idx) => {
+      lines.push(`${idx + 1}. ${m.name} — ${m.dosage} | ${m.frequency} | ${m.duration}`);
+    });
+  } else {
+    lines.push("None prescribed.");
+  }
+
+  if (rx.followUp) {
+    lines.push("");
+    lines.push(`Follow-up Date: ${rx.followUp}`);
+  }
+
+  return lines.join("\n");
+}
+
 

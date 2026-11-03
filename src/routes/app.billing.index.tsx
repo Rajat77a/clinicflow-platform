@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { CheckCircle2, Eye, Pencil, Send } from "lucide-react";
+import { CheckCircle2, Eye, Pencil, Send, Printer, Copy } from "lucide-react";
 import { toast } from "sonner";
 import { PaginationFooter } from "@/components/data/pagination-footer";
 import { PageHeader } from "@/components/layout/page-header";
@@ -34,7 +34,8 @@ import { hasPermission } from "@/lib/access-control";
 import { useRecordPage } from "@/lib/use-record-page";
 import { useWorkspaceData, type Bill } from "@/lib/workspace-data";
 import { sendWhatsApp, formatBillWhatsAppMessage } from "@/lib/whatsapp";
-import { formatInvoiceId, resolveClinicCode } from "@/lib/prescription-fields";
+import { formatInvoiceId, resolveClinicCode, formatBillCopyText, formatBillPrintHtml } from "@/lib/prescription-fields";
+import { printDocument } from "@/lib/exporters";
 
 export const Route = createFileRoute("/app/billing/")({ component: BillingPage });
 
@@ -59,6 +60,35 @@ function BillingPage() {
 
   const canEditNotes = user?.role === "clinic_admin" || user?.role === "receptionist" || user?.role === "super_admin";
   const canWriteBilling = user ? hasPermission(user.role, "billing.write") : false;
+
+  const copyBillDetails = (bill: Bill) => {
+    const clinicCode = resolveClinicCode(bill.clinicId, clinics, user?.clinicId);
+    const text = formatBillCopyText({
+      ...bill,
+      clinicName: user?.clinic,
+      clinicCode,
+    });
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(
+        () => toast.success(`Copied invoice ${formatInvoiceId(bill.id, clinicCode)} details to clipboard`),
+        () => toast.error("Could not copy to clipboard"),
+      );
+    } else {
+      toast.info("Clipboard access unavailable");
+    }
+  };
+
+  const printBillDetails = (bill: Bill) => {
+    const clinicCode = resolveClinicCode(bill.clinicId, clinics, user?.clinicId);
+    const p = patients.find(pt => pt.id === bill.patientId);
+    const html = formatBillPrintHtml({
+      ...bill,
+      clinicName: user?.clinic,
+      clinicCode,
+      phone: p?.phone || p?.whatsappPhone,
+    });
+    printDocument(html, `Invoice ${formatInvoiceId(bill.id, clinicCode)}`);
+  };
 
   const shareBillWhatsApp = async (bill: Bill) => {
     let p = patients.find(pt => pt.id === bill.patientId);
@@ -165,6 +195,24 @@ function BillingPage() {
                     >
                       <Eye className="mr-1 h-3.5 w-3.5" />
                       View
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => printBillDetails(bill)}
+                      title="Print invoice"
+                      aria-label={`Print bill ${bill.id}`}
+                    >
+                      <Printer className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => copyBillDetails(bill)}
+                      title="Copy invoice details"
+                      aria-label={`Copy bill ${bill.id}`}
+                    >
+                      <Copy className="h-3.5 w-3.5" />
                     </Button>
                     <Button
                       variant="ghost"
@@ -324,14 +372,32 @@ function BillingPage() {
           )}
           <DialogFooter>
             {viewing && (
-              <Button
-                variant="outline"
-                onClick={() => shareBillWhatsApp(viewing)}
-                title="Send invoice on WhatsApp"
-              >
-                <Send className="mr-1.5 h-4 w-4" />
-                Send on WhatsApp
-              </Button>
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => printBillDetails(viewing)}
+                  title="Print invoice"
+                >
+                  <Printer className="mr-1.5 h-4 w-4" />
+                  Print
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => copyBillDetails(viewing)}
+                  title="Copy invoice details"
+                >
+                  <Copy className="mr-1.5 h-4 w-4" />
+                  Copy
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => shareBillWhatsApp(viewing)}
+                  title="Send invoice on WhatsApp"
+                >
+                  <Send className="mr-1.5 h-4 w-4" />
+                  Send on WhatsApp
+                </Button>
+              </>
             )}
             {canWriteBilling && viewing?.status !== "Paid" && (
               <Button onClick={markPaid} disabled={isRecordingPayment}>

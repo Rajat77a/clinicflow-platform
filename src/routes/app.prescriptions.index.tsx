@@ -7,12 +7,12 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { useAuth } from "@/lib/auth";
 import { useWorkspaceData } from "@/lib/workspace-data";
 import { hasPermission } from "@/lib/access-control";
-import { Plus, FileText, Edit, Eye, Send, Printer } from "lucide-react";
+import { Plus, FileText, Edit, Eye, Send, Printer, Copy } from "lucide-react";
 import { PaginationFooter } from "@/components/data/pagination-footer";
 import { useRecordPage } from "@/lib/use-record-page";
 import { sendWhatsApp } from "@/lib/whatsapp";
 import { printDocument } from "@/lib/exporters";
-import { resolvePrescriptionDetails, formatPatientId, formatPrescriptionId, resolveClinicCode } from "@/lib/prescription-fields";
+import { resolvePrescriptionDetails, formatPatientId, formatPrescriptionId, resolveClinicCode, formatPrescriptionCopyText } from "@/lib/prescription-fields";
 import { toast } from "sonner";
 import type { Prescription } from "@/lib/workspace-data";
 
@@ -34,6 +34,23 @@ function PrescriptionsPage() {
   const canEdit = canCreateRx;
 
   const [viewingRx, setViewingRx] = useState<Prescription | null>(null);
+
+  const copyRx = (rx: Prescription) => {
+    const clinicCode = resolveClinicCode(rx.clinicId, clinics, user?.clinicId);
+    const text = formatPrescriptionCopyText({
+      ...rx,
+      clinicName: user?.clinic,
+      clinicCode,
+    });
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(
+        () => toast.success(`Copied prescription ${formatPrescriptionId(rx.id, clinicCode)} details to clipboard`),
+        () => toast.error("Could not copy to clipboard"),
+      );
+    } else {
+      toast.info("Clipboard access unavailable");
+    }
+  };
 
   const printRx = (rx: Prescription) => {
     const details = resolvePrescriptionDetails(rx);
@@ -188,6 +205,15 @@ function PrescriptionsPage() {
                         aria-label={`Print prescription ${r.id}`}
                       >
                         <Printer className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => copyRx(r)}
+                        title="Copy prescription details"
+                        aria-label={`Copy prescription ${r.id}`}
+                      >
+                        <Copy className="h-3.5 w-3.5" />
                       </Button>
                       <Button
                         size="sm"
@@ -359,6 +385,10 @@ function PrescriptionsPage() {
                 <Button variant="outline" size="sm" onClick={() => printRx(viewingRx)}>
                   <Printer className="mr-1.5 h-3.5 w-3.5" />
                   Print
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => copyRx(viewingRx)}>
+                  <Copy className="mr-1.5 h-3.5 w-3.5" />
+                  Copy
                 </Button>
                 <Button variant="default" size="sm" onClick={() => shareRxWhatsApp(viewingRx)}>
                   <Send className="mr-1.5 h-3.5 w-3.5" />
