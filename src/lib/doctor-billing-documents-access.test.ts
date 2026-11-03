@@ -7,6 +7,11 @@ const migration = await readFile(
   "utf8",
 );
 
+const writeMigration = await readFile(
+  new URL("../../supabase/migrations/20261103180000_allow_doctor_billing_write.sql", import.meta.url),
+  "utf8",
+);
+
 test("doctor billing access matches clinic staff read-only visibility", () => {
   assert.match(migration, /\('doctor', 'billing\.read'\)/);
   assert.match(migration, /\('doctor', 'documents\.read'\)/);
@@ -18,6 +23,13 @@ test("doctor billing access matches clinic staff read-only visibility", () => {
     migration.indexOf("drop policy if exists documents_select"),
   );
   assert.doesNotMatch(billingPolicies, /can_access_patient/);
+});
+
+test("doctor billing write grants billing.write and removes clinical scope restriction", () => {
+  assert.match(writeMigration, /\('doctor', 'billing\.write'\)/);
+  assert.match(writeMigration, /create policy invoices_insert[\s\S]*hospital_id = private\.current_hospital_id\(\)[\s\S]*private\.has_permission\('billing\.write'\)[\s\S]*created_by = auth\.uid\(\)/);
+  assert.match(writeMigration, /create policy invoice_items_insert[\s\S]*private\.has_permission\('billing\.write'\)/);
+  assert.doesNotMatch(writeMigration, /current_clinical_scope\(\)\s*=\s*'all'/);
 });
 
 test("doctor document access remains patient-scoped", () => {
