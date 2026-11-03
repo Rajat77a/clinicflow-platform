@@ -433,6 +433,95 @@ export type StaffMember = {
   emailError?: string;
 };
 
+
+export const STORAGE_KEY_STAFF_DETAILS = "cf_staff_profile_details";
+
+export interface StoredStaffDetails {
+  name?: string;
+  phone?: string;
+  specialty?: string;
+  gender?: "female" | "male" | "other" | "";
+  qualification?: string;
+  medicalRegistrationNumber?: string;
+  experienceYears?: number;
+  consultationFee?: number;
+  workingHours?: string;
+  notes?: string;
+  shift?: string;
+}
+
+export function loadStaffDetailsMap(): Record<string, StoredStaffDetails> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_STAFF_DETAILS);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+export function saveStaffDetails(identifier: string, details: StoredStaffDetails, secondaryIdentifier?: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const map = loadStaffDetailsMap();
+    const existing = map[identifier] || (secondaryIdentifier ? map[secondaryIdentifier.toLowerCase()] : {}) || {};
+    const merged = { ...existing, ...details };
+    map[identifier] = merged;
+    if (secondaryIdentifier) {
+      map[secondaryIdentifier.toLowerCase()] = merged;
+    }
+    if (merged.name) {
+      map[merged.name] = merged;
+      map[merged.name.toLowerCase()] = merged;
+      const clean = merged.name.replace(/^Dr\.?\s+/i, "").trim().toLowerCase();
+      if (clean) map[clean] = merged;
+    }
+    localStorage.setItem(STORAGE_KEY_STAFF_DETAILS, JSON.stringify(map));
+  } catch {
+    // ignore
+  }
+}
+
+export function getStoredStaffDetails(identifier?: string, secondaryIdentifier?: string): StoredStaffDetails | null {
+  if (!identifier && !secondaryIdentifier) return null;
+  const map = loadStaffDetailsMap();
+  if (identifier && map[identifier]) return map[identifier];
+  if (identifier && map[identifier.toLowerCase()]) return map[identifier.toLowerCase()];
+  if (secondaryIdentifier && map[secondaryIdentifier.toLowerCase()]) return map[secondaryIdentifier.toLowerCase()];
+  
+  const cleanId = (identifier || "").replace(/^Dr\.?\s+/i, "").trim().toLowerCase();
+  if (cleanId && map[cleanId]) return map[cleanId];
+
+  for (const item of Object.values(map)) {
+    if (item?.name) {
+      const cleanItem = item.name.replace(/^Dr\.?\s+/i, "").trim().toLowerCase();
+      if (cleanId && cleanItem === cleanId) return item;
+    }
+  }
+
+  // Also check individual cf_profile_doctor_* and cf_profile_receptionist_* items in localStorage
+  if (typeof window !== "undefined") {
+    try {
+      if (identifier) {
+        const directDoc = localStorage.getItem(`cf_profile_doctor_${identifier}`);
+        if (directDoc) return JSON.parse(directDoc);
+        const directRec = localStorage.getItem(`cf_profile_receptionist_${identifier}`);
+        if (directRec) return JSON.parse(directRec);
+      }
+      if (secondaryIdentifier) {
+        const directDocSec = localStorage.getItem(`cf_profile_doctor_${secondaryIdentifier.toLowerCase()}`);
+        if (directDocSec) return JSON.parse(directDocSec);
+        const directRecSec = localStorage.getItem(`cf_profile_receptionist_${secondaryIdentifier.toLowerCase()}`);
+        if (directRecSec) return JSON.parse(directRecSec);
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  return null;
+}
+
 export const STORAGE_KEY_INVITED_AT = "cf_staff_invited_at";
 
 export function loadInvitedAtMap(): Record<string, string> {
@@ -844,7 +933,8 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
           const clinicDeletedAt = currentMember.clinicId ? softDeletedMap.get(currentMember.clinicId) || updatedClinics.find((c) => c.id === currentMember.clinicId)?.deletedAt : undefined;
 
           // Check if user was directly soft-deleted
-          const softStaffInfo = storedSoftStaff[currentMember.id];
+          const softStaffInfo = storedSoftStaff[currentMember.id]
+            || (currentMember.email ? storedSoftStaff[currentMember.email.toLowerCase()] : undefined);
 
           if (isClinicDeleted) {
             return {
@@ -876,7 +966,9 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       const staffMemberEmailRoles = new Set(updatedStaffMembers.map(m => m.email ? `${m.email.toLowerCase()}-${m.role}` : ""));
 
       (command.value.receptionists || []).forEach((r) => {
-        if (r.status === "Inactive" || storedSoftStaff[r.id] || storedPermStaff.has(r.id)) return;
+        const isSoft = storedSoftStaff[r.id] || (r.email ? storedSoftStaff[r.email.toLowerCase()] : undefined);
+        const isPerm = storedPermStaff.has(r.id) || (r.email ? storedPermStaff.has(r.email.toLowerCase()) : false);
+        if (r.status === "Inactive" || isSoft || isPerm) return;
         const matchingStaff = updatedStaffMembers.find((m) => m.id === r.id || (r.email && m.email && m.email.toLowerCase() === r.email.toLowerCase()));
         if (matchingStaff && (matchingStaff.deletedAt || matchingStaff.status === "Inactive")) return;
         const key = `${r.id}-receptionist`;
@@ -905,7 +997,9 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
 
       // Ensure all doctors are represented in updatedStaffMembers
       (command.value.doctors || []).forEach((d) => {
-        if (d.status === "Inactive" || storedSoftStaff[d.id] || storedPermStaff.has(d.id)) return;
+        const isSoft = storedSoftStaff[d.id] || (d.email ? storedSoftStaff[d.email.toLowerCase()] : undefined);
+        const isPerm = storedPermStaff.has(d.id) || (d.email ? storedPermStaff.has(d.email.toLowerCase()) : false);
+        if (d.status === "Inactive" || isSoft || isPerm) return;
         const matchingStaff = updatedStaffMembers.find((m) => m.id === d.id || (d.email && m.email && m.email.toLowerCase() === d.email.toLowerCase()));
         if (matchingStaff && (matchingStaff.deletedAt || matchingStaff.status === "Inactive")) return;
         const key = `${d.id}-doctor`;
@@ -934,9 +1028,28 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
 
       // Ensure any soft-deleted staff members from storage are preserved in updatedStaffMembers
       const existingStaffIds = new Set(updatedStaffMembers.map((m) => m.id));
+      const existingStaffEmails = new Set(updatedStaffMembers.map((m) => m.email ? m.email.toLowerCase() : ""));
       for (const [id, soft] of Object.entries(storedSoftStaff)) {
         if (!existingStaffIds.has(id) && !storedPermStaff.has(id)) {
           if (soft.member) {
+            const memberEmail = soft.member.email ? soft.member.email.toLowerCase() : "";
+            if (memberEmail && existingStaffEmails.has(memberEmail)) {
+              // If an active copy exists with the same email, mark it inactive
+              const existingIdx = updatedStaffMembers.findIndex(
+                (m) => m.email && m.email.toLowerCase() === memberEmail
+              );
+              if (existingIdx !== -1) {
+                updatedStaffMembers[existingIdx] = {
+                  ...updatedStaffMembers[existingIdx],
+                  status: "Inactive",
+                  deletedAt: soft.member.deletedAt || soft.deletedAt,
+                  deletedBy: soft.member.deletedBy || soft.deletedBy || "Super Admin",
+                  previousClinicId: soft.member.previousClinicId || soft.previousClinicId || soft.member.clinicId || updatedStaffMembers[existingIdx].clinicId,
+                  previousClinicName: soft.member.previousClinicName || soft.previousClinicName || (soft.member.clinicId ? clinicNameMap.get(soft.member.clinicId) : null),
+                };
+              }
+              continue;
+            }
             updatedStaffMembers.push({
               ...soft.member,
               status: "Inactive",
@@ -946,6 +1059,7 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
               previousClinicName: soft.member.previousClinicName || soft.previousClinicName || (soft.member.clinicId ? clinicNameMap.get(soft.member.clinicId) : null),
             });
             existingStaffIds.add(id);
+            if (memberEmail) existingStaffEmails.add(memberEmail);
           }
         }
       }
@@ -967,11 +1081,110 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
           return p;
         });
 
+      const storedDetailsMap = loadStaffDetailsMap();
+      const updatedStaffMembersEnriched = updatedStaffMembers.map((m) => {
+        const stored = storedDetailsMap[m.id]
+          || (m.email ? storedDetailsMap[m.email.toLowerCase()] : null)
+          || getStoredStaffDetails(m.id, m.email);
+        if (stored?.name && stored.name !== m.name) {
+          return { ...m, name: stored.name, phone: stored.phone || m.phone };
+        }
+        return m;
+      });
+
+      const enrichedDoctors = (command.value.doctors || []).map((d) => {
+        const dCleanName = (d.name || "").replace(/^Dr\.?\s+/i, "").trim().toLowerCase();
+        const stored = storedDetailsMap[d.id]
+          || (d.email ? storedDetailsMap[d.email.toLowerCase()] : null)
+          || (d.name ? storedDetailsMap[d.name] || storedDetailsMap[d.name.toLowerCase()] : null)
+          || (dCleanName ? storedDetailsMap[dCleanName] : null)
+          || getStoredStaffDetails(d.id, d.email || d.name);
+        if (!stored) return d;
+        return {
+          ...d,
+          name: stored.name || d.name,
+          phone: stored.phone || d.phone,
+          specialty: stored.specialty || d.specialty,
+          gender: stored.gender !== undefined ? stored.gender : d.gender,
+          qualification: stored.qualification !== undefined ? stored.qualification : d.qualification,
+          medicalRegistrationNumber: stored.medicalRegistrationNumber !== undefined ? stored.medicalRegistrationNumber : d.medicalRegistrationNumber,
+          experienceYears: stored.experienceYears !== undefined ? stored.experienceYears : d.experienceYears,
+          consultationFee: stored.consultationFee !== undefined ? stored.consultationFee : d.consultationFee,
+          workingHours: stored.workingHours !== undefined ? stored.workingHours : d.workingHours,
+          notes: stored.notes !== undefined ? stored.notes : d.notes,
+        };
+      });
+
+      const enrichedReceptionists = (command.value.receptionists || []).map((r) => {
+        const stored = storedDetailsMap[r.id]
+          || (r.email ? storedDetailsMap[r.email.toLowerCase()] : null)
+          || getStoredStaffDetails(r.id, r.email);
+        if (!stored) return r;
+        return {
+          ...r,
+          name: stored.name || r.name,
+          phone: stored.phone || r.phone,
+          shift: stored.shift || r.shift,
+        };
+      });
+
+      // Synchronize doctor name changes across appointments, prescriptions, and patients
+      const doctorIdToNameMap = new Map<string, string>();
+      const doctorOldNameToNewMap = new Map<string, string>();
+      enrichedDoctors.forEach((d) => {
+        doctorIdToNameMap.set(d.id, d.name);
+        if (d.email) doctorIdToNameMap.set(d.email.toLowerCase(), d.name);
+        const origDoctor = (command.value.doctors || []).find((od) => od.id === d.id);
+        if (origDoctor && origDoctor.name && origDoctor.name !== d.name) {
+          doctorOldNameToNewMap.set(origDoctor.name, d.name);
+          const cleanOld = origDoctor.name.replace(/^Dr\.?\s+/i, "").trim();
+          if (cleanOld) doctorOldNameToNewMap.set(cleanOld, d.name);
+        }
+      });
+
+      const syncedAppointments = (command.value.appointments || []).map((a) => {
+        const newName = (a.doctorId ? doctorIdToNameMap.get(a.doctorId) : null) || doctorOldNameToNewMap.get(a.doctor);
+        if (newName && newName !== a.doctor) {
+          return { ...a, doctor: newName };
+        }
+        return a;
+      });
+
+      const syncedPrescriptions = (command.value.prescriptions || []).map((pr) => {
+        const newName = (pr.doctorId ? doctorIdToNameMap.get(pr.doctorId) : null) || doctorOldNameToNewMap.get(pr.doctor);
+        if (newName && newName !== pr.doctor) {
+          return { ...pr, doctor: newName };
+        }
+        return pr;
+      });
+
+      const syncedPatients = updatedPatients.map((p) => {
+        const newName = (p.doctorId ? doctorIdToNameMap.get(p.doctorId) : null) || (p.doctor ? doctorOldNameToNewMap.get(p.doctor) : null);
+        if (newName && newName !== p.doctor) {
+          return { ...p, doctor: newName };
+        }
+        return p;
+      });
+
+      const syncedClinics = updatedClinics.map((c) => {
+        const matchingAdmin = updatedStaffMembersEnriched.find(
+          (m) => m.clinicId === c.id && m.role === "clinic_admin"
+        );
+        if (matchingAdmin?.name && matchingAdmin.name !== c.adminName) {
+          return { ...c, adminName: matchingAdmin.name };
+        }
+        return c;
+      });
+
       return {
         ...command.value,
-        clinics: updatedClinics,
-        staffMembers: updatedStaffMembers,
-        patients: updatedPatients,
+        clinics: syncedClinics,
+        doctors: enrichedDoctors,
+        receptionists: enrichedReceptionists,
+        staffMembers: updatedStaffMembersEnriched,
+        patients: syncedPatients,
+        appointments: syncedAppointments,
+        prescriptions: syncedPrescriptions,
         permanentlyDeletedIds: permDeleted,
       };
     }
@@ -1037,11 +1250,89 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         shift,
         status,
       } = command.value;
+
+      const targetMember = state.staffMembers.find((m) => m.id === id)
+        || state.doctors.find((d) => d.id === id)
+        || state.receptionists.find((r) => r.id === id);
+      saveStaffDetails(
+        id,
+        {
+          ...(name ? { name } : {}),
+          ...(phone !== undefined ? { phone } : {}),
+          ...(specialty ? { specialty } : {}),
+          ...(gender !== undefined ? { gender } : {}),
+          ...(qualification !== undefined ? { qualification } : {}),
+          ...(medicalRegistrationNumber !== undefined ? { medicalRegistrationNumber } : {}),
+          ...(experienceYears !== undefined ? { experienceYears } : {}),
+          ...(consultationFee !== undefined ? { consultationFee } : {}),
+          ...(workingHours !== undefined ? { workingHours } : {}),
+          ...(notes !== undefined ? { notes } : {}),
+          ...(shift !== undefined ? { shift } : {}),
+        },
+        targetMember?.email
+      );
+
+      // Keep individual cf_profile_doctor_* and cf_profile_receptionist_* in sync
+      if (typeof window !== "undefined") {
+        try {
+          const docKeyId = `cf_profile_doctor_${id}`;
+          const recKeyId = `cf_profile_receptionist_${id}`;
+          const existingDoc = localStorage.getItem(docKeyId);
+          if (existingDoc || specialty !== undefined || qualification !== undefined) {
+            const parsed = existingDoc ? JSON.parse(existingDoc) : {};
+            const updated = {
+              ...parsed,
+              id,
+              ...(name ? { name } : {}),
+              ...(phone !== undefined ? { phone } : {}),
+              ...(specialty !== undefined ? { specialty } : {}),
+              ...(gender !== undefined ? { gender } : {}),
+              ...(qualification !== undefined ? { qualification } : {}),
+              ...(medicalRegistrationNumber !== undefined ? { medicalRegistrationNumber } : {}),
+              ...(experienceYears !== undefined ? { experienceYears } : {}),
+              ...(consultationFee !== undefined ? { consultationFee } : {}),
+              ...(workingHours !== undefined ? { workingHours } : {}),
+              ...(notes !== undefined ? { notes } : {}),
+            };
+            localStorage.setItem(docKeyId, JSON.stringify(updated));
+            if (targetMember?.email) {
+              localStorage.setItem(`cf_profile_doctor_${targetMember.email.toLowerCase()}`, JSON.stringify(updated));
+            }
+          }
+
+          const existingRec = localStorage.getItem(recKeyId);
+          if (existingRec || shift !== undefined || (targetMember && (targetMember as any).role === "receptionist")) {
+            const parsed = existingRec ? JSON.parse(existingRec) : {};
+            const updated = {
+              ...parsed,
+              id,
+              ...(name ? { name } : {}),
+              ...(phone !== undefined ? { phone } : {}),
+              ...(shift !== undefined ? { shift } : {}),
+            };
+            localStorage.setItem(recKeyId, JSON.stringify(updated));
+            if (targetMember?.email) {
+              localStorage.setItem(`cf_profile_receptionist_${targetMember.email.toLowerCase()}`, JSON.stringify(updated));
+            }
+          }
+        } catch {
+          // ignore
+        }
+      }
+
+      const oldDoctor = state.doctors.find((d) => d.id === id);
+      const oldDoctorName = oldDoctor?.name || targetMember?.name;
+      const cleanOldDoctorName = oldDoctorName ? oldDoctorName.replace(/^Dr\.?\s+/i, "").trim() : null;
+      const newDoctorName = name && oldDoctorName && oldDoctorName !== name ? name : null;
+
+      const isClinicAdmin = targetMember?.role === "clinic_admin";
+      const newAdminName = name && isClinicAdmin ? name : null;
+
       return appendAudit(
         {
           ...state,
           staffMembers: state.staffMembers.map((m) => {
-            if (m.id !== id) return m;
+            if (m.id !== id && (!targetMember?.email || !m.email || m.email.toLowerCase() !== targetMember.email.toLowerCase())) return m;
             return {
               ...m,
               ...(name ? { name } : {}),
@@ -1050,7 +1341,7 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
             };
           }),
           doctors: state.doctors.map((d) => {
-            if (d.id !== id) return d;
+            if (d.id !== id && (!targetMember?.email || !d.email || d.email.toLowerCase() !== targetMember.email.toLowerCase())) return d;
             return {
               ...d,
               ...(name ? { name } : {}),
@@ -1067,7 +1358,7 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
             };
           }),
           receptionists: state.receptionists.map((r) => {
-            if (r.id !== id) return r;
+            if (r.id !== id && (!targetMember?.email || !r.email || r.email.toLowerCase() !== targetMember.email.toLowerCase())) return r;
             return {
               ...r,
               ...(name ? { name } : {}),
@@ -1076,6 +1367,32 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
               ...(status ? { status } : {}),
             };
           }),
+          clinics: newAdminName && targetMember?.clinicId
+            ? state.clinics.map((c) =>
+                c.id === targetMember.clinicId ? { ...c, adminName: newAdminName } : c
+              )
+            : state.clinics,
+          appointments: newDoctorName
+            ? state.appointments.map((a) =>
+                a.doctorId === id || (oldDoctorName && a.doctor === oldDoctorName) || (cleanOldDoctorName && a.doctor === cleanOldDoctorName)
+                  ? { ...a, doctor: newDoctorName }
+                  : a
+              )
+            : state.appointments,
+          patients: newDoctorName
+            ? state.patients.map((p) =>
+                p.doctorId === id || (oldDoctorName && p.doctor === oldDoctorName) || (cleanOldDoctorName && p.doctor === cleanOldDoctorName)
+                  ? { ...p, doctor: newDoctorName }
+                  : p
+              )
+            : state.patients,
+          prescriptions: newDoctorName
+            ? state.prescriptions.map((pr) =>
+                pr.doctorId === id || (oldDoctorName && pr.doctor === oldDoctorName) || (cleanOldDoctorName && pr.doctor === cleanOldDoctorName)
+                  ? { ...pr, doctor: newDoctorName }
+                  : pr
+              )
+            : state.prescriptions,
         },
         command.actor,
         `Updated staff details for user ${id}`,
@@ -1485,7 +1802,36 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       );
     }
     case "staff.soft_deleted": {
-      const member = state.staffMembers.find((m) => m.id === command.userId);
+      let member = state.staffMembers.find((m) => m.id === command.userId);
+      if (!member) {
+        const doc = state.doctors.find((d) => d.id === command.userId);
+        if (doc) {
+          member = {
+            id: doc.id,
+            clinicId: doc.clinicId,
+            name: doc.name,
+            email: doc.email,
+            phone: doc.phone,
+            role: "doctor",
+            status: "Inactive",
+            specialty: doc.specialty,
+          };
+        } else {
+          const rec = state.receptionists.find((r) => r.id === command.userId);
+          if (rec) {
+            member = {
+              id: rec.id,
+              clinicId: rec.clinicId,
+              name: rec.name,
+              email: rec.email,
+              phone: rec.phone,
+              role: "receptionist",
+              status: "Inactive",
+              shift: rec.shift,
+            };
+          }
+        }
+      }
       if (member?.email) deactivateUserAccount(member.email);
       const now = new Date().toISOString();
       const clinic = member?.clinicId ? state.clinics.find((c) => c.id === member.clinicId) : null;
@@ -1503,35 +1849,51 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
           }
         : undefined;
 
-      storedSoft[command.userId] = {
+      const softRecord = {
         deletedAt: now,
         deletedBy: command.actor.name,
         previousClinicId: member?.clinicId || member?.previousClinicId || null,
         previousClinicName: prevClinicName,
         member: updatedMember,
       };
+      storedSoft[command.userId] = softRecord;
+      if (member?.id && member.id !== command.userId) {
+        storedSoft[member.id] = softRecord;
+      }
+      if (member?.email) {
+        storedSoft[member.email.toLowerCase()] = softRecord;
+      }
       saveSoftDeletedStaffToStorage(storedSoft);
 
-      return appendAudit(
-        {
-          ...state,
-          staffMembers: state.staffMembers.map((m) =>
-            m.id === command.userId
+      const hasMember = state.staffMembers.some((m) => m.id === command.userId || (member?.email && m.email && m.email.toLowerCase() === member.email.toLowerCase()));
+      const nextStaffMembers = hasMember
+        ? state.staffMembers.map((m) =>
+            m.id === command.userId || (member?.email && m.email && m.email.toLowerCase() === member.email.toLowerCase())
               ? {
                   ...m,
                   status: "Inactive",
                   deletedAt: now,
                   deletedBy: command.actor.name,
-                  previousClinicId: m.clinicId || m.previousClinicId,
+                  previousClinicId: m.clinicId || m.previousClinicId || member?.clinicId || member?.previousClinicId || null,
                   previousClinicName: prevClinicName,
                 }
               : m
-          ),
+          )
+        : (updatedMember ? [...state.staffMembers, updatedMember] : state.staffMembers);
+
+      return appendAudit(
+        {
+          ...state,
+          staffMembers: nextStaffMembers,
           doctors: state.doctors.map((d) =>
-            d.id === command.userId ? { ...d, status: "Inactive" } : d
+            d.id === command.userId || (member?.email && d.email && d.email.toLowerCase() === member.email.toLowerCase())
+              ? { ...d, status: "Inactive" }
+              : d
           ),
           receptionists: state.receptionists.map((r) =>
-            r.id === command.userId ? { ...r, status: "Inactive" } : r
+            r.id === command.userId || (member?.email && r.email && r.email.toLowerCase() === member.email.toLowerCase())
+              ? { ...r, status: "Inactive" }
+              : r
           ),
         },
         command.actor,
@@ -1539,18 +1901,22 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       );
     }
     case "staff.restored": {
-      const member = state.staffMembers.find((m) => m.id === command.userId);
+      const member = state.staffMembers.find((m) => m.id === command.userId)
+        || state.doctors.find((d) => d.id === command.userId)
+        || state.receptionists.find((r) => r.id === command.userId);
       if (member?.email) reactivateUserAccount(member.email);
 
       const storedSoft = loadSoftDeletedStaffFromStorage();
       delete storedSoft[command.userId];
+      if (member?.id) delete storedSoft[member.id];
+      if (member?.email) delete storedSoft[member.email.toLowerCase()];
       saveSoftDeletedStaffToStorage(storedSoft);
 
       return appendAudit(
         {
           ...state,
           staffMembers: state.staffMembers.map((m) =>
-            m.id === command.userId
+            m.id === command.userId || (member?.email && m.email && m.email.toLowerCase() === member.email.toLowerCase())
               ? {
                   ...m,
                   status: m.tempPassword ? "Invited" : "Active",
@@ -1560,10 +1926,10 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
               : m
           ),
           doctors: state.doctors.map((d) =>
-            d.id === command.userId ? { ...d, status: "Active" } : d
+            d.id === command.userId || (member?.email && d.email && d.email.toLowerCase() === member.email.toLowerCase()) ? { ...d, status: "Active" } : d
           ),
           receptionists: state.receptionists.map((r) =>
-            r.id === command.userId ? { ...r, status: "Active" } : r
+            r.id === command.userId || (member?.email && r.email && r.email.toLowerCase() === member.email.toLowerCase()) ? { ...r, status: "Active" } : r
           ),
         },
         command.actor,
@@ -1571,23 +1937,29 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
       );
     }
     case "staff.permanently_deleted": {
-      const member = state.staffMembers.find((m) => m.id === command.userId);
+      const member = state.staffMembers.find((m) => m.id === command.userId)
+        || state.doctors.find((d) => d.id === command.userId)
+        || state.receptionists.find((r) => r.id === command.userId);
       if (member?.email) deleteUserAccount(member.email);
 
       const storedSoft = loadSoftDeletedStaffFromStorage();
       delete storedSoft[command.userId];
+      if (member?.id) delete storedSoft[member.id];
+      if (member?.email) delete storedSoft[member.email.toLowerCase()];
       saveSoftDeletedStaffToStorage(storedSoft);
 
       const storedPerm = new Set(loadPermDeletedStaffFromStorage());
       storedPerm.add(command.userId);
+      if (member?.id) storedPerm.add(member.id);
+      if (member?.email) storedPerm.add(member.email.toLowerCase());
       savePermDeletedStaffToStorage(Array.from(storedPerm));
 
       return appendAudit(
         {
           ...state,
-          staffMembers: state.staffMembers.filter((m) => m.id !== command.userId),
-          doctors: state.doctors.filter((d) => d.id !== command.userId),
-          receptionists: state.receptionists.filter((r) => r.id !== command.userId),
+          staffMembers: state.staffMembers.filter((m) => m.id !== command.userId && (!member?.email || !m.email || m.email.toLowerCase() !== member.email.toLowerCase())),
+          doctors: state.doctors.filter((d) => d.id !== command.userId && (!member?.email || !d.email || d.email.toLowerCase() !== member.email.toLowerCase())),
+          receptionists: state.receptionists.filter((r) => r.id !== command.userId && (!member?.email || !r.email || r.email.toLowerCase() !== member.email.toLowerCase())),
         },
         command.actor,
         `Permanently deleted staff user ${command.userId}`,
@@ -2896,8 +3268,42 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           const actor = requireUser(user, "people.manage");
           const targetHospitalId = input.hospitalId || actor.clinicId || state.clinics[0]?.id;
           if (!targetHospitalId) throw new Error("A clinic workspace is required");
+          saveStaffDetails(
+            input.email.trim().toLowerCase(),
+            {
+              name: input.name,
+              phone: input.phone,
+              specialty: input.specialty,
+              gender: input.gender,
+              qualification: input.qualification,
+              medicalRegistrationNumber: input.medicalRegistrationNumber,
+              experienceYears: input.experienceYears,
+              consultationFee: input.consultationFee,
+              workingHours: input.workingHours,
+              notes: input.notes,
+            },
+            input.email.trim().toLowerCase()
+          );
           if (repository) {
             const res = await repository.createDoctor({ ...input, hospitalId: targetHospitalId });
+            if (res.data?.id) {
+              saveStaffDetails(
+                res.data.id,
+                {
+                  name: input.name,
+                  phone: input.phone,
+                  specialty: input.specialty,
+                  gender: input.gender,
+                  qualification: input.qualification,
+                  medicalRegistrationNumber: input.medicalRegistrationNumber,
+                  experienceYears: input.experienceYears,
+                  consultationFee: input.consultationFee,
+                  workingHours: input.workingHours,
+                  notes: input.notes,
+                },
+                input.email.trim().toLowerCase()
+              );
+            }
             await refresh();
             return res;
           }
@@ -2928,8 +3334,28 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           const actor = requireUser(user, "people.manage");
           const targetHospitalId = input.hospitalId || actor.clinicId || state.clinics[0]?.id;
           if (!targetHospitalId) throw new Error("A clinic workspace is required");
+          saveStaffDetails(
+            input.email.trim().toLowerCase(),
+            {
+              name: input.name,
+              phone: input.phone,
+              shift: input.shift,
+            },
+            input.email.trim().toLowerCase()
+          );
           if (repository) {
             const res = await repository.createReceptionist({ ...input, hospitalId: targetHospitalId });
+            if (res.data?.id) {
+              saveStaffDetails(
+                res.data.id,
+                {
+                  name: input.name,
+                  phone: input.phone,
+                  shift: input.shift,
+                },
+                input.email.trim().toLowerCase()
+              );
+            }
             await refresh();
             return res;
           }
@@ -3024,15 +3450,24 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         dispatch({ type: "staff.deactivated", userId, actor });
       },
       updateStaff: async (input) => {
-        const actor = requireUser(user, "people.manage");
         const target = state.staffMembers.find((m) => m.id === input.id);
-        if (
-          actor.role !== "super_admin" &&
-          target?.clinicId &&
-          actor.clinicId &&
-          target.clinicId !== actor.clinicId
-        ) {
-          throw new Error("You can only manage users within your clinic");
+        const isSelf = Boolean(
+          (user?.userId && user.userId === input.id) ||
+          (user?.email && target?.email && user.email.toLowerCase() === target.email.toLowerCase())
+        );
+        let actor: User;
+        if (isSelf && user) {
+          actor = user;
+        } else {
+          actor = requireUser(user, "people.manage");
+          if (
+            actor.role !== "super_admin" &&
+            target?.clinicId &&
+            actor.clinicId &&
+            target.clinicId !== actor.clinicId
+          ) {
+            throw new Error("You can only manage users within your clinic");
+          }
         }
         dispatch({ type: "staff.updated", value: input, actor });
         if (repository?.updateStaff) {
@@ -3046,7 +3481,36 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       },
       softDeleteStaff: async (userId: string) => {
         const actor = requireUser(user, "people.manage");
-        const target = state.staffMembers.find((member) => member.id === userId);
+        let target = state.staffMembers.find((member) => member.id === userId);
+        if (!target) {
+          const doc = state.doctors.find((d) => d.id === userId);
+          if (doc) {
+            target = {
+              id: doc.id,
+              clinicId: doc.clinicId,
+              name: doc.name,
+              email: doc.email,
+              phone: doc.phone,
+              role: "doctor",
+              status: (doc.status as any) || "Active",
+              specialty: doc.specialty,
+            };
+          } else {
+            const rec = state.receptionists.find((r) => r.id === userId);
+            if (rec) {
+              target = {
+                id: rec.id,
+                clinicId: rec.clinicId,
+                name: rec.name,
+                email: rec.email,
+                phone: rec.phone,
+                role: "receptionist",
+                status: (rec.status as any) || "Active",
+                shift: rec.shift,
+              };
+            }
+          }
+        }
         if (!target) throw new Error("Staff member was not found");
         if (target.id === actor.userId) throw new Error("You cannot delete your own account");
         if (
@@ -3074,7 +3538,36 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
       },
       restoreStaff: async (userId: string) => {
         const actor = requireUser(user, "people.manage");
-        const target = state.staffMembers.find((member) => member.id === userId);
+        let target = state.staffMembers.find((member) => member.id === userId);
+        if (!target) {
+          const doc = state.doctors.find((d) => d.id === userId);
+          if (doc) {
+            target = {
+              id: doc.id,
+              clinicId: doc.clinicId,
+              name: doc.name,
+              email: doc.email,
+              phone: doc.phone,
+              role: "doctor",
+              status: "Inactive",
+              specialty: doc.specialty,
+            };
+          } else {
+            const rec = state.receptionists.find((r) => r.id === userId);
+            if (rec) {
+              target = {
+                id: rec.id,
+                clinicId: rec.clinicId,
+                name: rec.name,
+                email: rec.email,
+                phone: rec.phone,
+                role: "receptionist",
+                status: "Inactive",
+                shift: rec.shift,
+              };
+            }
+          }
+        }
         if (!target) throw new Error("Staff member was not found");
         if (
           actor.role !== "super_admin" &&

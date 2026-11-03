@@ -50,7 +50,7 @@ function generateTempPassword() {
 }
 
 function UsersPage() {
-  const { user } = useAuth();
+  const { user, updateCurrentUserProfile } = useAuth();
   const {
     staffMembers,
     binStaffMembers,
@@ -570,6 +570,13 @@ function UsersPage() {
     if (user?.role === "clinic_admin") {
       return member.role !== "super_admin" && (member.clinicId === user.clinicId || !member.clinicId);
     }
+    // Doctors and receptionists can edit their own profile
+    if (
+      (user?.userId && member.id === user.userId) ||
+      (user?.email && member.email && user.email.toLowerCase() === member.email.toLowerCase())
+    ) {
+      return true;
+    }
     return false;
   }, [user]);
 
@@ -618,6 +625,14 @@ function UsersPage() {
       });
       setIsEditingStaff(false);
       setEditTarget(null);
+      if (
+        updateCurrentUserProfile &&
+        user &&
+        (user.userId === editTarget.id ||
+          (user.email && editTarget.email && user.email.toLowerCase() === editTarget.email.toLowerCase()))
+      ) {
+        updateCurrentUserProfile({ name: editStaffName.trim() });
+      }
       toast.success(`Updated details for ${editStaffName.trim()}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to update staff details");
