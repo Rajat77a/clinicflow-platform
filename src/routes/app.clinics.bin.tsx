@@ -1376,13 +1376,8 @@ function TrashBinPage() {
                               <Button
                                 size="sm"
                                 variant="destructive"
-                                disabled={!retention.canPermanentlyDelete}
                                 onClick={() => setDeleteBillTarget(bill)}
-                                title={
-                                  retention.canPermanentlyDelete
-                                    ? `Permanently Delete invoice ${invoiceCode}`
-                                    : `Locked in Trash: 10-day safety hold (${retention.daysUntilEligible} day(s) remaining)`
-                                }
+                                title={`Permanently Delete invoice ${invoiceCode}`}
                               >
                                 <Trash2 className="mr-1.5 h-3.5 w-3.5" />
                                 Delete Permanently
