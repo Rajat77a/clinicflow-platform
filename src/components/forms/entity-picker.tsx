@@ -171,7 +171,7 @@ import { formatPatientId } from "@/lib/prescription-fields";
 export type PatientOption = EntityOption & { raw: Patient };
 export type DoctorOption = EntityOption & { raw: Doctor };
 
-export const toPatientOptions = (patients: Patient[]): PatientOption[] => patients.map(p => {
+export const toPatientOption = (p: Patient): PatientOption => {
   const shortId = formatPatientId(p.id, p.medicalRecordNumber, p.clinicId);
   return {
     id: p.id,
@@ -187,7 +187,9 @@ export const toPatientOptions = (patients: Patient[]): PatientOption[] => patien
     ],
     raw: p,
   };
-});
+};
+
+export const toPatientOptions = (patients: Patient[]): PatientOption[] => patients.map(toPatientOption);
 
 export const toDoctorOptions = (doctors: Doctor[]): DoctorOption[] => doctors.map(d => ({
   id: d.id,

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { EntityPicker, toPatientOptions, type PatientOption } from "@/components/forms/entity-picker";
+import { EntityPicker, toPatientOptions, toPatientOption, type PatientOption } from "@/components/forms/entity-picker";
 import { useAuth } from "@/lib/auth";
 import { useWorkspaceData, getStoredStaffDetails, type Prescription } from "@/lib/workspace-data";
 import { sendWhatsApp, formatBillWhatsAppMessage } from "@/lib/whatsapp";
@@ -148,9 +148,19 @@ function NewBill() {
       const match = patients.find((p) => p.id === search.patient);
       if (match) {
         selectPatient(toPatientOption(match));
+        return;
       }
+      let active = true;
+      void getPatient(search.patient).then((record) => {
+        if (active && record) {
+          selectPatient(toPatientOption(record));
+        }
+      });
+      return () => {
+        active = false;
+      };
     }
-  }, [search.patient, patients]);
+  }, [search.patient, patients, patient, getPatient]);
   const [discount, setDiscount] = useState(0);
   const [tax, setTax] = useState(0);
   const [isSaving, setIsSaving] = useState(false);

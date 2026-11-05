@@ -2458,7 +2458,6 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         `Permanently deleted ${command.billIds.length} bills`,
       );
     }
-    }
   }
 }
 
