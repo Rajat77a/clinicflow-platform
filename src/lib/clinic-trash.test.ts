@@ -421,6 +421,18 @@ test("workspace-data supports patient soft deletion and trash management", () =>
   assert.match(workspaceDataSource, /binPatients/);
 });
 
+test("workspace-data and trash bin support bill soft deletion and trash management for clinical admins", () => {
+  assert.match(workspaceDataSource, /STORAGE_KEY_SOFT_DELETED_BILLS/);
+  assert.match(workspaceDataSource, /STORAGE_KEY_PERM_DELETED_BILLS/);
+  assert.match(workspaceDataSource, /softDeleteBill:\s*async/);
+  assert.match(workspaceDataSource, /restoreBill:\s*async/);
+  assert.match(workspaceDataSource, /permanentlyDeleteBill:\s*async/);
+  assert.match(workspaceDataSource, /binBills/);
+  assert.match(clinicsBinSource, /<TabsTrigger value="bills"/);
+  assert.match(clinicsBinSource, /<TabsContent value="bills"/);
+  assert.match(clinicsBinSource, /Restore Invoice/);
+});
+
 test("setup page displays password conditions with live validation", () => {
   assert.match(setupSource, /Password Conditions/);
   assert.match(setupSource, /At least 8 characters long/);

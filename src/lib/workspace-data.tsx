@@ -38,6 +38,8 @@ const STORAGE_KEY_SOFT_DELETED_STAFF = "cf_soft_deleted_staff";
 const STORAGE_KEY_PERM_DELETED_STAFF = "cf_perm_deleted_staff";
 const STORAGE_KEY_SOFT_DELETED_PATIENTS = "cf_soft_deleted_patients";
 const STORAGE_KEY_PERM_DELETED_PATIENTS = "cf_perm_deleted_patients";
+const STORAGE_KEY_SOFT_DELETED_BILLS = "cf_soft_deleted_bills";
+const STORAGE_KEY_PERM_DELETED_BILLS = "cf_perm_deleted_bills";
 export const STORAGE_KEY_PATIENT_DOCUMENTS = "cf_patient_documents";
 
 export interface PatientDocument {
@@ -102,6 +104,13 @@ export interface StoredSoftDeletedPatient {
   deletedAt: string;
   deletedBy?: string;
   clinicId?: string;
+}
+
+export interface StoredSoftDeletedBill {
+  deletedAt: string;
+  deletedBy?: string;
+  clinicId?: string;
+  bill?: Bill;
 }
 
 export function loadSoftDeletedStaffFromStorage(): Record<string, StoredSoftDeletedStaff> {
@@ -214,6 +223,63 @@ export function savePermDeletedPatientsToStorage(ids: string[]): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(STORAGE_KEY_PERM_DELETED_PATIENTS, JSON.stringify(ids));
+  } catch {
+    // Ignore quota or disabled storage
+  }
+}
+
+export function loadSoftDeletedBillsFromStorage(): Record<string, StoredSoftDeletedBill> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_SOFT_DELETED_BILLS);
+    if (!raw) return {};
+    const parsed: Record<string, StoredSoftDeletedBill> = JSON.parse(raw);
+    const now = Date.now();
+    const purgedIds: string[] = [];
+    const valid: Record<string, StoredSoftDeletedBill> = {};
+    for (const [id, item] of Object.entries(parsed)) {
+      const daysOld = (now - new Date(item.deletedAt).getTime()) / (1000 * 60 * 60 * 24);
+      if (daysOld >= 60) {
+        purgedIds.push(id);
+      } else {
+        valid[id] = item;
+      }
+    }
+    if (purgedIds.length > 0) {
+      saveSoftDeletedBillsToStorage(valid);
+      const perm = new Set(loadPermDeletedBillsFromStorage());
+      purgedIds.forEach((id) => perm.add(id));
+      savePermDeletedBillsToStorage(Array.from(perm));
+    }
+    return valid;
+  } catch {
+    return {};
+  }
+}
+
+export function saveSoftDeletedBillsToStorage(data: Record<string, StoredSoftDeletedBill>): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEY_SOFT_DELETED_BILLS, JSON.stringify(data));
+  } catch {
+    // Ignore quota or disabled storage
+  }
+}
+
+export function loadPermDeletedBillsFromStorage(): string[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_PERM_DELETED_BILLS);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function savePermDeletedBillsToStorage(ids: string[]): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(STORAGE_KEY_PERM_DELETED_BILLS, JSON.stringify(ids));
   } catch {
     // Ignore quota or disabled storage
   }
@@ -404,6 +470,8 @@ export type Bill = {
   notes?: string;
   databaseId?: string;
   version?: number;
+  deletedAt?: string;
+  deletedBy?: string;
 };
 export type AuditEntry = {
   id: string;
@@ -807,6 +875,12 @@ type Command =
   | { type: "patient.bulk_soft_deleted"; patientIds: string[]; actor: AuthUser }
   | { type: "patient.bulk_restored"; patientIds: string[]; actor: AuthUser }
   | { type: "patient.bulk_permanently_deleted"; patientIds: string[]; actor: AuthUser }
+  | { type: "bill.soft_deleted"; billId: string; actor: AuthUser }
+  | { type: "bill.restored"; billId: string; actor: AuthUser }
+  | { type: "bill.permanently_deleted"; billId: string; actor: AuthUser }
+  | { type: "bill.bulk_soft_deleted"; billIds: string[]; actor: AuthUser }
+  | { type: "bill.bulk_restored"; billIds: string[]; actor: AuthUser }
+  | { type: "bill.bulk_permanently_deleted"; billIds: string[]; actor: AuthUser }
   | { type: "patient.updated"; value: Patient; actor: AuthUser }
   | {
       type: "staff.updated";
@@ -1176,6 +1250,23 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         return c;
       });
 
+      const storedSoftBills = loadSoftDeletedBillsFromStorage();
+      const storedPermBills = new Set(loadPermDeletedBillsFromStorage());
+
+      const updatedBills = (command.value.bills || [])
+        .filter((b) => !storedPermBills.has(b.id))
+        .map((b) => {
+          const softBillInfo = storedSoftBills[b.id];
+          if (softBillInfo) {
+            return {
+              ...b,
+              deletedAt: b.deletedAt || softBillInfo.deletedAt,
+              deletedBy: b.deletedBy || softBillInfo.deletedBy || "Clinical Admin",
+            };
+          }
+          return b;
+        });
+
       return {
         ...command.value,
         clinics: syncedClinics,
@@ -1183,6 +1274,7 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         receptionists: enrichedReceptionists,
         staffMembers: updatedStaffMembersEnriched,
         patients: syncedPatients,
+        bills: updatedBills,
         appointments: syncedAppointments,
         prescriptions: syncedPrescriptions,
         permanentlyDeletedIds: permDeleted,
@@ -2232,6 +2324,141 @@ function reducer(state: WorkspaceSnapshot, command: Command): WorkspaceSnapshot 
         `Permanently deleted ${command.patientIds.length} patients`,
       );
     }
+    case "bill.soft_deleted": {
+      const now = new Date().toISOString();
+      const bill = state.bills.find((b) => b.id === command.billId);
+      const storedSoft = loadSoftDeletedBillsFromStorage();
+      storedSoft[command.billId] = {
+        deletedAt: now,
+        deletedBy: command.actor.name,
+        clinicId: bill?.clinicId,
+        bill: bill ? { ...bill, deletedAt: now, deletedBy: command.actor.name } : undefined,
+      };
+      saveSoftDeletedBillsToStorage(storedSoft);
+
+      return appendAudit(
+        {
+          ...state,
+          bills: state.bills.map((b) =>
+            b.id === command.billId
+              ? { ...b, deletedAt: now, deletedBy: command.actor.name }
+              : b
+          ),
+        },
+        command.actor,
+        `Soft deleted bill ${command.billId}`,
+      );
+    }
+    case "bill.restored": {
+      const storedSoft = loadSoftDeletedBillsFromStorage();
+      delete storedSoft[command.billId];
+      saveSoftDeletedBillsToStorage(storedSoft);
+
+      return appendAudit(
+        {
+          ...state,
+          bills: state.bills.map((b) =>
+            b.id === command.billId
+              ? { ...b, deletedAt: undefined, deletedBy: undefined }
+              : b
+          ),
+        },
+        command.actor,
+        `Restored bill ${command.billId}`,
+      );
+    }
+    case "bill.permanently_deleted": {
+      const storedSoft = loadSoftDeletedBillsFromStorage();
+      delete storedSoft[command.billId];
+      saveSoftDeletedBillsToStorage(storedSoft);
+
+      const storedPerm = new Set(loadPermDeletedBillsFromStorage());
+      storedPerm.add(command.billId);
+      savePermDeletedBillsToStorage(Array.from(storedPerm));
+
+      return appendAudit(
+        {
+          ...state,
+          bills: state.bills.filter((b) => b.id !== command.billId),
+        },
+        command.actor,
+        `Permanently deleted bill ${command.billId}`,
+      );
+    }
+    case "bill.bulk_soft_deleted": {
+      const idSet = new Set(command.billIds);
+      const now = new Date().toISOString();
+      const storedSoft = loadSoftDeletedBillsFromStorage();
+      state.bills.forEach((b) => {
+        if (idSet.has(b.id)) {
+          storedSoft[b.id] = {
+            deletedAt: now,
+            deletedBy: command.actor.name,
+            clinicId: b.clinicId,
+            bill: { ...b, deletedAt: now, deletedBy: command.actor.name },
+          };
+        }
+      });
+      saveSoftDeletedBillsToStorage(storedSoft);
+
+      return appendAudit(
+        {
+          ...state,
+          bills: state.bills.map((b) =>
+            idSet.has(b.id)
+              ? { ...b, deletedAt: now, deletedBy: command.actor.name }
+              : b
+          ),
+        },
+        command.actor,
+        `Soft deleted ${command.billIds.length} bills`,
+      );
+    }
+    case "bill.bulk_restored": {
+      const idSet = new Set(command.billIds);
+      const storedSoft = loadSoftDeletedBillsFromStorage();
+      command.billIds.forEach((id) => {
+        delete storedSoft[id];
+      });
+      saveSoftDeletedBillsToStorage(storedSoft);
+
+      return appendAudit(
+        {
+          ...state,
+          bills: state.bills.map((b) =>
+            idSet.has(b.id)
+              ? { ...b, deletedAt: undefined, deletedBy: undefined }
+              : b
+          ),
+        },
+        command.actor,
+        `Restored ${command.billIds.length} bills`,
+      );
+    }
+    case "bill.bulk_permanently_deleted": {
+      const idSet = new Set(command.billIds);
+      const storedSoft = loadSoftDeletedBillsFromStorage();
+      command.billIds.forEach((id) => {
+        delete storedSoft[id];
+      });
+      saveSoftDeletedBillsToStorage(storedSoft);
+
+      const storedPerm = new Set(loadPermDeletedBillsFromStorage());
+      command.billIds.forEach((id) => {
+        storedPerm.add(id);
+      });
+      savePermDeletedBillsToStorage(Array.from(storedPerm));
+
+      return appendAudit(
+        {
+          ...state,
+          bills: state.bills.filter((b) => !idSet.has(b.id)),
+        },
+        command.actor,
+        `Permanently deleted ${command.billIds.length} bills`,
+      );
+    }
+    }
   }
 }
 
@@ -2254,6 +2481,7 @@ interface WorkspaceData {
   staffMembers: StaffMember[];
   binStaffMembers: StaffMember[];
   binPatients: Patient[];
+  binBills: Bill[];
   facilities: Facility[];
   refresh: () => Promise<void>;
   searchPatients: (input?: PatientSearch) => Promise<PatientPage>;
@@ -2293,6 +2521,12 @@ interface WorkspaceData {
   bulkRestorePatients: (patientIds: string[]) => Promise<void>;
   permanentlyDeletePatient: (patientId: string) => Promise<void>;
   bulkPermanentlyDeletePatients: (patientIds: string[]) => Promise<void>;
+  softDeleteBill: (billId: string) => Promise<void>;
+  bulkSoftDeleteBills: (billIds: string[]) => Promise<void>;
+  restoreBill: (billId: string) => Promise<void>;
+  bulkRestoreBills: (billIds: string[]) => Promise<void>;
+  permanentlyDeleteBill: (billId: string) => Promise<void>;
+  bulkPermanentlyDeleteBills: (billIds: string[]) => Promise<void>;
   resetUserPassword: (email: string, newPassword: string) => Promise<void>;
   resendStaffInvitation: (userId: string) => Promise<{ data: StaffMember; setupUrl: string; emailSent?: boolean; emailId?: string; emailError?: string } | void>;
   createPatient: (input: PatientInput) => Promise<Patient>;
@@ -2669,11 +2903,13 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           )
         : [],
       bills: user && hasPermission(user.role, "billing.read")
-        ? clinicScope(state.bills).map((b) => {
-            const storedNotes = loadInvoiceNotesFromStorage();
-            const note = b.notes ?? storedNotes[b.id] ?? (b.databaseId ? storedNotes[b.databaseId] : undefined);
-            return note !== undefined ? { ...b, notes: note } : b;
-          })
+        ? clinicScope(state.bills)
+            .filter((b) => !b.deletedAt && !loadPermDeletedBillsFromStorage().includes(b.id))
+            .map((b) => {
+              const storedNotes = loadInvoiceNotesFromStorage();
+              const note = b.notes ?? storedNotes[b.id] ?? (b.databaseId ? storedNotes[b.databaseId] : undefined);
+              return note !== undefined ? { ...b, notes: note } : b;
+            })
         : [],
       auditLogs: isSuperAdmin
         ? state.auditLogs
@@ -2808,6 +3044,33 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         ? (isSuperAdmin ? state.patients : clinicScope(state.patients))
             .filter((p) => Boolean(p.deletedAt) && isWithinRetentionPeriod(p.deletedAt, 60))
         : [],
+      binBills: user && (user.role === "clinic_admin" || user.role === "super_admin")
+        ? (() => {
+            const storedSoft = loadSoftDeletedBillsFromStorage();
+            const storedPerm = new Set(loadPermDeletedBillsFromStorage());
+            const pool = isSuperAdmin ? state.bills : clinicScope(state.bills);
+            const billMap = new Map<string, Bill>();
+            pool.forEach((b) => {
+              if (b.deletedAt && !storedPerm.has(b.id)) {
+                billMap.set(b.id, b);
+              }
+            });
+            for (const [id, item] of Object.entries(storedSoft)) {
+              if (storedPerm.has(id)) continue;
+              if (item.bill) {
+                const targetClinicId = item.bill.clinicId || item.clinicId;
+                if (isSuperAdmin || !targetClinicId || !clinicId || targetClinicId === clinicId) {
+                  if (!billMap.has(id)) {
+                    billMap.set(id, item.bill);
+                  }
+                }
+              }
+            }
+            return Array.from(billMap.values()).filter((b) =>
+              Boolean(b.deletedAt) && isWithinRetentionPeriod(b.deletedAt!, 60)
+            );
+          })()
+        : [],
       facilities: user && hasPermission(user.role, "facilities.manage")
         ? clinicScope(state.facilities)
         : [],
@@ -2928,10 +3191,27 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         if (!user || !hasPermission(user.role, "billing.read")) {
           return localRecordPage([], input);
         }
-        if (repository) return repository.listBills(input);
+        const softDeletedBills = loadSoftDeletedBillsFromStorage();
+        const permDeletedBills = new Set(loadPermDeletedBillsFromStorage());
+
+        if (repository) {
+          const result = await repository.listBills(input);
+          const filteredRows = result.rows.filter(
+            (b) => !b.deletedAt && !softDeletedBills[b.id] && !permDeletedBills.has(b.id)
+          );
+          return {
+            ...result,
+            rows: filteredRows,
+            total: Math.max(0, result.total - (result.rows.length - filteredRows.length)),
+          };
+        }
         return localRecordPage(
           clinicScope(state.bills).filter(
-            (item) => !input.patientId || item.patientId === input.patientId,
+            (item) =>
+              (!input.patientId || item.patientId === input.patientId) &&
+              !item.deletedAt &&
+              !softDeletedBills[item.id] &&
+              !permDeletedBills.has(item.id),
           ),
           input,
         );
@@ -3851,6 +4131,117 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         }
 
         dispatch({ type: "patient.bulk_permanently_deleted", patientIds: eligibleIds, actor });
+        await refresh().catch(() => undefined);
+      },
+      softDeleteBill: async (billId: string) => {
+        const actor = requireUser(user, "billing.read");
+        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+          throw new Error("Only Clinical Admins can move bills to Trash");
+        }
+        const target = state.bills.find((b) => b.id === billId);
+        if (
+          actor.role !== "super_admin" &&
+          target &&
+          target.clinicId &&
+          actor.clinicId &&
+          target.clinicId !== actor.clinicId
+        ) {
+          throw new Error("You can only manage bills within your clinic");
+        }
+        dispatch({ type: "bill.soft_deleted", billId, actor });
+        await refresh().catch(() => undefined);
+      },
+      bulkSoftDeleteBills: async (billIds: string[]) => {
+        const actor = requireUser(user, "billing.read");
+        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+          throw new Error("Only Clinical Admins can move bills to Trash");
+        }
+        const filteredIds = billIds.filter((id) => {
+          if (actor.role === "super_admin") return true;
+          const target = state.bills.find((b) => b.id === id);
+          return !target || !target.clinicId || !actor.clinicId || target.clinicId === actor.clinicId;
+        });
+        if (!filteredIds.length) return;
+        dispatch({ type: "bill.bulk_soft_deleted", billIds: filteredIds, actor });
+        await refresh().catch(() => undefined);
+      },
+      restoreBill: async (billId: string) => {
+        const actor = requireUser(user, "billing.read");
+        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+          throw new Error("Only Clinical Admins can restore bills");
+        }
+        const target = state.bills.find((b) => b.id === billId);
+        if (
+          actor.role !== "super_admin" &&
+          target &&
+          target.clinicId &&
+          actor.clinicId &&
+          target.clinicId !== actor.clinicId
+        ) {
+          throw new Error("You can only manage bills within your clinic");
+        }
+        dispatch({ type: "bill.restored", billId, actor });
+        await refresh().catch(() => undefined);
+      },
+      bulkRestoreBills: async (billIds: string[]) => {
+        const actor = requireUser(user, "billing.read");
+        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+          throw new Error("Only Clinical Admins can restore bills");
+        }
+        const filteredIds = billIds.filter((id) => {
+          if (actor.role === "super_admin") return true;
+          const target = state.bills.find((b) => b.id === id);
+          return !target || !target.clinicId || !actor.clinicId || target.clinicId === actor.clinicId;
+        });
+        if (!filteredIds.length) return;
+        dispatch({ type: "bill.bulk_restored", billIds: filteredIds, actor });
+        await refresh().catch(() => undefined);
+      },
+      permanentlyDeleteBill: async (billId: string) => {
+        const actor = requireUser(user, "billing.read");
+        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+          throw new Error("Only Clinical Admins can permanently delete bills");
+        }
+        const target = state.bills.find((b) => b.id === billId);
+        if (
+          actor.role !== "super_admin" &&
+          target &&
+          target.clinicId &&
+          actor.clinicId &&
+          target.clinicId !== actor.clinicId
+        ) {
+          throw new Error("You can only manage bills within your clinic");
+        }
+
+        if (target?.deletedAt && !isEligibleForPermanentDelete(target.deletedAt, 10)) {
+          const status = getTrashRetentionStatus(target.deletedAt);
+          throw new Error(`Item must remain in Trash for 10 days before permanent deletion (${status.daysUntilEligible} day(s) remaining).`);
+        }
+
+        dispatch({ type: "bill.permanently_deleted", billId, actor });
+        await refresh().catch(() => undefined);
+      },
+      bulkPermanentlyDeleteBills: async (billIds: string[]) => {
+        const actor = requireUser(user, "billing.read");
+        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+          throw new Error("Only Clinical Admins can permanently delete bills");
+        }
+        const filteredIds = billIds.filter((id) => {
+          if (actor.role === "super_admin") return true;
+          const target = state.bills.find((b) => b.id === id);
+          return !target || !target.clinicId || !actor.clinicId || target.clinicId === actor.clinicId;
+        });
+        if (!filteredIds.length) return;
+
+        const eligibleIds = filteredIds.filter((id) => {
+          const target = state.bills.find((b) => b.id === id);
+          return !target?.deletedAt || isEligibleForPermanentDelete(target.deletedAt, 10);
+        });
+        if (!eligibleIds.length) {
+          throw new Error("Selected bills are still within the 10-day trash retention lock.");
+        }
+
+        dispatch({ type: "bill.bulk_permanently_deleted", billIds: eligibleIds, actor });
         await refresh().catch(() => undefined);
       },
       resetUserPassword: async (email: string, newPassword: string) => {

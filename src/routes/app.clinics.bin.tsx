@@ -12,10 +12,11 @@ import {
   type Clinic,
   type StaffMember,
   type Patient,
+  type Bill,
   getTrashRetentionStatus,
   isEligibleForPermanentDelete,
 } from "@/lib/workspace-data";
-import { resolveClinicCode, formatClinicEntityId, formatPatientId } from "@/lib/prescription-fields";
+import { resolveClinicCode, formatClinicEntityId, formatPatientId, formatInvoiceId } from "@/lib/prescription-fields";
 import {
   Trash2,
   RotateCcw,
@@ -26,6 +27,7 @@ import {
   Building2,
   Users,
   UsersRound,
+  Receipt,
   Info,
   Lock,
   Clock,
@@ -69,17 +71,25 @@ function TrashBinPage() {
     permanentlyDeletePatient,
     bulkRestorePatients,
     bulkPermanentlyDeletePatients,
+    binBills,
+    restoreBill,
+    permanentlyDeleteBill,
+    bulkRestoreBills,
+    bulkPermanentlyDeleteBills,
   } = useWorkspaceData();
 
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set());
   const [selectedPatientIds, setSelectedPatientIds] = useState<Set<string>>(new Set());
+  const [selectedBillIds, setSelectedBillIds] = useState<Set<string>>(new Set());
   const [restoreTarget, setRestoreTarget] = useState<Clinic | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<Clinic | null>(null);
   const [restoreUserTarget, setRestoreUserTarget] = useState<StaffMember | null>(null);
   const [deleteUserTarget, setDeleteUserTarget] = useState<StaffMember | null>(null);
   const [restorePatientTarget, setRestorePatientTarget] = useState<Patient | null>(null);
   const [deletePatientTarget, setDeletePatientTarget] = useState<Patient | null>(null);
+  const [restoreBillTarget, setRestoreBillTarget] = useState<Bill | null>(null);
+  const [deleteBillTarget, setDeleteBillTarget] = useState<Bill | null>(null);
 
   const [showEmptyTrashDialog, setShowEmptyTrashDialog] = useState(false);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
@@ -88,6 +98,8 @@ function TrashBinPage() {
   const [showBulkDeleteUsersDialog, setShowBulkDeleteUsersDialog] = useState(false);
   const [showBulkRestorePatientsDialog, setShowBulkRestorePatientsDialog] = useState(false);
   const [showBulkDeletePatientsDialog, setShowBulkDeletePatientsDialog] = useState(false);
+  const [showBulkRestoreBillsDialog, setShowBulkRestoreBillsDialog] = useState(false);
+  const [showBulkDeleteBillsDialog, setShowBulkDeleteBillsDialog] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const isSuperAdmin = user?.role === "super_admin";
@@ -129,6 +141,13 @@ function TrashBinPage() {
       (p) => !p.clinicId || !user?.clinicId || p.clinicId === user.clinicId
     );
   }, [binPatients, isSuperAdmin, user?.clinicId]);
+
+  const visibleBills = useMemo(() => {
+    if (isSuperAdmin) return binBills;
+    return binBills.filter(
+      (b) => !b.clinicId || !user?.clinicId || b.clinicId === user.clinicId
+    );
+  }, [binBills, isSuperAdmin, user?.clinicId]);
 
   if (!canAccessTrash) {
     return (
@@ -432,6 +451,99 @@ function TrashBinPage() {
     }
   };
 
+  const allBillsSelected = visibleBills.length > 0 && visibleBills.every((b) => selectedBillIds.has(b.id));
+  const someBillsSelected = visibleBills.some((b) => selectedBillIds.has(b.id));
+
+  const toggleSelectAllBills = () => {
+    if (allBillsSelected) {
+      setSelectedBillIds(new Set());
+    } else {
+      setSelectedBillIds(new Set(visibleBills.map((b) => b.id)));
+    }
+  };
+
+  const toggleSelectOneBill = (id: string) => {
+    const next = new Set(selectedBillIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    setSelectedBillIds(next);
+  };
+
+  const handleRestoreBill = async () => {
+    if (!restoreBillTarget) return;
+    setIsProcessing(true);
+    try {
+      await restoreBill(restoreBillTarget.id);
+      setSelectedBillIds((prev) => {
+        const next = new Set(prev);
+        next.delete(restoreBillTarget.id);
+        return next;
+      });
+      const bClinicCode = resolveClinicCode(restoreBillTarget.clinicId, [...clinics, ...binClinics]);
+      toast.success(`Invoice ${formatInvoiceId(restoreBillTarget.id, bClinicCode)} has been restored to active billing`);
+      setRestoreBillTarget(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to restore bill");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handlePermanentDeleteBill = async () => {
+    if (!deleteBillTarget) return;
+    setIsProcessing(true);
+    try {
+      await permanentlyDeleteBill(deleteBillTarget.id);
+      setSelectedBillIds((prev) => {
+        const next = new Set(prev);
+        next.delete(deleteBillTarget.id);
+        return next;
+      });
+      const bClinicCode = resolveClinicCode(deleteBillTarget.clinicId, [...clinics, ...binClinics]);
+      toast.success(`Invoice ${formatInvoiceId(deleteBillTarget.id, bClinicCode)} has been permanently deleted`);
+      setDeleteBillTarget(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to permanently delete bill");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleBulkRestoreBills = async () => {
+    if (selectedBillIds.size === 0) return;
+    setIsProcessing(true);
+    try {
+      const ids = Array.from(selectedBillIds);
+      await bulkRestoreBills(ids);
+      toast.success(`Restored ${ids.length} invoice${ids.length === 1 ? "" : "s"} successfully`);
+      setSelectedBillIds(new Set());
+      setShowBulkRestoreBillsDialog(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to restore selected bills");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleBulkPermanentDeleteBills = async () => {
+    if (selectedBillIds.size === 0) return;
+    setIsProcessing(true);
+    try {
+      const ids = Array.from(selectedBillIds);
+      await bulkPermanentlyDeleteBills(ids);
+      toast.success(`Permanently deleted ${ids.length} invoice${ids.length === 1 ? "" : "s"}`);
+      setSelectedBillIds(new Set());
+      setShowBulkDeleteBillsDialog(false);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Failed to delete selected bills");
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <>
       <PageHeader
@@ -490,7 +602,7 @@ function TrashBinPage() {
       </div>
 
       <Tabs defaultValue="clinics" value={currentTab} onValueChange={setCurrentTab} className="w-full space-y-6">
-        <TabsList className={`grid w-full ${isSuperAdmin ? "max-w-md grid-cols-3" : "max-w-xs grid-cols-2"}`}>
+        <TabsList className={`grid w-full ${isSuperAdmin ? "max-w-xl grid-cols-4" : "max-w-md grid-cols-3"}`}>
           {isSuperAdmin && (
             <TabsTrigger value="clinics" className="gap-2">
               <Building2 className="h-4 w-4" />
@@ -512,6 +624,13 @@ function TrashBinPage() {
             <span>Patients</span>
             <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
               {visiblePatients.length}
+            </Badge>
+          </TabsTrigger>
+          <TabsTrigger value="bills" className="gap-2">
+            <Receipt className="h-4 w-4" />
+            <span>Bills</span>
+            <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
+              {visibleBills.length}
             </Badge>
           </TabsTrigger>
         </TabsList>
@@ -1088,6 +1207,197 @@ function TrashBinPage() {
             </div>
           </div>
         </TabsContent>
+
+        {/* BILLS TAB */}
+        <TabsContent value="bills" className="space-y-4">
+          <div className="rounded-2xl border bg-card shadow-soft">
+            <div className="flex items-center justify-between border-b p-4 text-sm font-medium text-muted-foreground">
+              <div className="flex items-center gap-2">
+                <Receipt className="h-4 w-4 text-destructive" />
+                <span>{visibleBills.length} deleted bill{visibleBills.length === 1 ? "" : "s"} in Trash</span>
+              </div>
+              {visibleBills.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+                  onClick={() => {
+                    setSelectedBillIds(new Set(visibleBills.map((b) => b.id)));
+                    setShowBulkDeleteBillsDialog(true);
+                  }}
+                >
+                  Delete All Bills from Trash
+                </Button>
+              )}
+            </div>
+
+            {/* Bulk Selection Toolbar for Bills */}
+            {selectedBillIds.size > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b bg-destructive/5 px-4 py-3 text-sm">
+                <div className="flex items-center gap-2 font-medium text-foreground">
+                  <CheckSquare className="h-4 w-4 text-destructive" />
+                  <span>{selectedBillIds.size} bill{selectedBillIds.size === 1 ? "" : "s"} selected in Trash</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => setSelectedBillIds(new Set())}
+                    disabled={isProcessing}
+                  >
+                    Clear selection
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="border-emerald-500/40 text-emerald-700 hover:bg-emerald-50"
+                    onClick={() => setShowBulkRestoreBillsDialog(true)}
+                    disabled={isProcessing}
+                  >
+                    <RotateCcw className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
+                    Restore Selected ({selectedBillIds.size})
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    onClick={() => setShowBulkDeleteBillsDialog(true)}
+                    disabled={isProcessing}
+                  >
+                    <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                    Permanently Delete Selected ({selectedBillIds.size})
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-12 text-center">
+                      <input
+                        type="checkbox"
+                        aria-label="Select all deleted bills"
+                        checked={allBillsSelected}
+                        ref={(el) => {
+                          if (el) el.indeterminate = !allBillsSelected && someBillsSelected;
+                        }}
+                        onChange={toggleSelectAllBills}
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary"
+                      />
+                    </TableHead>
+                    <TableHead>Invoice</TableHead>
+                    <TableHead>Patient</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead className="text-right">Amount</TableHead>
+                    <TableHead>Deleted Date</TableHead>
+                    <TableHead>Deleted By</TableHead>
+                    <TableHead>Deletion Period / Status</TableHead>
+                    <TableHead className="text-right">Actions</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {visibleBills.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={9} className="h-32 text-center text-muted-foreground">
+                        The Trash is empty. No deleted bills found.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    visibleBills.map((bill) => {
+                      const deletedFormatted = bill.deletedAt
+                        ? new Date(bill.deletedAt).toLocaleDateString(undefined, {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          })
+                        : "Recently";
+                      const retention = getTrashRetentionStatus(bill.deletedAt);
+                      const bClinicCode = resolveClinicCode(bill.clinicId, [...clinics, ...binClinics]);
+                      const invoiceCode = formatInvoiceId(bill.id, bClinicCode);
+
+                      return (
+                        <TableRow key={bill.id}>
+                          <TableCell className="w-12 text-center">
+                            <input
+                              type="checkbox"
+                              aria-label={`Select invoice ${invoiceCode}`}
+                              checked={selectedBillIds.has(bill.id)}
+                              onChange={() => toggleSelectOneBill(bill.id)}
+                              className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary"
+                            />
+                          </TableCell>
+                          <TableCell className="font-mono text-xs font-semibold text-primary line-through">
+                            {invoiceCode}
+                          </TableCell>
+                          <TableCell className="text-sm font-medium">
+                            {bill.patient}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-sm">
+                            {bill.date}
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums text-sm font-medium">
+                            ₹{bill.amount.toFixed(2)}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground tabular-nums text-sm">
+                            {deletedFormatted}
+                          </TableCell>
+                          <TableCell className="text-muted-foreground text-sm">
+                            {bill.deletedBy || "Clinical Admin"}
+                          </TableCell>
+                          <TableCell>
+                            <div className="space-y-1">
+                              {!retention.canPermanentlyDelete ? (
+                                <Badge variant="outline" className="border-amber-500/40 text-amber-700 bg-amber-500/10 font-medium text-[11px] gap-1">
+                                  <Lock className="h-3 w-3" />
+                                  10-Day Hold ({retention.daysUntilEligible}d left)
+                                </Badge>
+                              ) : (
+                                <Badge variant="outline" className="border-emerald-500/40 text-emerald-700 bg-emerald-500/10 font-medium text-[11px] gap-1">
+                                  Eligible for permanent deletion
+                                </Badge>
+                              )}
+                              <div className="text-[11px] text-muted-foreground tabular-nums">
+                                Auto-purges in {retention.daysUntilPurge} days
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setRestoreBillTarget(bill)}
+                                title={`Restore invoice ${invoiceCode}`}
+                              >
+                                <RotateCcw className="mr-1.5 h-3.5 w-3.5 text-emerald-600" />
+                                Restore
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                disabled={!retention.canPermanentlyDelete}
+                                onClick={() => setDeleteBillTarget(bill)}
+                                title={
+                                  retention.canPermanentlyDelete
+                                    ? `Permanently Delete invoice ${invoiceCode}`
+                                    : `Locked in Trash: 10-day safety hold (${retention.daysUntilEligible} day(s) remaining)`
+                                }
+                              >
+                                <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                                Delete Permanently
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })
+                  )}
+                </TableBody>
+              </Table>
+            </div>
+          </div>
+        </TabsContent>
       </Tabs>
 
       {/* Restore Clinic Confirmation Dialog */}
@@ -1493,6 +1803,123 @@ function TrashBinPage() {
             </Button>
             <Button variant="destructive" onClick={handleBulkPermanentDeletePatients} disabled={isProcessing}>
               {isProcessing ? "Deleting..." : `Permanently Delete ${selectedPatientIds.size} Patients`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* Restore Bill Confirmation Dialog */}
+      <Dialog open={Boolean(restoreBillTarget)} onOpenChange={(open) => { if (!open) setRestoreBillTarget(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-emerald-600" /> Restore Invoice
+            </DialogTitle>
+            <DialogDescription className="space-y-3 pt-2 text-left">
+              <p>
+                Restore this invoice back to active billing records?
+              </p>
+              {restoreBillTarget && (
+                <div className="rounded-xl border bg-muted/40 p-3 text-xs space-y-1">
+                  <div className="font-semibold text-sm">
+                    {formatInvoiceId(restoreBillTarget.id, resolveClinicCode(restoreBillTarget.clinicId, [...clinics, ...binClinics]))}
+                  </div>
+                  <div>Patient: {restoreBillTarget.patient}</div>
+                  <div>Amount: ₹{restoreBillTarget.amount.toFixed(2)}</div>
+                  <div>Date: {restoreBillTarget.date}</div>
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRestoreBillTarget(null)} disabled={isProcessing}>
+              Cancel
+            </Button>
+            <Button onClick={handleRestoreBill} disabled={isProcessing} className="bg-emerald-600 hover:bg-emerald-700">
+              {isProcessing ? "Restoring..." : "Restore Invoice"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Single Permanent Delete Bill Confirmation Dialog */}
+      <Dialog open={Boolean(deleteBillTarget)} onOpenChange={(open) => { if (!open) setDeleteBillTarget(null); }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5 text-destructive" /> Permanent Deletion Warning
+            </DialogTitle>
+            <DialogDescription className="space-y-3 pt-2 text-left">
+              <p>
+                This action cannot be undone. Permanently delete this invoice?
+              </p>
+              {deleteBillTarget && (
+                <div className="rounded-xl border border-destructive/30 bg-destructive/10 p-3 text-xs text-destructive space-y-1">
+                  <div className="font-semibold text-sm">
+                    {formatInvoiceId(deleteBillTarget.id, resolveClinicCode(deleteBillTarget.clinicId, [...clinics, ...binClinics]))}
+                  </div>
+                  <div>Patient: {deleteBillTarget.patient}</div>
+                  <div>Amount: ₹{deleteBillTarget.amount.toFixed(2)}</div>
+                  <div>Date: {deleteBillTarget.date}</div>
+                </div>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteBillTarget(null)} disabled={isProcessing}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handlePermanentDeleteBill} disabled={isProcessing}>
+              {isProcessing ? "Deleting..." : "Delete Permanently"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Restore Bills Dialog */}
+      <Dialog open={showBulkRestoreBillsDialog} onOpenChange={setShowBulkRestoreBillsDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <RotateCcw className="h-5 w-5 text-emerald-600" /> Restore Selected Invoices
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-left">
+              Are you sure you want to restore {selectedBillIds.size} invoice{selectedBillIds.size === 1 ? "" : "s"}?
+              They will be made active again in billing records.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBulkRestoreBillsDialog(false)} disabled={isProcessing}>
+              Cancel
+            </Button>
+            <Button onClick={handleBulkRestoreBills} disabled={isProcessing} className="bg-emerald-600 hover:bg-emerald-700">
+              {isProcessing ? "Restoring..." : `Restore ${selectedBillIds.size} Invoices`}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Bulk Permanent Delete Bills Dialog */}
+      <Dialog open={showBulkDeleteBillsDialog} onOpenChange={setShowBulkDeleteBillsDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertTriangle className="h-5 w-5 text-destructive" /> Permanent Deletion Warning
+            </DialogTitle>
+            <DialogDescription className="pt-2 text-left space-y-2">
+              <p>
+                This action cannot be undone. Permanently delete {selectedBillIds.size} selected invoice{selectedBillIds.size === 1 ? "" : "s"}?
+              </p>
+              <p className="text-xs text-muted-foreground">
+                All associated invoice items and payment records will be permanently removed.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowBulkDeleteBillsDialog(false)} disabled={isProcessing}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleBulkPermanentDeleteBills} disabled={isProcessing}>
+              {isProcessing ? "Deleting..." : `Permanently Delete ${selectedBillIds.size} Invoices`}
             </Button>
           </DialogFooter>
         </DialogContent>

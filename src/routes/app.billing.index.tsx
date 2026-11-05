@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState } from "react";
-import { CheckCircle2, Eye, Pencil, Send, Printer, Copy } from "lucide-react";
+import { CheckCircle2, Eye, Pencil, Send, Printer, Copy, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import { PaginationFooter } from "@/components/data/pagination-footer";
 import { PageHeader } from "@/components/layout/page-header";
@@ -10,6 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -41,7 +42,7 @@ export const Route = createFileRoute("/app/billing/")({ component: BillingPage }
 
 function BillingPage() {
   const { user } = useAuth();
-  const { patients, clinics, getPatient, listBills, updateBill, updateBillNotes } = useWorkspaceData();
+  const { patients, clinics, getPatient, listBills, updateBill, updateBillNotes, softDeleteBill } = useWorkspaceData();
   const {
     rows: bills,
     total,
@@ -50,8 +51,11 @@ function BillingPage() {
     setOffset,
     isLoading,
     error,
+    refresh,
   } = useRecordPage(listBills);
   const [viewing, setViewing] = useState<Bill | null>(null);
+  const [billToTrash, setBillToTrash] = useState<Bill | null>(null);
+  const [isDeletingBill, setIsDeletingBill] = useState(false);
   const [payMethod, setPayMethod] = useState("Card");
   const [isRecordingPayment, setIsRecordingPayment] = useState(false);
   const [isEditingNotes, setIsEditingNotes] = useState(false);
@@ -60,6 +64,7 @@ function BillingPage() {
 
   const canEditNotes = user?.role === "clinic_admin" || user?.role === "receptionist" || user?.role === "super_admin";
   const canWriteBilling = user ? hasPermission(user.role, "billing.write") : false;
+  const canDeleteBill = user?.role === "clinic_admin" || user?.role === "super_admin";
 
   const copyBillDetails = (bill: Bill) => {
     const clinicCode = resolveClinicCode(bill.clinicId, clinics, user?.clinicId);
@@ -135,6 +140,27 @@ function BillingPage() {
       toast.error(cause instanceof Error ? cause.message : "Unable to record the payment");
     } finally {
       setIsRecordingPayment(false);
+    }
+  };
+
+  const handleMoveBillToTrash = async () => {
+    if (!billToTrash) return;
+    setIsDeletingBill(true);
+    try {
+      const billId = billToTrash.id;
+      const clinicCode = resolveClinicCode(billToTrash.clinicId, clinics, user?.clinicId);
+      const invoiceCode = formatInvoiceId(billId, clinicCode);
+      await softDeleteBill(billId);
+      toast.success(`Invoice ${invoiceCode} moved to Trash`);
+      setBillToTrash(null);
+      if (viewing?.id === billId) {
+        setViewing(null);
+      }
+      await refresh();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Failed to move bill to Trash");
+    } finally {
+      setIsDeletingBill(false);
     }
   };
 
@@ -224,6 +250,18 @@ function BillingPage() {
                     >
                       <Send className="h-3.5 w-3.5" />
                     </Button>
+                    {canDeleteBill && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                        onClick={() => setBillToTrash(bill)}
+                        title="Move to Trash"
+                        aria-label={`Move bill ${bill.id} to Trash`}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
                   </div>
                 </TableCell>
               </TableRow>
@@ -406,6 +444,17 @@ function BillingPage() {
                 {isRecordingPayment ? "Recording..." : "Mark as paid"}
               </Button>
             )}
+            {canDeleteBill && viewing && (
+              <Button
+                variant="outline"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+                onClick={() => setBillToTrash(viewing)}
+                title="Move invoice to Trash"
+              >
+                <Trash2 className="mr-1.5 h-4 w-4" />
+                Move to Trash
+              </Button>
+            )}
             <Button
               variant="outline"
               onClick={() => {
@@ -414,6 +463,53 @@ function BillingPage() {
               }}
             >
               Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirmation Dialog to Move Bill to Trash */}
+      <Dialog
+        open={Boolean(billToTrash)}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingBill) {
+            setBillToTrash(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5 text-destructive" />
+              Move Invoice to Trash?
+            </DialogTitle>
+            <DialogDescription className="space-y-2 pt-2 text-left">
+              <p>
+                Are you sure you want to move invoice{" "}
+                <span className="font-mono font-semibold text-foreground">
+                  {billToTrash ? formatInvoiceId(billToTrash.id, resolveClinicCode(billToTrash.clinicId, clinics, user?.clinicId)) : ""}
+                </span>{" "}
+                for patient <span className="font-semibold text-foreground">{billToTrash?.patient}</span> to the Trash?
+              </p>
+              <p className="text-xs text-muted-foreground">
+                It will be safely retained in the Trash bin for 60 days before auto-purging. Clinical Admins can restore it anytime.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button
+              variant="outline"
+              onClick={() => setBillToTrash(null)}
+              disabled={isDeletingBill}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleMoveBillToTrash}
+              disabled={isDeletingBill}
+            >
+              {isDeletingBill ? "Moving..." : "Move to Trash"}
             </Button>
           </DialogFooter>
         </DialogContent>
