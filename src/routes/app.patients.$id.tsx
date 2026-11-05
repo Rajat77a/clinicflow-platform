@@ -96,6 +96,7 @@ function PatientProfile() {
     listDocuments,
     updateBillNotes,
     softDeletePatient,
+    softDeleteBill,
     updatePatient,
     listPatientDocuments,
     uploadPatientDocument,
@@ -112,6 +113,8 @@ function PatientProfile() {
   const [viewingLab, setViewingLab] = useState<LabReport | null>(null);
   const [showTrashDialog, setShowTrashDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [billToTrash, setBillToTrash] = useState<Bill | null>(null);
+  const [isDeletingBill, setIsDeletingBill] = useState(false);
   const [patientDocs, setPatientDocs] = useState<PatientDocument[]>([]);
   const [isUploadingDoc, setIsUploadingDoc] = useState(false);
   const [viewingDoc, setViewingDoc] = useState<PatientDocument | null>(null);
@@ -253,6 +256,27 @@ function PatientProfile() {
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Failed to move patient to Trash");
       setIsDeleting(false);
+    }
+  };
+
+  const handleMoveBillToTrash = async () => {
+    if (!billToTrash) return;
+    setIsDeletingBill(true);
+    try {
+      const billId = billToTrash.id;
+      const bClinicCode = resolveClinicCode(billToTrash.clinicId, clinics, user?.clinicId);
+      const invoiceCode = formatInvoiceId(billId, bClinicCode);
+      await softDeleteBill(billId);
+      toast.success(`Invoice ${invoiceCode} moved to Trash`);
+      setBillToTrash(null);
+      if (viewingBill?.id === billId) {
+        setViewingBill(null);
+      }
+      await billsPage.refresh();
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Failed to move bill to Trash");
+    } finally {
+      setIsDeletingBill(false);
     }
   };
 
@@ -756,6 +780,18 @@ function PatientProfile() {
                               <Send className="h-3.5 w-3.5" />
                             </Button>
                           )}
+                          {canDelete && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              onClick={(e) => { e.stopPropagation(); setBillToTrash(b); }}
+                              aria-label={`Move bill ${b.id} to Trash`}
+                              title="Move to Trash"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1076,6 +1112,16 @@ function PatientProfile() {
             {canUseExternalSharing && (
               <Button variant="outline" onClick={() => viewingBill && shareBill(viewingBill)}>
                 <Send className="mr-1.5 h-4 w-4" />Send on WhatsApp
+              </Button>
+            )}
+            {canDelete && viewingBill && (
+              <Button
+                variant="outline"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive border-destructive/30"
+                onClick={() => setBillToTrash(viewingBill)}
+                title="Move invoice to Trash"
+              >
+                <Trash2 className="mr-1.5 h-4 w-4" />Move to Trash
               </Button>
             )}
             <Button onClick={() => {
@@ -1540,6 +1586,52 @@ function PatientProfile() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+      {/* Confirmation Dialog to Move Bill to Trash */}
+      <Dialog
+        open={Boolean(billToTrash)}
+        onOpenChange={(open) => {
+          if (!open && !isDeletingBill) {
+            setBillToTrash(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5 text-destructive" />
+              Move Invoice to Trash?
+            </DialogTitle>
+            <DialogDescription className="space-y-2 pt-2 text-left">
+              <p>
+                Are you sure you want to move invoice{" "}
+                <span className="font-mono font-semibold text-foreground">
+                  {billToTrash ? formatInvoiceId(billToTrash.id, clinicCode) : ""}
+                </span>{" "}
+                for patient <span className="font-semibold text-foreground">{patient?.name}</span> to the Trash?
+              </p>
+              <p className="text-xs text-muted-foreground">
+                It will be safely retained in the Trash bin for 60 days before auto-purging. Clinical Admins can restore it anytime.
+              </p>
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:justify-end">
+            <Button
+              variant="outline"
+              onClick={() => setBillToTrash(null)}
+              disabled={isDeletingBill}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleMoveBillToTrash}
+              disabled={isDeletingBill}
+            >
+              {isDeletingBill ? "Moving..." : "Move to Trash"}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>
