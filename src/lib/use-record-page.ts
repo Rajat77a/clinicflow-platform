@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { RecordPage, RecordPageInput } from "./backend/workspace-repository";
 
 export function useRecordPage<T>(
@@ -15,11 +15,16 @@ export function useRecordPage<T>(
   });
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadCount, setReloadCount] = useState(0);
   const query = input.query ?? "";
   const patientId = input.patientId;
   const recordId = input.recordId;
   const date = input.date;
   const scope = input.scope;
+
+  const refresh = useCallback(async () => {
+    setReloadCount((c) => c + 1);
+  }, []);
 
   useEffect(() => {
     setOffset(0);
@@ -44,7 +49,7 @@ export function useRecordPage<T>(
     return () => {
       active = false;
     };
-  }, [date, limit, loader, offset, patientId, query, recordId, scope]);
+  }, [date, limit, loader, offset, patientId, query, recordId, scope, reloadCount]);
 
-  return { ...page, offset, setOffset, isLoading, error };
+  return { ...page, offset, setOffset, isLoading, error, refresh };
 }
