@@ -4213,11 +4213,6 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           throw new Error("You can only manage bills within your clinic");
         }
 
-        if (target?.deletedAt && !isEligibleForPermanentDelete(target.deletedAt, 10)) {
-          const status = getTrashRetentionStatus(target.deletedAt);
-          throw new Error(`Item must remain in Trash for 10 days before permanent deletion (${status.daysUntilEligible} day(s) remaining).`);
-        }
-
         dispatch({ type: "bill.permanently_deleted", billId, actor });
         await refresh().catch(() => undefined);
       },
@@ -4233,15 +4228,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         });
         if (!filteredIds.length) return;
 
-        const eligibleIds = filteredIds.filter((id) => {
-          const target = state.bills.find((b) => b.id === id);
-          return !target?.deletedAt || isEligibleForPermanentDelete(target.deletedAt, 10);
-        });
-        if (!eligibleIds.length) {
-          throw new Error("Selected bills are still within the 10-day trash retention lock.");
-        }
-
-        dispatch({ type: "bill.bulk_permanently_deleted", billIds: eligibleIds, actor });
+        dispatch({ type: "bill.bulk_permanently_deleted", billIds: filteredIds, actor });
         await refresh().catch(() => undefined);
       },
       resetUserPassword: async (email: string, newPassword: string) => {
