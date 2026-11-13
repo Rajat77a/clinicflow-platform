@@ -4019,10 +4019,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         }
       },
       softDeletePatient: async (patientId: string) => {
-        const actor = requireUser(user, "patients.read");
-        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+        if (!user) throw new Error("An authenticated user is required");
+        if (user.role !== "super_admin" && user.role !== "clinic_admin") {
           throw new Error("Only Clinical Admins and Super Admins can move patients to Trash");
         }
+        const actor = user;
         const target = state.patients.find((p) => p.id === patientId);
         if (
           actor.role !== "super_admin" &&
@@ -4037,10 +4038,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         await refresh().catch(() => undefined);
       },
       bulkSoftDeletePatients: async (patientIds: string[]) => {
-        const actor = requireUser(user, "patients.read");
-        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+        if (!user) throw new Error("An authenticated user is required");
+        if (user.role !== "super_admin" && user.role !== "clinic_admin") {
           throw new Error("Only Clinical Admins and Super Admins can move patients to Trash");
         }
+        const actor = user;
         const filteredIds = patientIds.filter((id) => {
           if (actor.role === "super_admin") return true;
           const target = state.patients.find((p) => p.id === id);
@@ -4051,10 +4053,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         await refresh().catch(() => undefined);
       },
       restorePatient: async (patientId: string) => {
-        const actor = requireUser(user, "patients.read");
-        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+        if (!user) throw new Error("An authenticated user is required");
+        if (user.role !== "super_admin" && user.role !== "clinic_admin") {
           throw new Error("Only Clinical Admins and Super Admins can restore patients");
         }
+        const actor = user;
         const target = state.patients.find((p) => p.id === patientId);
         if (
           actor.role !== "super_admin" &&
@@ -4069,10 +4072,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         await refresh().catch(() => undefined);
       },
       bulkRestorePatients: async (patientIds: string[]) => {
-        const actor = requireUser(user, "patients.read");
-        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+        if (!user) throw new Error("An authenticated user is required");
+        if (user.role !== "super_admin" && user.role !== "clinic_admin") {
           throw new Error("Only Clinical Admins and Super Admins can restore patients");
         }
+        const actor = user;
         const filteredIds = patientIds.filter((id) => {
           if (actor.role === "super_admin") return true;
           const target = state.patients.find((p) => p.id === id);
@@ -4083,10 +4087,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         await refresh().catch(() => undefined);
       },
       permanentlyDeletePatient: async (patientId: string) => {
-        const actor = requireUser(user, "patients.read");
-        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+        if (!user) throw new Error("An authenticated user is required");
+        if (user.role !== "super_admin" && user.role !== "clinic_admin") {
           throw new Error("Only Clinical Admins and Super Admins can permanently delete patients");
         }
+        const actor = user;
         const target = state.patients.find((p) => p.id === patientId);
         if (
           actor.role !== "super_admin" &&
@@ -4102,10 +4107,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         await refresh().catch(() => undefined);
       },
       bulkPermanentlyDeletePatients: async (patientIds: string[]) => {
-        const actor = requireUser(user, "patients.read");
-        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+        if (!user) throw new Error("An authenticated user is required");
+        if (user.role !== "super_admin" && user.role !== "clinic_admin") {
           throw new Error("Only Clinical Admins and Super Admins can permanently delete patients");
         }
+        const actor = user;
         const filteredIds = patientIds.filter((id) => {
           if (actor.role === "super_admin") return true;
           const target = state.patients.find((p) => p.id === id);
@@ -4117,10 +4123,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         await refresh().catch(() => undefined);
       },
       softDeleteBill: async (billId: string) => {
-        const actor = requireUser(user, "billing.read");
-        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+        if (!user) throw new Error("An authenticated user is required");
+        if (user.role !== "super_admin" && user.role !== "clinic_admin") {
           throw new Error("Only Clinical Admins can move bills to Trash");
         }
+        const actor = user;
         const target = state.bills.find((b) => b.id === billId);
         if (
           actor.role !== "super_admin" &&
@@ -4135,10 +4142,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         await refresh().catch(() => undefined);
       },
       bulkSoftDeleteBills: async (billIds: string[]) => {
-        const actor = requireUser(user, "billing.read");
-        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+        if (!user) throw new Error("An authenticated user is required");
+        if (user.role !== "super_admin" && user.role !== "clinic_admin") {
           throw new Error("Only Clinical Admins can move bills to Trash");
         }
+        const actor = user;
         const filteredIds = billIds.filter((id) => {
           if (actor.role === "super_admin") return true;
           const target = state.bills.find((b) => b.id === id);
@@ -4149,10 +4157,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         await refresh().catch(() => undefined);
       },
       restoreBill: async (billId: string) => {
-        const actor = requireUser(user, "billing.read");
-        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+        if (!user) throw new Error("An authenticated user is required");
+        if (user.role !== "super_admin" && user.role !== "clinic_admin") {
           throw new Error("Only Clinical Admins can restore bills");
         }
+        const actor = user;
         const target = state.bills.find((b) => b.id === billId);
         if (
           actor.role !== "super_admin" &&
@@ -4167,10 +4176,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         await refresh().catch(() => undefined);
       },
       bulkRestoreBills: async (billIds: string[]) => {
-        const actor = requireUser(user, "billing.read");
-        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+        if (!user) throw new Error("An authenticated user is required");
+        if (user.role !== "super_admin" && user.role !== "clinic_admin") {
           throw new Error("Only Clinical Admins can restore bills");
         }
+        const actor = user;
         const filteredIds = billIds.filter((id) => {
           if (actor.role === "super_admin") return true;
           const target = state.bills.find((b) => b.id === id);
@@ -4181,10 +4191,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         await refresh().catch(() => undefined);
       },
       permanentlyDeleteBill: async (billId: string) => {
-        const actor = requireUser(user, "billing.read");
-        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+        if (!user) throw new Error("An authenticated user is required");
+        if (user.role !== "super_admin" && user.role !== "clinic_admin") {
           throw new Error("Only Clinical Admins can permanently delete bills");
         }
+        const actor = user;
         const target = state.bills.find((b) => b.id === billId);
         if (
           actor.role !== "super_admin" &&
@@ -4200,10 +4211,11 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         await refresh().catch(() => undefined);
       },
       bulkPermanentlyDeleteBills: async (billIds: string[]) => {
-        const actor = requireUser(user, "billing.read");
-        if (actor.role !== "super_admin" && actor.role !== "clinic_admin") {
+        if (!user) throw new Error("An authenticated user is required");
+        if (user.role !== "super_admin" && user.role !== "clinic_admin") {
           throw new Error("Only Clinical Admins can permanently delete bills");
         }
+        const actor = user;
         const filteredIds = billIds.filter((id) => {
           if (actor.role === "super_admin") return true;
           const target = state.bills.find((b) => b.id === id);
