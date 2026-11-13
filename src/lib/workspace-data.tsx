@@ -2584,7 +2584,7 @@ export function isEligibleForPermanentDelete(deletedAt?: string, minDays = 10): 
 }
 
 export function getTrashRetentionStatus(deletedAt?: string) {
-  if (!deletedAt) return { daysOld: 0, daysUntilEligible: 10, daysUntilPurge: 60, canPermanentlyDelete: false };
+  if (!deletedAt) return { daysOld: 0, daysUntilEligible: 10, daysUntilPurge: 60, canPermanentlyDelete: false, message: "10 days before permanent deletion" };
   const deletedTime = new Date(deletedAt).getTime();
   const daysOld = Math.floor((Date.now() - deletedTime) / (1000 * 60 * 60 * 24));
   const daysUntilEligible = Math.max(0, 10 - daysOld);
@@ -2595,6 +2595,7 @@ export function getTrashRetentionStatus(deletedAt?: string) {
     daysUntilEligible,
     daysUntilPurge,
     canPermanentlyDelete,
+    message: `${daysUntilEligible} of 10 days before permanent deletion`,
   };
 }
 
@@ -3007,41 +3008,50 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           })()
         : [],
       binStaffMembers: user && hasPermission(user.role, "people.manage")
-        ? (isSuperAdmin
-            ? state.staffMembers
-            : state.staffMembers.filter((m) =>
-                !clinicId ||
-                !m.clinicId ||
-                allowedClinicIds.has(m.clinicId) ||
-                m.clinicId === clinicId ||
-                (m.previousClinicId && (allowedClinicIds.has(m.previousClinicId) || m.previousClinicId === clinicId))
-              )
-          )
-            .filter((m) => {
-              if (Boolean(m.deletedAt) || m.status === "Inactive") {
-                return !m.deletedAt || isWithinRetentionPeriod(m.deletedAt, 60);
-              }
-              const evalResult = evaluateStaffInviteStatus(m, undefined, isClinicalAdmin);
-              if (evalResult.shouldAutoDelete) return false;
-              if (isClinicalAdmin && (evalResult.isExpired || evalResult.status === "Expired" || m.status === "Expired")) {
+        ? (() => {
+            const storedPermStaff = new Set(loadPermDeletedStaffFromStorage());
+            return (isSuperAdmin
+              ? state.staffMembers
+              : state.staffMembers.filter((m) =>
+                  !clinicId ||
+                  !m.clinicId ||
+                  allowedClinicIds.has(m.clinicId) ||
+                  m.clinicId === clinicId ||
+                  (m.previousClinicId && (allowedClinicIds.has(m.previousClinicId) || m.previousClinicId === clinicId))
+                )
+            )
+              .filter((m) => {
+                if (storedPermStaff.has(m.id) || (m.email && storedPermStaff.has(m.email.toLowerCase()))) {
+                  return false;
+                }
+                if (Boolean(m.deletedAt) || m.status === "Inactive") {
+                  return !m.deletedAt || isWithinRetentionPeriod(m.deletedAt, 60);
+                }
+                const evalResult = evaluateStaffInviteStatus(m, undefined, isClinicalAdmin);
+                if (evalResult.shouldAutoDelete) return false;
+                if (isClinicalAdmin && (evalResult.isExpired || evalResult.status === "Expired" || m.status === "Expired")) {
+                  return false;
+                }
+                if (m.clinicId && state.clinics.some((c) => c.id === m.clinicId && Boolean(c.deletedAt))) {
+                  return true;
+                }
                 return false;
-              }
-              if (m.clinicId && state.clinics.some((c) => c.id === m.clinicId && Boolean(c.deletedAt))) {
-                return true;
-              }
-              return false;
-            })
-            .map((m) => {
-              if (!m.previousClinicName && m.clinicId) {
-                const c = state.clinics.find((clinic) => clinic.id === m.clinicId);
-                if (c?.name) return { ...m, previousClinicName: c.name };
-              }
-              return m;
-            })
+              })
+              .map((m) => {
+                if (!m.previousClinicName && m.clinicId) {
+                  const c = state.clinics.find((clinic) => clinic.id === m.clinicId);
+                  if (c?.name) return { ...m, previousClinicName: c.name };
+                }
+                return m;
+              });
+          })()
         : [],
       binPatients: user && (hasPermission(user.role, "people.manage") || hasPermission(user.role, "patients.read"))
-        ? (isSuperAdmin ? state.patients : clinicScope(state.patients))
-            .filter((p) => Boolean(p.deletedAt) && isWithinRetentionPeriod(p.deletedAt, 60))
+        ? (() => {
+            const storedPermPatients = new Set(loadPermDeletedPatientsFromStorage());
+            return (isSuperAdmin ? state.patients : clinicScope(state.patients))
+              .filter((p) => !storedPermPatients.has(p.id) && Boolean(p.deletedAt) && isWithinRetentionPeriod(p.deletedAt, 60));
+          })()
         : [],
       binBills: user && (user.role === "clinic_admin" || user.role === "super_admin")
         ? (() => {
@@ -3894,11 +3904,6 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           throw new Error("You can only manage users within your clinic");
         }
 
-        if (target?.deletedAt && !isEligibleForPermanentDelete(target.deletedAt, 10)) {
-          const status = getTrashRetentionStatus(target.deletedAt);
-          throw new Error(`Item must remain in Trash for 10 days before permanent deletion (${status.daysUntilEligible} day(s) remaining).`);
-        }
-
         if (target?.email) {
           deleteUserAccount(target.email);
         }
@@ -3989,29 +3994,21 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         });
         if (!filteredIds.length) return;
 
-        const eligibleIds = filteredIds.filter((id) => {
-          const target = state.staffMembers.find((m) => m.id === id);
-          return !target?.deletedAt || isEligibleForPermanentDelete(target.deletedAt, 10);
-        });
-        if (!eligibleIds.length) {
-          throw new Error("Selected users are still within the 10-day trash retention lock.");
-        }
-
-        eligibleIds.forEach((id) => {
+        filteredIds.forEach((id) => {
           const target = state.staffMembers.find((m) => m.id === id);
           if (target?.email) deleteUserAccount(target.email);
         });
-        dispatch({ type: "staff.bulk_permanently_deleted", userIds: eligibleIds, actor });
+        dispatch({ type: "staff.bulk_permanently_deleted", userIds: filteredIds, actor });
 
         if (repository?.bulkPermanentlyDeleteStaff) {
           try {
-            await repository.bulkPermanentlyDeleteStaff(eligibleIds);
+            await repository.bulkPermanentlyDeleteStaff(filteredIds);
           } catch (err) {
             console.warn("Backend bulk permanent delete failed, local state updated:", err);
           }
           await refresh().catch(() => undefined);
         } else if (repository?.permanentlyDeleteStaff) {
-          for (const id of eligibleIds) {
+          for (const id of filteredIds) {
             try {
               await repository.permanentlyDeleteStaff(id);
             } catch (err) {
@@ -4101,11 +4098,6 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
           throw new Error("You can only manage patients within your clinic");
         }
 
-        if (target?.deletedAt && !isEligibleForPermanentDelete(target.deletedAt, 10)) {
-          const status = getTrashRetentionStatus(target.deletedAt);
-          throw new Error(`Item must remain in Trash for 10 days before permanent deletion (${status.daysUntilEligible} day(s) remaining).`);
-        }
-
         dispatch({ type: "patient.permanently_deleted", patientId, actor });
         await refresh().catch(() => undefined);
       },
@@ -4121,15 +4113,7 @@ export function WorkspaceDataProvider({ children }: { children: ReactNode }) {
         });
         if (!filteredIds.length) return;
 
-        const eligibleIds = filteredIds.filter((id) => {
-          const target = state.patients.find((p) => p.id === id);
-          return !target?.deletedAt || isEligibleForPermanentDelete(target.deletedAt, 10);
-        });
-        if (!eligibleIds.length) {
-          throw new Error("Selected patients are still within the 10-day trash retention lock.");
-        }
-
-        dispatch({ type: "patient.bulk_permanently_deleted", patientIds: eligibleIds, actor });
+        dispatch({ type: "patient.bulk_permanently_deleted", patientIds: filteredIds, actor });
         await refresh().catch(() => undefined);
       },
       softDeleteBill: async (billId: string) => {
