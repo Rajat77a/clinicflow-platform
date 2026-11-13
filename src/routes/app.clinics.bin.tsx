@@ -988,13 +988,8 @@ function TrashBinPage() {
                               <Button
                                 size="sm"
                                 variant="destructive"
-                                disabled={!retention.canPermanentlyDelete}
                                 onClick={() => setDeleteUserTarget(member)}
-                                title={
-                                  retention.canPermanentlyDelete
-                                    ? `Permanently Delete ${member.name}`
-                                    : `Locked in Trash: 10-day safety hold (${retention.daysUntilEligible} day(s) remaining)`
-                                }
+                                title={`Permanently Delete ${member.name}`}
                               >
                                 <Trash2 className="mr-1.5 h-3.5 w-3.5" />
                                 Delete Permanently
@@ -1185,13 +1180,8 @@ function TrashBinPage() {
                               <Button
                                 size="sm"
                                 variant="destructive"
-                                disabled={!retention.canPermanentlyDelete}
                                 onClick={() => setDeletePatientTarget(patient)}
-                                title={
-                                  retention.canPermanentlyDelete
-                                    ? `Permanently Delete ${patient.name}`
-                                    : `Locked in Trash: 10-day safety hold (${retention.daysUntilEligible} day(s) remaining)`
-                                }
+                                title={`Permanently Delete ${patient.name}`}
                               >
                                 <Trash2 className="mr-1.5 h-3.5 w-3.5" />
                                 Delete Permanently
